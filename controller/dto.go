@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"buy-ticket/domain"
+	"buy-ticket/service"
 )
 
 type ReserveTicketRequest struct {
@@ -52,6 +53,43 @@ type ReservationResponse struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+type EventResponse struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Venue       string `json:"venue"`
+	Status      int8   `json:"status"`
+	StartAt     string `json:"start_at"`
+	EndAt       string `json:"end_at"`
+	SaleStartAt string `json:"sale_start_at"`
+	SaleEndAt   string `json:"sale_end_at"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type SectionResponse struct {
+	ID               int64  `json:"id"`
+	EventID          int64  `json:"event_id"`
+	Name             string `json:"name"`
+	Price            int64  `json:"price"`
+	TotalQuantity    int    `json:"total_quantity"`
+	ReservedQuantity int    `json:"reserved_quantity"`
+	SoldQuantity     int    `json:"sold_quantity"`
+	PurchaseLimit    int    `json:"purchase_limit"`
+	Status           int8   `json:"status"`
+	CreatedAt        string `json:"created_at"`
+	UpdatedAt        string `json:"updated_at"`
+}
+
+type SectionAvailabilityResponse struct {
+	SectionID         int64  `json:"section_id"`
+	Name              string `json:"name"`
+	Price             int64  `json:"price"`
+	AvailableQuantity int    `json:"available_quantity"`
+	ReservedQuantity  int    `json:"reserved_quantity"`
+	SoldQuantity      int    `json:"sold_quantity"`
+	Status            int8   `json:"status"`
+}
+
 type OrderResponse struct {
 	ID            int64  `json:"id"`
 	OrderNo       string `json:"order_no"`
@@ -66,6 +104,49 @@ type OrderResponse struct {
 	ExpiresAt     string `json:"expires_at"`
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
+}
+
+func newEventResponse(event *domain.Event) EventResponse {
+	return EventResponse{
+		ID:          event.ID,
+		Name:        event.Name,
+		Venue:       event.Venue,
+		Status:      int8(event.Status),
+		StartAt:     event.StartAt.Format(time.RFC3339),
+		EndAt:       event.EndAt.Format(time.RFC3339),
+		SaleStartAt: event.SaleStartAt.Format(time.RFC3339),
+		SaleEndAt:   event.SaleEndAt.Format(time.RFC3339),
+		CreatedAt:   event.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:   event.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func newSectionResponse(section domain.Section) SectionResponse {
+	return SectionResponse{
+		ID:               section.ID,
+		EventID:          section.EventID,
+		Name:             section.Name,
+		Price:            section.Price,
+		TotalQuantity:    section.TotalQuantity,
+		ReservedQuantity: section.ReservedQuantity,
+		SoldQuantity:     section.SoldQuantity,
+		PurchaseLimit:    section.PurchaseLimit,
+		Status:           int8(section.Status),
+		CreatedAt:        section.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:        section.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func newSectionAvailabilityResponse(availability service.SectionAvailability) SectionAvailabilityResponse {
+	return SectionAvailabilityResponse{
+		SectionID:         availability.Section.ID,
+		Name:              availability.Section.Name,
+		Price:             availability.Section.Price,
+		AvailableQuantity: availability.Available,
+		ReservedQuantity:  availability.Section.ReservedQuantity,
+		SoldQuantity:      availability.Section.SoldQuantity,
+		Status:            int8(availability.Section.Status),
+	}
 }
 
 type PaymentResponse struct {

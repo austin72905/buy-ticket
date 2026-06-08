@@ -63,6 +63,11 @@ type CancelReservationInput struct {
 	CancelledAt   time.Time
 }
 
+type SectionAvailability struct {
+	Section   domain.Section
+	Available int
+}
+
 func NewBookingService(
 	eventRepo repository.EventRepository,
 	sectionRepo repository.SectionRepository,
@@ -310,6 +315,35 @@ func (s *BookingService) CancelReservation(ctx context.Context, input CancelRese
 	}
 
 	return reservation, nil
+}
+
+func (s *BookingService) GetEvent(ctx context.Context, eventID int64) (*domain.Event, error) {
+	return s.EventRepo.FindByID(ctx, eventID)
+}
+
+func (s *BookingService) GetSections(ctx context.Context, eventID int64) ([]domain.Section, error) {
+	return s.SectionRepo.ListByEventID(ctx, eventID)
+}
+
+func (s *BookingService) GetAvailability(ctx context.Context, eventID int64) ([]SectionAvailability, error) {
+	sections, err := s.SectionRepo.ListByEventID(ctx, eventID)
+	if err != nil {
+		return nil, err
+	}
+
+	availabilities := make([]SectionAvailability, 0, len(sections))
+	for _, section := range sections {
+		availabilities = append(availabilities, SectionAvailability{
+			Section:   section,
+			Available: section.AvailableQuantity(),
+		})
+	}
+
+	return availabilities, nil
+}
+
+func (s *BookingService) GetOrder(ctx context.Context, orderID int64) (*domain.Order, error) {
+	return s.OrderRepo.FindByID(ctx, orderID)
 }
 
 type bookingRepos struct {

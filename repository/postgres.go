@@ -72,6 +72,20 @@ func (r *PostgresSectionRepository) FindByEventAndID(ctx context.Context, eventI
 	return toDomainSection(record), nil
 }
 
+func (r *PostgresSectionRepository) ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error) {
+	records, err := r.queries.ListSectionsByEventID(ctx, eventID)
+	if err != nil {
+		return nil, err
+	}
+
+	sections := make([]domain.Section, 0, len(records))
+	for _, record := range records {
+		sections = append(sections, *toDomainSection(record))
+	}
+
+	return sections, nil
+}
+
 func (r *PostgresSectionRepository) Save(ctx context.Context, section *domain.Section) error {
 	if section.ID == 0 {
 		event, err := r.queries.GetEventByID(ctx, section.EventID)

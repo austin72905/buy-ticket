@@ -344,6 +344,14 @@ func (f *fakeSectionRepository) FindByEventAndID(ctx context.Context, eventID, s
 	return f.section, nil
 }
 
+func (f *fakeSectionRepository) ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error) {
+	if f.section == nil || f.section.EventID != eventID {
+		return nil, errors.New("section not found")
+	}
+
+	return []domain.Section{*f.section}, nil
+}
+
 func (f *fakeSectionRepository) Save(ctx context.Context, section *domain.Section) error {
 	f.section = section
 	return nil

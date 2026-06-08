@@ -12,6 +12,7 @@ type EventRepository interface {
 
 type SectionRepository interface {
 	FindByEventAndID(ctx context.Context, eventID, sectionID int64) (*domain.Section, error)
+	ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error)
 	Save(ctx context.Context, section *domain.Section) error
 }
 
