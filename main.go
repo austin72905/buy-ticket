@@ -7,13 +7,20 @@ import (
 
 	"buy-ticket/controller"
 	db "buy-ticket/db/sqlc"
+	docs "buy-ticket/docs"
 	"buy-ticket/repository"
 	"buy-ticket/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+// @title buy-ticket API
+// @version 1.0
+// @description 演唱會搶票系統 API
+// @BasePath /
 func main() {
 	eventRepo, sectionRepo, reservationRepo, orderRepo, paymentRepo, dbPool, cleanup := buildRepositories()
 	defer cleanup()
@@ -30,9 +37,11 @@ func main() {
 	bookingController := controller.NewBookingController(bookingService)
 
 	router := gin.Default()
+	docs.SwaggerInfo.BasePath = "/"
 	router.GET("/healthz", func(ctx *gin.Context) {
 		ctx.JSON(200, gin.H{"status": "ok"})
 	})
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	bookingController.RegisterRoutes(router)
 
 	log.Println("server started at :8080")

@@ -31,6 +31,16 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 	router.POST("/reservations/cancel", c.CancelReservation)
 }
 
+// GetEvent godoc
+// @Summary 取得活動資訊
+// @Description 依活動 ID 取得活動基本資訊
+// @Tags events
+// @Produce json
+// @Param eventId path int true "活動 ID"
+// @Success 200 {object} EventResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /events/{eventId} [get]
 func (c *BookingController) GetEvent(ctx *gin.Context) {
 	eventID, ok := parseInt64Param(ctx, "eventId")
 	if !ok {
@@ -46,6 +56,16 @@ func (c *BookingController) GetEvent(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newEventResponse(event))
 }
 
+// GetSections godoc
+// @Summary 取得活動票區
+// @Description 依活動 ID 取得票區列表
+// @Tags events
+// @Produce json
+// @Param eventId path int true "活動 ID"
+// @Success 200 {array} SectionResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /events/{eventId}/sections [get]
 func (c *BookingController) GetSections(ctx *gin.Context) {
 	eventID, ok := parseInt64Param(ctx, "eventId")
 	if !ok {
@@ -66,6 +86,16 @@ func (c *BookingController) GetSections(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, response)
 }
 
+// GetAvailability godoc
+// @Summary 取得票區可售量
+// @Description 依活動 ID 取得各票區剩餘可售量
+// @Tags events
+// @Produce json
+// @Param eventId path int true "活動 ID"
+// @Success 200 {array} SectionAvailabilityResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /events/{eventId}/availability [get]
 func (c *BookingController) GetAvailability(ctx *gin.Context) {
 	eventID, ok := parseInt64Param(ctx, "eventId")
 	if !ok {
@@ -86,6 +116,16 @@ func (c *BookingController) GetAvailability(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, response)
 }
 
+// GetOrder godoc
+// @Summary 取得訂單資訊
+// @Description 依訂單 ID 取得訂單內容
+// @Tags orders
+// @Produce json
+// @Param orderId path int true "訂單 ID"
+// @Success 200 {object} OrderResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /orders/{orderId} [get]
 func (c *BookingController) GetOrder(ctx *gin.Context) {
 	orderID, ok := parseInt64Param(ctx, "orderId")
 	if !ok {
@@ -101,6 +141,16 @@ func (c *BookingController) GetOrder(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newOrderResponse(order))
 }
 
+// ReserveTicket godoc
+// @Summary 保留票券
+// @Description 建立 reservation 並保留票區數量
+// @Tags reservations
+// @Accept json
+// @Produce json
+// @Param request body ReserveTicketRequest true "保留票券請求"
+// @Success 201 {object} ReservationResponse
+// @Failure 400 {object} ErrorResponse
+// @Router /reservations [post]
 func (c *BookingController) ReserveTicket(ctx *gin.Context) {
 	var request ReserveTicketRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
@@ -123,6 +173,16 @@ func (c *BookingController) ReserveTicket(ctx *gin.Context) {
 	ctx.JSON(http.StatusCreated, newReservationResponse(reservation))
 }
 
+// CreateOrder godoc
+// @Summary 建立訂單
+// @Description 由 reservation 建立待付款訂單
+// @Tags orders
+// @Accept json
+// @Produce json
+// @Param request body CreateOrderRequest true "建立訂單請求"
+// @Success 201 {object} OrderResponse
+// @Failure 400 {object} ErrorResponse
+// @Router /orders [post]
 func (c *BookingController) CreateOrder(ctx *gin.Context) {
 	var request CreateOrderRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
@@ -143,6 +203,16 @@ func (c *BookingController) CreateOrder(ctx *gin.Context) {
 	ctx.JSON(http.StatusCreated, newOrderResponse(order))
 }
 
+// PayOrder godoc
+// @Summary 訂單付款
+// @Description 付款成功後確認 reservation 並轉成售出
+// @Tags payments
+// @Accept json
+// @Produce json
+// @Param request body PayOrderRequest true "付款請求"
+// @Success 200 {object} PaymentResponse
+// @Failure 400 {object} ErrorResponse
+// @Router /payments [post]
 func (c *BookingController) PayOrder(ctx *gin.Context) {
 	var request PayOrderRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
@@ -165,6 +235,16 @@ func (c *BookingController) PayOrder(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newPaymentResponse(payment))
 }
 
+// ExpireReservation godoc
+// @Summary 過期 reservation
+// @Description 將 reservation 標記為 expired 並釋放保留量
+// @Tags reservations
+// @Accept json
+// @Produce json
+// @Param request body ExpireReservationRequest true "過期請求"
+// @Success 200 {object} ReservationResponse
+// @Failure 400 {object} ErrorResponse
+// @Router /reservations/expire [post]
 func (c *BookingController) ExpireReservation(ctx *gin.Context) {
 	var request ExpireReservationRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
@@ -184,6 +264,16 @@ func (c *BookingController) ExpireReservation(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newReservationResponse(reservation))
 }
 
+// CancelReservation godoc
+// @Summary 取消 reservation
+// @Description 主動取消 reservation 並釋放保留量
+// @Tags reservations
+// @Accept json
+// @Produce json
+// @Param request body CancelReservationRequest true "取消請求"
+// @Success 200 {object} ReservationResponse
+// @Failure 400 {object} ErrorResponse
+// @Router /reservations/cancel [post]
 func (c *BookingController) CancelReservation(ctx *gin.Context) {
 	var request CancelReservationRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {

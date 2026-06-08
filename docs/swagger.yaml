@@ -1,0 +1,447 @@
+basePath: /
+definitions:
+  controller.CancelReservationRequest:
+    properties:
+      cancelled_at:
+        type: string
+      reservation_id:
+        type: integer
+    type: object
+  controller.CreateOrderRequest:
+    properties:
+      expires_at:
+        type: string
+      order_no:
+        type: string
+      reservation_id:
+        type: integer
+    type: object
+  controller.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  controller.EventResponse:
+    properties:
+      created_at:
+        type: string
+      end_at:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      sale_end_at:
+        type: string
+      sale_start_at:
+        type: string
+      start_at:
+        type: string
+      status:
+        type: integer
+      updated_at:
+        type: string
+      venue:
+        type: string
+    type: object
+  controller.ExpireReservationRequest:
+    properties:
+      expired_at:
+        type: string
+      reservation_id:
+        type: integer
+    type: object
+  controller.OrderResponse:
+    properties:
+      created_at:
+        type: string
+      event_id:
+        type: integer
+      expires_at:
+        type: string
+      id:
+        type: integer
+      order_no:
+        type: string
+      quantity:
+        type: integer
+      reservation_id:
+        type: integer
+      section_id:
+        type: integer
+      status:
+        type: integer
+      total_amount:
+        type: integer
+      unit_price:
+        type: integer
+      updated_at:
+        type: string
+      user_id:
+        type: integer
+    type: object
+  controller.PayOrderRequest:
+    properties:
+      amount:
+        type: integer
+      method:
+        type: string
+      order_id:
+        type: integer
+      paid_at:
+        type: string
+      payment_no:
+        type: string
+    type: object
+  controller.PaymentResponse:
+    properties:
+      amount:
+        type: integer
+      created_at:
+        type: string
+      failed_at:
+        type: string
+      id:
+        type: integer
+      method:
+        type: string
+      order_id:
+        type: integer
+      paid_at:
+        type: string
+      payment_no:
+        type: string
+      status:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  controller.ReservationResponse:
+    properties:
+      created_at:
+        type: string
+      event_id:
+        type: integer
+      expires_at:
+        type: string
+      id:
+        type: integer
+      quantity:
+        type: integer
+      section_id:
+        type: integer
+      status:
+        type: integer
+      total_amount:
+        type: integer
+      unit_price:
+        type: integer
+      updated_at:
+        type: string
+      user_id:
+        type: integer
+    type: object
+  controller.ReserveTicketRequest:
+    properties:
+      event_id:
+        type: integer
+      hold_until:
+        type: string
+      quantity:
+        type: integer
+      section_id:
+        type: integer
+      user_id:
+        type: integer
+    type: object
+  controller.SectionAvailabilityResponse:
+    properties:
+      available_quantity:
+        type: integer
+      name:
+        type: string
+      price:
+        type: integer
+      reserved_quantity:
+        type: integer
+      section_id:
+        type: integer
+      sold_quantity:
+        type: integer
+      status:
+        type: integer
+    type: object
+  controller.SectionResponse:
+    properties:
+      created_at:
+        type: string
+      event_id:
+        type: integer
+      id:
+        type: integer
+      name:
+        type: string
+      price:
+        type: integer
+      purchase_limit:
+        type: integer
+      reserved_quantity:
+        type: integer
+      sold_quantity:
+        type: integer
+      status:
+        type: integer
+      total_quantity:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: 演唱會搶票系統 API
+  title: buy-ticket API
+  version: "1.0"
+paths:
+  /events/{eventId}:
+    get:
+      description: 依活動 ID 取得活動基本資訊
+      parameters:
+      - description: 活動 ID
+        in: path
+        name: eventId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.EventResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 取得活動資訊
+      tags:
+      - events
+  /events/{eventId}/availability:
+    get:
+      description: 依活動 ID 取得各票區剩餘可售量
+      parameters:
+      - description: 活動 ID
+        in: path
+        name: eventId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.SectionAvailabilityResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 取得票區可售量
+      tags:
+      - events
+  /events/{eventId}/sections:
+    get:
+      description: 依活動 ID 取得票區列表
+      parameters:
+      - description: 活動 ID
+        in: path
+        name: eventId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.SectionResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 取得活動票區
+      tags:
+      - events
+  /orders:
+    post:
+      consumes:
+      - application/json
+      description: 由 reservation 建立待付款訂單
+      parameters:
+      - description: 建立訂單請求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.CreateOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/controller.OrderResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 建立訂單
+      tags:
+      - orders
+  /orders/{orderId}:
+    get:
+      description: 依訂單 ID 取得訂單內容
+      parameters:
+      - description: 訂單 ID
+        in: path
+        name: orderId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.OrderResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 取得訂單資訊
+      tags:
+      - orders
+  /payments:
+    post:
+      consumes:
+      - application/json
+      description: 付款成功後確認 reservation 並轉成售出
+      parameters:
+      - description: 付款請求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.PayOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.PaymentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 訂單付款
+      tags:
+      - payments
+  /reservations:
+    post:
+      consumes:
+      - application/json
+      description: 建立 reservation 並保留票區數量
+      parameters:
+      - description: 保留票券請求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.ReserveTicketRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/controller.ReservationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 保留票券
+      tags:
+      - reservations
+  /reservations/cancel:
+    post:
+      consumes:
+      - application/json
+      description: 主動取消 reservation 並釋放保留量
+      parameters:
+      - description: 取消請求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.CancelReservationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.ReservationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 取消 reservation
+      tags:
+      - reservations
+  /reservations/expire:
+    post:
+      consumes:
+      - application/json
+      description: 將 reservation 標記為 expired 並釋放保留量
+      parameters:
+      - description: 過期請求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.ExpireReservationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.ReservationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 過期 reservation
+      tags:
+      - reservations
+swagger: "2.0"

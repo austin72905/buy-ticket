@@ -162,6 +162,10 @@ type PaymentResponse struct {
 	UpdatedAt string  `json:"updated_at"`
 }
 
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
 func newReservationResponse(reservation *domain.Reservation) ReservationResponse {
 	return ReservationResponse{
 		ID:          reservation.ID,
