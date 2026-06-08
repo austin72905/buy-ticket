@@ -5,8 +5,11 @@ import (
 	"errors"
 	"time"
 
+	"buy-ticket/db/sqlc"
 	"buy-ticket/domain"
 	"buy-ticket/repository"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
@@ -20,6 +23,7 @@ var (
 )
 
 type BookingService struct {
+	DB              *pgxpool.Pool
 	EventRepo       repository.EventRepository
 	SectionRepo     repository.SectionRepository
 	ReservationRepo repository.ReservationRepository
@@ -42,11 +46,11 @@ type CreateOrderInput struct {
 }
 
 type PayOrderInput struct {
-	OrderID    int64
-	PaymentNo  string
-	Method     string
-	Amount     int64
-	PaidAt     time.Time
+	OrderID   int64
+	PaymentNo string
+	Method    string
+	Amount    int64
+	PaidAt    time.Time
 }
 
 type ExpireReservationInput struct {
@@ -77,44 +81,48 @@ func NewBookingService(
 
 func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketInput) (*domain.Reservation, error) {
 	now := time.Now()
+	var reservation *domain.Reservation
 
-	event, err := s.EventRepo.FindByID(ctx, input.EventID)
+	err := s.withTx(ctx, func(repos bookingRepos) error {
+		event, err := repos.event.FindByID(ctx, input.EventID)
+		if err != nil {
+			return err
+		}
+
+		if !event.IsOnSale(now) {
+			return ErrEventNotOnSale
+		}
+
+		section, err := repos.section.FindByEventAndID(ctx, input.EventID, input.SectionID)
+		if err != nil {
+			return err
+		}
+
+		if !section.Reserve(input.Quantity) {
+			return ErrSectionNotReservable
+		}
+
+		section.UpdatedAt = now
+		if err := repos.section.Save(ctx, section); err != nil {
+			return err
+		}
+
+		reservation = &domain.Reservation{
+			EventID:     input.EventID,
+			SectionID:   input.SectionID,
+			UserID:      input.UserID,
+			Quantity:    input.Quantity,
+			UnitPrice:   section.Price,
+			TotalAmount: int64(input.Quantity) * section.Price,
+			Status:      domain.ReservationStatusHolding,
+			ExpiresAt:   input.HoldUntil,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+
+		return repos.reservation.Save(ctx, reservation)
+	})
 	if err != nil {
-		return nil, err
-	}
-
-	if !event.IsOnSale(now) {
-		return nil, ErrEventNotOnSale
-	}
-
-	section, err := s.SectionRepo.FindByEventAndID(ctx, input.EventID, input.SectionID)
-	if err != nil {
-		return nil, err
-	}
-
-	if !section.Reserve(input.Quantity) {
-		return nil, ErrSectionNotReservable
-	}
-
-	section.UpdatedAt = now
-	if err := s.SectionRepo.Save(ctx, section); err != nil {
-		return nil, err
-	}
-
-	reservation := &domain.Reservation{
-		EventID:     input.EventID,
-		SectionID:   input.SectionID,
-		UserID:      input.UserID,
-		Quantity:    input.Quantity,
-		UnitPrice:   section.Price,
-		TotalAmount: int64(input.Quantity) * section.Price,
-		Status:      domain.ReservationStatusHolding,
-		ExpiresAt:   input.HoldUntil,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-
-	if err := s.ReservationRepo.Save(ctx, reservation); err != nil {
 		return nil, err
 	}
 
@@ -137,7 +145,10 @@ func (s *BookingService) CreateOrder(ctx context.Context, input CreateOrderInput
 		OrderNo:       input.OrderNo,
 		UserID:        reservation.UserID,
 		EventID:       reservation.EventID,
+		SectionID:     reservation.SectionID,
 		ReservationID: reservation.ID,
+		Quantity:      reservation.Quantity,
+		UnitPrice:     reservation.UnitPrice,
 		TotalAmount:   reservation.TotalAmount,
 		Status:        domain.OrderStatusPendingPayment,
 		ExpiresAt:     input.ExpiresAt,
@@ -153,69 +164,74 @@ func (s *BookingService) CreateOrder(ctx context.Context, input CreateOrderInput
 }
 
 func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*domain.Payment, error) {
-	order, err := s.OrderRepo.FindByID(ctx, input.OrderID)
+	var payment *domain.Payment
+
+	err := s.withTx(ctx, func(repos bookingRepos) error {
+		order, err := repos.order.FindByID(ctx, input.OrderID)
+		if err != nil {
+			return err
+		}
+
+		if !order.CanPay(input.PaidAt) {
+			return ErrOrderCannotBePaid
+		}
+
+		if input.Amount != order.TotalAmount {
+			return ErrPaymentAmountMismatch
+		}
+
+		reservation, err := repos.reservation.FindByID(ctx, order.ReservationID)
+		if err != nil {
+			return err
+		}
+
+		if !reservation.Confirm(input.PaidAt) {
+			return ErrReservationAlreadyUsed
+		}
+
+		section, err := repos.section.FindByEventAndID(ctx, reservation.EventID, reservation.SectionID)
+		if err != nil {
+			return err
+		}
+
+		if !section.ConfirmSale(reservation.Quantity) {
+			return ErrSectionNotReservable
+		}
+
+		if !order.MarkPaid(input.PaidAt) {
+			return ErrOrderCannotBePaid
+		}
+
+		payment = &domain.Payment{
+			OrderID:   order.ID,
+			PaymentNo: input.PaymentNo,
+			Method:    input.Method,
+			Amount:    input.Amount,
+			Status:    domain.PaymentStatusPending,
+			CreatedAt: input.PaidAt,
+			UpdatedAt: input.PaidAt,
+		}
+
+		if !payment.MarkPaid(input.PaidAt) {
+			return ErrOrderCannotBePaid
+		}
+
+		section.UpdatedAt = input.PaidAt
+		if err := repos.section.Save(ctx, section); err != nil {
+			return err
+		}
+
+		if err := repos.reservation.Save(ctx, reservation); err != nil {
+			return err
+		}
+
+		if err := repos.order.Save(ctx, order); err != nil {
+			return err
+		}
+
+		return repos.payment.Save(ctx, payment)
+	})
 	if err != nil {
-		return nil, err
-	}
-
-	if !order.CanPay(input.PaidAt) {
-		return nil, ErrOrderCannotBePaid
-	}
-
-	if input.Amount != order.TotalAmount {
-		return nil, ErrPaymentAmountMismatch
-	}
-
-	reservation, err := s.ReservationRepo.FindByID(ctx, order.ReservationID)
-	if err != nil {
-		return nil, err
-	}
-
-	if !reservation.Confirm(input.PaidAt) {
-		return nil, ErrReservationAlreadyUsed
-	}
-
-	section, err := s.SectionRepo.FindByEventAndID(ctx, reservation.EventID, reservation.SectionID)
-	if err != nil {
-		return nil, err
-	}
-
-	if !section.ConfirmSale(reservation.Quantity) {
-		return nil, ErrSectionNotReservable
-	}
-
-	if !order.MarkPaid(input.PaidAt) {
-		return nil, ErrOrderCannotBePaid
-	}
-
-	payment := &domain.Payment{
-		OrderID:   order.ID,
-		PaymentNo: input.PaymentNo,
-		Method:    input.Method,
-		Amount:    input.Amount,
-		Status:    domain.PaymentStatusPending,
-		CreatedAt: input.PaidAt,
-		UpdatedAt: input.PaidAt,
-	}
-
-	if !payment.MarkPaid(input.PaidAt) {
-		return nil, ErrOrderCannotBePaid
-	}
-
-	section.UpdatedAt = input.PaidAt
-	if err := s.SectionRepo.Save(ctx, section); err != nil {
-		return nil, err
-	}
-
-	if err := s.ReservationRepo.Save(ctx, reservation); err != nil {
-		return nil, err
-	}
-
-	if err := s.OrderRepo.Save(ctx, order); err != nil {
-		return nil, err
-	}
-
-	if err := s.PaymentRepo.Save(ctx, payment); err != nil {
 		return nil, err
 	}
 
@@ -223,30 +239,36 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 }
 
 func (s *BookingService) ExpireReservation(ctx context.Context, input ExpireReservationInput) (*domain.Reservation, error) {
-	reservation, err := s.ReservationRepo.FindByID(ctx, input.ReservationID)
+	var reservation *domain.Reservation
+
+	err := s.withTx(ctx, func(repos bookingRepos) error {
+		var err error
+		reservation, err = repos.reservation.FindByID(ctx, input.ReservationID)
+		if err != nil {
+			return err
+		}
+
+		if !reservation.Expire(input.ExpiredAt) {
+			return ErrReservationCannotClose
+		}
+
+		section, err := repos.section.FindByEventAndID(ctx, reservation.EventID, reservation.SectionID)
+		if err != nil {
+			return err
+		}
+
+		if !section.Release(reservation.Quantity) {
+			return ErrReservationCannotClose
+		}
+
+		section.UpdatedAt = input.ExpiredAt
+		if err := repos.section.Save(ctx, section); err != nil {
+			return err
+		}
+
+		return repos.reservation.Save(ctx, reservation)
+	})
 	if err != nil {
-		return nil, err
-	}
-
-	if !reservation.Expire(input.ExpiredAt) {
-		return nil, ErrReservationCannotClose
-	}
-
-	section, err := s.SectionRepo.FindByEventAndID(ctx, reservation.EventID, reservation.SectionID)
-	if err != nil {
-		return nil, err
-	}
-
-	if !section.Release(reservation.Quantity) {
-		return nil, ErrReservationCannotClose
-	}
-
-	section.UpdatedAt = input.ExpiredAt
-	if err := s.SectionRepo.Save(ctx, section); err != nil {
-		return nil, err
-	}
-
-	if err := s.ReservationRepo.Save(ctx, reservation); err != nil {
 		return nil, err
 	}
 
@@ -254,32 +276,79 @@ func (s *BookingService) ExpireReservation(ctx context.Context, input ExpireRese
 }
 
 func (s *BookingService) CancelReservation(ctx context.Context, input CancelReservationInput) (*domain.Reservation, error) {
-	reservation, err := s.ReservationRepo.FindByID(ctx, input.ReservationID)
+	var reservation *domain.Reservation
+
+	err := s.withTx(ctx, func(repos bookingRepos) error {
+		var err error
+		reservation, err = repos.reservation.FindByID(ctx, input.ReservationID)
+		if err != nil {
+			return err
+		}
+
+		if !reservation.Cancel(input.CancelledAt) {
+			return ErrReservationCannotClose
+		}
+
+		section, err := repos.section.FindByEventAndID(ctx, reservation.EventID, reservation.SectionID)
+		if err != nil {
+			return err
+		}
+
+		if !section.Release(reservation.Quantity) {
+			return ErrReservationCannotClose
+		}
+
+		section.UpdatedAt = input.CancelledAt
+		if err := repos.section.Save(ctx, section); err != nil {
+			return err
+		}
+
+		return repos.reservation.Save(ctx, reservation)
+	})
 	if err != nil {
-		return nil, err
-	}
-
-	if !reservation.Cancel(input.CancelledAt) {
-		return nil, ErrReservationCannotClose
-	}
-
-	section, err := s.SectionRepo.FindByEventAndID(ctx, reservation.EventID, reservation.SectionID)
-	if err != nil {
-		return nil, err
-	}
-
-	if !section.Release(reservation.Quantity) {
-		return nil, ErrReservationCannotClose
-	}
-
-	section.UpdatedAt = input.CancelledAt
-	if err := s.SectionRepo.Save(ctx, section); err != nil {
-		return nil, err
-	}
-
-	if err := s.ReservationRepo.Save(ctx, reservation); err != nil {
 		return nil, err
 	}
 
 	return reservation, nil
+}
+
+type bookingRepos struct {
+	event       repository.EventRepository
+	section     repository.SectionRepository
+	reservation repository.ReservationRepository
+	order       repository.OrderRepository
+	payment     repository.PaymentRepository
+}
+
+func (s *BookingService) withTx(ctx context.Context, fn func(repos bookingRepos) error) error {
+	if s.DB == nil {
+		return fn(bookingRepos{
+			event:       s.EventRepo,
+			section:     s.SectionRepo,
+			reservation: s.ReservationRepo,
+			order:       s.OrderRepo,
+			payment:     s.PaymentRepo,
+		})
+	}
+
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	queries := db.New(tx)
+	repos := bookingRepos{
+		event:       repository.NewPostgresEventRepository(queries),
+		section:     repository.NewPostgresSectionRepository(queries),
+		reservation: repository.NewPostgresReservationRepository(queries),
+		order:       repository.NewPostgresOrderRepository(queries),
+		payment:     repository.NewPostgresPaymentRepository(queries),
+	}
+
+	if err := fn(repos); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }

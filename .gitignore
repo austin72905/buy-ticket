@@ -1,0 +1,28 @@
+# Go binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+buy-ticket
+
+# Go test artifacts
+*.test
+*.out
+coverage.out
+cover.out
+
+# Environment files
+.env
+.env.*
+
+# Logs
+*.log
+
+# IDE files
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

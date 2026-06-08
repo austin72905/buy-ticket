@@ -15,6 +15,7 @@ func TestBookingServiceReserveTicket(t *testing.T) {
 		eventRepo := &fakeEventRepository{
 			event: &domain.Event{
 				ID:          1,
+				Name:        "Jay Concert",
 				Status:      domain.EventStatusOnSale,
 				SaleStartAt: now.Add(-time.Hour),
 				SaleEndAt:   now.Add(time.Hour),
@@ -24,6 +25,7 @@ func TestBookingServiceReserveTicket(t *testing.T) {
 			section: &domain.Section{
 				ID:            2,
 				EventID:       1,
+				Name:          "A 區",
 				Price:         1800,
 				TotalQuantity: 10,
 				Status:        domain.SectionStatusActive,
@@ -100,6 +102,7 @@ func TestBookingServiceCreateOrder(t *testing.T) {
 					EventID:     1,
 					SectionID:   2,
 					Quantity:    2,
+					UnitPrice:   1800,
 					TotalAmount: 3600,
 					Status:      domain.ReservationStatusHolding,
 					ExpiresAt:   now.Add(5 * time.Minute),
@@ -125,6 +128,9 @@ func TestBookingServiceCreateOrder(t *testing.T) {
 		if order.TotalAmount != 3600 {
 			t.Fatalf("預期訂單金額為 3600，實際為 %d", order.TotalAmount)
 		}
+		if order.Quantity != 2 || order.UnitPrice != 1800 {
+			t.Fatalf("預期訂單快照 quantity=2 unit_price=1800，實際 quantity=%d unit_price=%d", order.Quantity, order.UnitPrice)
+		}
 	})
 }
 
@@ -135,7 +141,13 @@ func TestBookingServicePayOrder(t *testing.T) {
 			orders: map[int64]*domain.Order{
 				20: {
 					ID:            20,
+					OrderNo:       "ORD-001",
 					ReservationID: 10,
+					UserID:        3,
+					EventID:       1,
+					SectionID:     2,
+					Quantity:      2,
+					UnitPrice:     1800,
 					TotalAmount:   3600,
 					Status:        domain.OrderStatusPendingPayment,
 					ExpiresAt:     now.Add(10 * time.Minute),
@@ -151,6 +163,7 @@ func TestBookingServicePayOrder(t *testing.T) {
 					SectionID:   2,
 					UserID:      3,
 					Quantity:    2,
+					UnitPrice:   1800,
 					TotalAmount: 3600,
 					Status:      domain.ReservationStatusHolding,
 					ExpiresAt:   now.Add(5 * time.Minute),
@@ -369,8 +382,8 @@ func (f *fakeReservationRepository) Save(ctx context.Context, reservation *domai
 }
 
 type fakeOrderRepository struct {
-	orders  map[int64]*domain.Order
-	nextID  int64
+	orders map[int64]*domain.Order
+	nextID int64
 }
 
 func (f *fakeOrderRepository) FindByID(ctx context.Context, orderID int64) (*domain.Order, error) {

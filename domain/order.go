@@ -16,7 +16,10 @@ type Order struct {
 	OrderNo       string
 	UserID        int64
 	EventID       int64
+	SectionID     int64
 	ReservationID int64
+	Quantity      int
+	UnitPrice     int64
 	TotalAmount   int64
 	Status        OrderStatus
 	ExpiresAt     time.Time

@@ -57,7 +57,10 @@ type OrderResponse struct {
 	OrderNo       string `json:"order_no"`
 	UserID        int64  `json:"user_id"`
 	EventID       int64  `json:"event_id"`
+	SectionID     int64  `json:"section_id"`
 	ReservationID int64  `json:"reservation_id"`
+	Quantity      int    `json:"quantity"`
+	UnitPrice     int64  `json:"unit_price"`
 	TotalAmount   int64  `json:"total_amount"`
 	Status        int8   `json:"status"`
 	ExpiresAt     string `json:"expires_at"`
@@ -100,7 +103,10 @@ func newOrderResponse(order *domain.Order) OrderResponse {
 		OrderNo:       order.OrderNo,
 		UserID:        order.UserID,
 		EventID:       order.EventID,
+		SectionID:     order.SectionID,
 		ReservationID: order.ReservationID,
+		Quantity:      order.Quantity,
+		UnitPrice:     order.UnitPrice,
 		TotalAmount:   order.TotalAmount,
 		Status:        int8(order.Status),
 		ExpiresAt:     order.ExpiresAt.Format(time.RFC3339),
