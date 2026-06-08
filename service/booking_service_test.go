@@ -1,0 +1,420 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"buy-ticket/domain"
+)
+
+func TestBookingServiceReserveTicket(t *testing.T) {
+	t.Run("開賣中且票區可保留時應建立 reservation", func(t *testing.T) {
+		now := time.Now()
+		eventRepo := &fakeEventRepository{
+			event: &domain.Event{
+				ID:          1,
+				Status:      domain.EventStatusOnSale,
+				SaleStartAt: now.Add(-time.Hour),
+				SaleEndAt:   now.Add(time.Hour),
+			},
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:            2,
+				EventID:       1,
+				Price:         1800,
+				TotalQuantity: 10,
+				Status:        domain.SectionStatusActive,
+			},
+		}
+		reservationRepo := &fakeReservationRepository{}
+		service := NewBookingService(eventRepo, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+
+		reservation, err := service.ReserveTicket(context.Background(), ReserveTicketInput{
+			UserID:    3,
+			EventID:   1,
+			SectionID: 2,
+			Quantity:  2,
+			HoldUntil: now.Add(5 * time.Minute),
+		})
+
+		if err != nil {
+			t.Fatalf("預期保留成功，實際錯誤: %v", err)
+		}
+		if reservation.Status != domain.ReservationStatusHolding {
+			t.Fatal("預期 reservation 狀態為 holding")
+		}
+		if reservation.TotalAmount != 3600 {
+			t.Fatalf("預期總金額為 3600，實際為 %d", reservation.TotalAmount)
+		}
+		if sectionRepo.section.ReservedQuantity != 2 {
+			t.Fatalf("預期票區保留數量為 2，實際為 %d", sectionRepo.section.ReservedQuantity)
+		}
+	})
+
+	t.Run("未開賣時應回傳 event is not on sale", func(t *testing.T) {
+		now := time.Now()
+		eventRepo := &fakeEventRepository{
+			event: &domain.Event{
+				ID:          1,
+				Status:      domain.EventStatusOnSale,
+				SaleStartAt: now.Add(time.Hour),
+				SaleEndAt:   now.Add(2 * time.Hour),
+			},
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:            2,
+				EventID:       1,
+				Price:         1800,
+				TotalQuantity: 10,
+				Status:        domain.SectionStatusActive,
+			},
+		}
+		service := NewBookingService(eventRepo, sectionRepo, &fakeReservationRepository{}, &fakeOrderRepository{}, &fakePaymentRepository{})
+
+		_, err := service.ReserveTicket(context.Background(), ReserveTicketInput{
+			UserID:    3,
+			EventID:   1,
+			SectionID: 2,
+			Quantity:  2,
+			HoldUntil: now.Add(5 * time.Minute),
+		})
+
+		if !errors.Is(err, ErrEventNotOnSale) {
+			t.Fatalf("預期錯誤為 ErrEventNotOnSale，實際為 %v", err)
+		}
+	})
+}
+
+func TestBookingServiceCreateOrder(t *testing.T) {
+	t.Run("有效 reservation 應建立待付款訂單", func(t *testing.T) {
+		now := time.Now()
+		reservationRepo := &fakeReservationRepository{
+			reservations: map[int64]*domain.Reservation{
+				10: {
+					ID:          10,
+					UserID:      3,
+					EventID:     1,
+					SectionID:   2,
+					Quantity:    2,
+					TotalAmount: 3600,
+					Status:      domain.ReservationStatusHolding,
+					ExpiresAt:   now.Add(5 * time.Minute),
+				},
+			},
+			nextID: 10,
+		}
+		orderRepo := &fakeOrderRepository{}
+		service := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, reservationRepo, orderRepo, &fakePaymentRepository{})
+
+		order, err := service.CreateOrder(context.Background(), CreateOrderInput{
+			ReservationID: 10,
+			OrderNo:       "ORD-001",
+			ExpiresAt:     now.Add(10 * time.Minute),
+		})
+
+		if err != nil {
+			t.Fatalf("預期建單成功，實際錯誤: %v", err)
+		}
+		if order.Status != domain.OrderStatusPendingPayment {
+			t.Fatal("預期訂單狀態為 pending payment")
+		}
+		if order.TotalAmount != 3600 {
+			t.Fatalf("預期訂單金額為 3600，實際為 %d", order.TotalAmount)
+		}
+	})
+}
+
+func TestBookingServicePayOrder(t *testing.T) {
+	t.Run("訂單可付款時應完成付款並確認售出", func(t *testing.T) {
+		now := time.Now()
+		orderRepo := &fakeOrderRepository{
+			orders: map[int64]*domain.Order{
+				20: {
+					ID:            20,
+					ReservationID: 10,
+					TotalAmount:   3600,
+					Status:        domain.OrderStatusPendingPayment,
+					ExpiresAt:     now.Add(10 * time.Minute),
+				},
+			},
+			nextID: 20,
+		}
+		reservationRepo := &fakeReservationRepository{
+			reservations: map[int64]*domain.Reservation{
+				10: {
+					ID:          10,
+					EventID:     1,
+					SectionID:   2,
+					UserID:      3,
+					Quantity:    2,
+					TotalAmount: 3600,
+					Status:      domain.ReservationStatusHolding,
+					ExpiresAt:   now.Add(5 * time.Minute),
+				},
+			},
+			nextID: 10,
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:               2,
+				EventID:          1,
+				ReservedQuantity: 2,
+				SoldQuantity:     3,
+				TotalQuantity:    10,
+				Status:           domain.SectionStatusActive,
+			},
+		}
+		paymentRepo := &fakePaymentRepository{}
+		service := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, orderRepo, paymentRepo)
+
+		payment, err := service.PayOrder(context.Background(), PayOrderInput{
+			OrderID:   20,
+			PaymentNo: "PAY-001",
+			Method:    "credit_card",
+			Amount:    3600,
+			PaidAt:    now,
+		})
+
+		if err != nil {
+			t.Fatalf("預期付款成功，實際錯誤: %v", err)
+		}
+		if payment.Status != domain.PaymentStatusPaid {
+			t.Fatal("預期 payment 狀態為 paid")
+		}
+		if orderRepo.orders[20].Status != domain.OrderStatusPaid {
+			t.Fatal("預期 order 狀態為 paid")
+		}
+		if reservationRepo.reservations[10].Status != domain.ReservationStatusConfirmed {
+			t.Fatal("預期 reservation 狀態為 confirmed")
+		}
+		if sectionRepo.section.ReservedQuantity != 0 || sectionRepo.section.SoldQuantity != 5 {
+			t.Fatalf("預期票區 reserved=0 sold=5，實際 reserved=%d sold=%d", sectionRepo.section.ReservedQuantity, sectionRepo.section.SoldQuantity)
+		}
+	})
+
+	t.Run("付款金額不符時應回傳錯誤", func(t *testing.T) {
+		now := time.Now()
+		orderRepo := &fakeOrderRepository{
+			orders: map[int64]*domain.Order{
+				20: {
+					ID:            20,
+					ReservationID: 10,
+					TotalAmount:   3600,
+					Status:        domain.OrderStatusPendingPayment,
+					ExpiresAt:     now.Add(10 * time.Minute),
+				},
+			},
+		}
+		service := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, &fakeReservationRepository{}, orderRepo, &fakePaymentRepository{})
+
+		_, err := service.PayOrder(context.Background(), PayOrderInput{
+			OrderID:   20,
+			PaymentNo: "PAY-001",
+			Method:    "credit_card",
+			Amount:    3000,
+			PaidAt:    now,
+		})
+
+		if !errors.Is(err, ErrPaymentAmountMismatch) {
+			t.Fatalf("預期錯誤為 ErrPaymentAmountMismatch，實際為 %v", err)
+		}
+	})
+}
+
+func TestBookingServiceCloseReservation(t *testing.T) {
+	t.Run("reservation 過期時應釋放票區保留量", func(t *testing.T) {
+		now := time.Now()
+		reservationRepo := &fakeReservationRepository{
+			reservations: map[int64]*domain.Reservation{
+				10: {
+					ID:        10,
+					EventID:   1,
+					SectionID: 2,
+					Quantity:  2,
+					Status:    domain.ReservationStatusHolding,
+				},
+			},
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:               2,
+				EventID:          1,
+				ReservedQuantity: 2,
+				TotalQuantity:    10,
+				Status:           domain.SectionStatusActive,
+			},
+		}
+		service := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+
+		reservation, err := service.ExpireReservation(context.Background(), ExpireReservationInput{
+			ReservationID: 10,
+			ExpiredAt:     now,
+		})
+
+		if err != nil {
+			t.Fatalf("預期過期成功，實際錯誤: %v", err)
+		}
+		if reservation.Status != domain.ReservationStatusExpired {
+			t.Fatal("預期 reservation 狀態為 expired")
+		}
+		if sectionRepo.section.ReservedQuantity != 0 {
+			t.Fatalf("預期票區保留數量為 0，實際為 %d", sectionRepo.section.ReservedQuantity)
+		}
+	})
+
+	t.Run("reservation 取消時應釋放票區保留量", func(t *testing.T) {
+		now := time.Now()
+		reservationRepo := &fakeReservationRepository{
+			reservations: map[int64]*domain.Reservation{
+				11: {
+					ID:        11,
+					EventID:   1,
+					SectionID: 2,
+					Quantity:  1,
+					Status:    domain.ReservationStatusHolding,
+				},
+			},
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:               2,
+				EventID:          1,
+				ReservedQuantity: 1,
+				TotalQuantity:    10,
+				Status:           domain.SectionStatusActive,
+			},
+		}
+		service := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+
+		reservation, err := service.CancelReservation(context.Background(), CancelReservationInput{
+			ReservationID: 11,
+			CancelledAt:   now,
+		})
+
+		if err != nil {
+			t.Fatalf("預期取消成功，實際錯誤: %v", err)
+		}
+		if reservation.Status != domain.ReservationStatusCancelled {
+			t.Fatal("預期 reservation 狀態為 cancelled")
+		}
+		if sectionRepo.section.ReservedQuantity != 0 {
+			t.Fatalf("預期票區保留數量為 0，實際為 %d", sectionRepo.section.ReservedQuantity)
+		}
+	})
+}
+
+type fakeEventRepository struct {
+	event *domain.Event
+}
+
+func (f *fakeEventRepository) FindByID(ctx context.Context, eventID int64) (*domain.Event, error) {
+	if f.event == nil || f.event.ID != eventID {
+		return nil, errors.New("event not found")
+	}
+
+	return f.event, nil
+}
+
+type fakeSectionRepository struct {
+	section *domain.Section
+}
+
+func (f *fakeSectionRepository) FindByEventAndID(ctx context.Context, eventID, sectionID int64) (*domain.Section, error) {
+	if f.section == nil || f.section.EventID != eventID || f.section.ID != sectionID {
+		return nil, errors.New("section not found")
+	}
+
+	return f.section, nil
+}
+
+func (f *fakeSectionRepository) Save(ctx context.Context, section *domain.Section) error {
+	f.section = section
+	return nil
+}
+
+type fakeReservationRepository struct {
+	reservations map[int64]*domain.Reservation
+	nextID       int64
+}
+
+func (f *fakeReservationRepository) FindByID(ctx context.Context, reservationID int64) (*domain.Reservation, error) {
+	if f.reservations == nil {
+		return nil, errors.New("reservation not found")
+	}
+
+	reservation, ok := f.reservations[reservationID]
+	if !ok {
+		return nil, errors.New("reservation not found")
+	}
+
+	return reservation, nil
+}
+
+func (f *fakeReservationRepository) Save(ctx context.Context, reservation *domain.Reservation) error {
+	if f.reservations == nil {
+		f.reservations = map[int64]*domain.Reservation{}
+	}
+
+	if reservation.ID == 0 {
+		f.nextID++
+		reservation.ID = f.nextID
+	}
+
+	f.reservations[reservation.ID] = reservation
+	return nil
+}
+
+type fakeOrderRepository struct {
+	orders  map[int64]*domain.Order
+	nextID  int64
+}
+
+func (f *fakeOrderRepository) FindByID(ctx context.Context, orderID int64) (*domain.Order, error) {
+	if f.orders == nil {
+		return nil, errors.New("order not found")
+	}
+
+	order, ok := f.orders[orderID]
+	if !ok {
+		return nil, errors.New("order not found")
+	}
+
+	return order, nil
+}
+
+func (f *fakeOrderRepository) Save(ctx context.Context, order *domain.Order) error {
+	if f.orders == nil {
+		f.orders = map[int64]*domain.Order{}
+	}
+
+	if order.ID == 0 {
+		f.nextID++
+		order.ID = f.nextID
+	}
+
+	f.orders[order.ID] = order
+	return nil
+}
+
+type fakePaymentRepository struct {
+	payments map[int64]*domain.Payment
+	nextID   int64
+}
+
+func (f *fakePaymentRepository) Save(ctx context.Context, payment *domain.Payment) error {
+	if f.payments == nil {
+		f.payments = map[int64]*domain.Payment{}
+	}
+
+	if payment.ID == 0 {
+		f.nextID++
+		payment.ID = f.nextID
+	}
+
+	f.payments[payment.ID] = payment
+	return nil
+}
