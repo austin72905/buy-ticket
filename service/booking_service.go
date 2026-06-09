@@ -354,8 +354,16 @@ func (s *BookingService) GetReservation(ctx context.Context, reservationID int64
 	return s.ReservationRepo.FindByID(ctx, reservationID)
 }
 
+func (s *BookingService) ListReservationsByUserID(ctx context.Context, userID int64) ([]domain.Reservation, error) {
+	return s.ReservationRepo.ListByUserID(ctx, userID)
+}
+
 func (s *BookingService) GetOrderByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error) {
 	return s.OrderRepo.FindByOrderNo(ctx, orderNo)
+}
+
+func (s *BookingService) ListOrdersByUserID(ctx context.Context, userID int64) ([]domain.Order, error) {
+	return s.OrderRepo.ListByUserID(ctx, userID)
 }
 
 func (s *BookingService) GetPaymentByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error) {

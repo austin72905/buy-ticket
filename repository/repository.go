@@ -19,12 +19,14 @@ type SectionRepository interface {
 
 type ReservationRepository interface {
 	FindByID(ctx context.Context, reservationID int64) (*domain.Reservation, error)
+	ListByUserID(ctx context.Context, userID int64) ([]domain.Reservation, error)
 	Save(ctx context.Context, reservation *domain.Reservation) error
 }
 
 type OrderRepository interface {
 	FindByID(ctx context.Context, orderID int64) (*domain.Order, error)
 	FindByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error)
+	ListByUserID(ctx context.Context, userID int64) ([]domain.Order, error)
 	Save(ctx context.Context, order *domain.Order) error
 }
 

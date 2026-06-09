@@ -24,6 +24,8 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 	router.GET("/events/:eventId", c.GetEvent)
 	router.GET("/events/:eventId/sections", c.GetSections)
 	router.GET("/events/:eventId/availability", c.GetAvailability)
+	router.GET("/users/:userId/reservations", c.ListUserReservations)
+	router.GET("/users/:userId/orders", c.ListUserOrders)
 	router.GET("/reservations/:reservationId", c.GetReservation)
 	router.GET("/orders/:orderId", c.GetOrder)
 	router.GET("/orders/order-no/:orderNo", c.GetOrderByOrderNo)
@@ -138,6 +140,66 @@ func (c *BookingController) GetAvailability(ctx *gin.Context) {
 	response := make([]SectionAvailabilityResponse, 0, len(availabilities))
 	for _, availability := range availabilities {
 		response = append(response, newSectionAvailabilityResponse(availability))
+	}
+
+	ctx.JSON(http.StatusOK, response)
+}
+
+// ListUserReservations godoc
+// @Summary 查詢使用者 reservation 列表
+// @Description 依照 user ID 取得該使用者的鎖票列表
+// @Tags reservations
+// @Produce json
+// @Param userId path int true "使用者 ID"
+// @Success 200 {array} ReservationResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /users/{userId}/reservations [get]
+func (c *BookingController) ListUserReservations(ctx *gin.Context) {
+	userID, ok := parseInt64Param(ctx, "userId")
+	if !ok {
+		return
+	}
+
+	reservations, err := c.BookingService.ListReservationsByUserID(ctx.Request.Context(), userID)
+	if err != nil {
+		writeError(ctx, http.StatusNotFound, err)
+		return
+	}
+
+	response := make([]ReservationResponse, 0, len(reservations))
+	for _, reservation := range reservations {
+		response = append(response, newReservationResponse(&reservation))
+	}
+
+	ctx.JSON(http.StatusOK, response)
+}
+
+// ListUserOrders godoc
+// @Summary 查詢使用者訂單列表
+// @Description 依照 user ID 取得該使用者的訂單列表
+// @Tags orders
+// @Produce json
+// @Param userId path int true "使用者 ID"
+// @Success 200 {array} OrderResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /users/{userId}/orders [get]
+func (c *BookingController) ListUserOrders(ctx *gin.Context) {
+	userID, ok := parseInt64Param(ctx, "userId")
+	if !ok {
+		return
+	}
+
+	orders, err := c.BookingService.ListOrdersByUserID(ctx.Request.Context(), userID)
+	if err != nil {
+		writeError(ctx, http.StatusNotFound, err)
+		return
+	}
+
+	response := make([]OrderResponse, 0, len(orders))
+	for _, order := range orders {
+		response = append(response, newOrderResponse(&order))
 	}
 
 	ctx.JSON(http.StatusOK, response)

@@ -148,6 +148,23 @@ func (r *MemoryReservationRepository) FindByID(ctx context.Context, reservationI
 	return &cloned, nil
 }
 
+func (r *MemoryReservationRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Reservation, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	reservations := make([]domain.Reservation, 0)
+	for _, reservation := range r.reservations {
+		if reservation.UserID != userID {
+			continue
+		}
+
+		cloned := *reservation
+		reservations = append(reservations, cloned)
+	}
+
+	return reservations, nil
+}
+
 func (r *MemoryReservationRepository) Save(ctx context.Context, reservation *domain.Reservation) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -203,6 +220,23 @@ func (r *MemoryOrderRepository) FindByOrderNo(ctx context.Context, orderNo strin
 	}
 
 	return nil, ErrOrderNotFound
+}
+
+func (r *MemoryOrderRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Order, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	orders := make([]domain.Order, 0)
+	for _, order := range r.orders {
+		if order.UserID != userID {
+			continue
+		}
+
+		cloned := *order
+		orders = append(orders, cloned)
+	}
+
+	return orders, nil
 }
 
 func (r *MemoryOrderRepository) Save(ctx context.Context, order *domain.Order) error {

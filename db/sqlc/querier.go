@@ -24,6 +24,8 @@ type Querier interface {
 	ListEvents(ctx context.Context) ([]Event, error)
 	ListExpiredHoldingReservations(ctx context.Context, arg ListExpiredHoldingReservationsParams) ([]Reservation, error)
 	ListExpiredPendingOrders(ctx context.Context, arg ListExpiredPendingOrdersParams) ([]Order, error)
+	ListOrdersByUserID(ctx context.Context, userID int64) ([]Order, error)
+	ListReservationsByUserID(ctx context.Context, userID int64) ([]Reservation, error)
 	ListSectionsByEventID(ctx context.Context, eventID int64) ([]EventSection, error)
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) error
 	UpdatePaymentStatus(ctx context.Context, arg UpdatePaymentStatusParams) error

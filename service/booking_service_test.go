@@ -383,6 +383,17 @@ func (f *fakeReservationRepository) FindByID(ctx context.Context, reservationID 
 	return reservation, nil
 }
 
+func (f *fakeReservationRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Reservation, error) {
+	reservations := make([]domain.Reservation, 0)
+	for _, reservation := range f.reservations {
+		if reservation.UserID != userID {
+			continue
+		}
+		reservations = append(reservations, *reservation)
+	}
+	return reservations, nil
+}
+
 func (f *fakeReservationRepository) Save(ctx context.Context, reservation *domain.Reservation) error {
 	if f.reservations == nil {
 		f.reservations = map[int64]*domain.Reservation{}
@@ -423,6 +434,17 @@ func (f *fakeOrderRepository) FindByOrderNo(ctx context.Context, orderNo string)
 	}
 
 	return nil, errors.New("order not found")
+}
+
+func (f *fakeOrderRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Order, error) {
+	orders := make([]domain.Order, 0)
+	for _, order := range f.orders {
+		if order.UserID != userID {
+			continue
+		}
+		orders = append(orders, *order)
+	}
+	return orders, nil
 }
 
 func (f *fakeOrderRepository) Save(ctx context.Context, order *domain.Order) error {

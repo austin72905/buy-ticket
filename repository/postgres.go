@@ -144,6 +144,20 @@ func (r *PostgresReservationRepository) FindByID(ctx context.Context, reservatio
 	return toDomainReservation(record), nil
 }
 
+func (r *PostgresReservationRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Reservation, error) {
+	records, err := r.queries.ListReservationsByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	reservations := make([]domain.Reservation, 0, len(records))
+	for _, record := range records {
+		reservations = append(reservations, *toDomainReservation(record))
+	}
+
+	return reservations, nil
+}
+
 func (r *PostgresReservationRepository) Save(ctx context.Context, reservation *domain.Reservation) error {
 	if reservation.ID == 0 {
 		event, err := r.queries.GetEventByID(ctx, reservation.EventID)
@@ -206,6 +220,20 @@ func (r *PostgresOrderRepository) FindByOrderNo(ctx context.Context, orderNo str
 	}
 
 	return toDomainOrder(record), nil
+}
+
+func (r *PostgresOrderRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Order, error) {
+	records, err := r.queries.ListOrdersByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	orders := make([]domain.Order, 0, len(records))
+	for _, record := range records {
+		orders = append(orders, *toDomainOrder(record))
+	}
+
+	return orders, nil
 }
 
 func (r *PostgresOrderRepository) Save(ctx context.Context, order *domain.Order) error {

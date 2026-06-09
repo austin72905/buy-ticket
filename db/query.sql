@@ -235,6 +235,27 @@ WHERE status = 1
 ORDER BY expires_at
 LIMIT $2;
 
+-- name: ListReservationsByUserID :many
+SELECT
+    id,
+    reservation_no,
+    event_id,
+    event_name,
+    section_id,
+    section_name,
+    user_id,
+    user_name,
+    quantity,
+    unit_price,
+    total_amount,
+    status,
+    expires_at,
+    created_at,
+    updated_at
+FROM reservations
+WHERE user_id = $1
+ORDER BY created_at DESC, id DESC;
+
 -- name: GetOrderByID :one
 SELECT
     id,
@@ -358,6 +379,30 @@ WHERE status = 1
   AND expires_at <= $1
 ORDER BY expires_at
 LIMIT $2;
+
+-- name: ListOrdersByUserID :many
+SELECT
+    id,
+    order_no,
+    reservation_id,
+    reservation_no,
+    event_id,
+    event_name,
+    section_id,
+    section_name,
+    user_id,
+    user_name,
+    quantity,
+    unit_price,
+    total_amount,
+    status,
+    expires_at,
+    paid_at,
+    created_at,
+    updated_at
+FROM orders
+WHERE user_id = $1
+ORDER BY created_at DESC, id DESC;
 
 -- name: CreatePayment :one
 INSERT INTO payments (

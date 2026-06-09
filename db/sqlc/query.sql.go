@@ -941,6 +941,128 @@ func (q *Queries) ListExpiredPendingOrders(ctx context.Context, arg ListExpiredP
 	return items, nil
 }
 
+const listOrdersByUserID = `-- name: ListOrdersByUserID :many
+SELECT
+    id,
+    order_no,
+    reservation_id,
+    reservation_no,
+    event_id,
+    event_name,
+    section_id,
+    section_name,
+    user_id,
+    user_name,
+    quantity,
+    unit_price,
+    total_amount,
+    status,
+    expires_at,
+    paid_at,
+    created_at,
+    updated_at
+FROM orders
+WHERE user_id = $1
+ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListOrdersByUserID(ctx context.Context, userID int64) ([]Order, error) {
+	rows, err := q.db.Query(ctx, listOrdersByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Order{}
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderNo,
+			&i.ReservationID,
+			&i.ReservationNo,
+			&i.EventID,
+			&i.EventName,
+			&i.SectionID,
+			&i.SectionName,
+			&i.UserID,
+			&i.UserName,
+			&i.Quantity,
+			&i.UnitPrice,
+			&i.TotalAmount,
+			&i.Status,
+			&i.ExpiresAt,
+			&i.PaidAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReservationsByUserID = `-- name: ListReservationsByUserID :many
+SELECT
+    id,
+    reservation_no,
+    event_id,
+    event_name,
+    section_id,
+    section_name,
+    user_id,
+    user_name,
+    quantity,
+    unit_price,
+    total_amount,
+    status,
+    expires_at,
+    created_at,
+    updated_at
+FROM reservations
+WHERE user_id = $1
+ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListReservationsByUserID(ctx context.Context, userID int64) ([]Reservation, error) {
+	rows, err := q.db.Query(ctx, listReservationsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Reservation{}
+	for rows.Next() {
+		var i Reservation
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReservationNo,
+			&i.EventID,
+			&i.EventName,
+			&i.SectionID,
+			&i.SectionName,
+			&i.UserID,
+			&i.UserName,
+			&i.Quantity,
+			&i.UnitPrice,
+			&i.TotalAmount,
+			&i.Status,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSectionsByEventID = `-- name: ListSectionsByEventID :many
 SELECT
     id,
