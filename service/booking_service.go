@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"buy-ticket/db/sqlc"
@@ -20,6 +21,7 @@ var (
 	ErrReservationCannotClose = errors.New("reservation cannot be expired or cancelled")
 	ErrOrderCannotBePaid      = errors.New("order cannot be paid")
 	ErrPaymentAmountMismatch  = errors.New("payment amount mismatch")
+	ErrQueueTokenNotFound     = errors.New("queue token not found")
 )
 
 type BookingService struct {
@@ -29,6 +31,8 @@ type BookingService struct {
 	ReservationRepo repository.ReservationRepository
 	OrderRepo       repository.OrderRepository
 	PaymentRepo     repository.PaymentRepository
+	queueMu         sync.RWMutex
+	queueStatuses   map[string]QueueStatusSnapshot
 }
 
 type ReserveTicketInput struct {
@@ -69,15 +73,40 @@ type SectionAvailability struct {
 }
 
 type SaleStatus struct {
-	EventID        int64
-	EventStatus    domain.EventStatus
-	IsOnSale       bool
-	QueueEnabled   bool
-	CanJoinQueue   bool
-	CanReserve     bool
-	SaleStartAt    time.Time
-	SaleEndAt      time.Time
-	ServerTime     time.Time
+	EventID      int64
+	EventStatus  domain.EventStatus
+	IsOnSale     bool
+	QueueEnabled bool
+	CanJoinQueue bool
+	CanReserve   bool
+	SaleStartAt  time.Time
+	SaleEndAt    time.Time
+	ServerTime   time.Time
+}
+
+type QueueStatus int8
+
+const (
+	QueueStatusWaiting   QueueStatus = 1
+	QueueStatusReady     QueueStatus = 2
+	QueueStatusExpired   QueueStatus = 3
+	QueueStatusCancelled QueueStatus = 4
+	QueueStatusRejected  QueueStatus = 5
+)
+
+type QueueStatusSnapshot struct {
+	QueueToken             string
+	Status                 QueueStatus
+	EventID                int64
+	UserID                 int64
+	QueuePosition          int64
+	AheadCount             int64
+	EstimatedWaitSeconds   int64
+	PurchaseToken          *string
+	PurchaseTokenExpiresAt *time.Time
+	JoinedAt               time.Time
+	ExpiredAt              time.Time
+	UpdatedAt              time.Time
 }
 
 func NewBookingService(
@@ -93,6 +122,7 @@ func NewBookingService(
 		ReservationRepo: reservationRepo,
 		OrderRepo:       orderRepo,
 		PaymentRepo:     paymentRepo,
+		queueStatuses:   map[string]QueueStatusSnapshot{},
 	}
 }
 
@@ -404,6 +434,26 @@ func (s *BookingService) GetSaleStatus(ctx context.Context, eventID int64, now t
 		SaleEndAt:    event.SaleEndAt,
 		ServerTime:   now,
 	}, nil
+}
+
+func (s *BookingService) GetQueueStatus(ctx context.Context, queueToken string) (*QueueStatusSnapshot, error) {
+	s.queueMu.RLock()
+	defer s.queueMu.RUnlock()
+
+	snapshot, ok := s.queueStatuses[queueToken]
+	if !ok {
+		return nil, ErrQueueTokenNotFound
+	}
+
+	cloned := snapshot
+	return &cloned, nil
+}
+
+func (s *BookingService) SaveQueueStatus(snapshot QueueStatusSnapshot) {
+	s.queueMu.Lock()
+	defer s.queueMu.Unlock()
+
+	s.queueStatuses[snapshot.QueueToken] = snapshot
 }
 
 type bookingRepos struct {

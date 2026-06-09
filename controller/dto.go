@@ -15,6 +15,15 @@ type ReserveTicketRequest struct {
 	HoldUntil time.Time `json:"hold_until"`
 }
 
+type JoinQueueRequest struct {
+	EventID    int64  `json:"event_id"`
+	UserID     int64  `json:"user_id"`
+	ClientID   string `json:"client_id"`
+	RequestID  string `json:"request_id"`
+	Channel    string `json:"channel"`
+	AccessCode string `json:"access_code,omitempty"`
+}
+
 type CreateOrderRequest struct {
 	ReservationID int64     `json:"reservation_id"`
 	OrderNo       string    `json:"order_no"`
@@ -190,6 +199,61 @@ type PaymentResponse struct {
 
 type ErrorResponse struct {
 	Error string `json:"error"`
+}
+
+type JoinQueueResponse struct {
+	QueueToken             string  `json:"queue_token"`
+	Status                 int8    `json:"status"`
+	EventID                int64   `json:"event_id"`
+	UserID                 int64   `json:"user_id"`
+	QueuePosition          int64   `json:"queue_position"`
+	AheadCount             int64   `json:"ahead_count"`
+	EstimatedWaitSeconds   int64   `json:"estimated_wait_seconds"`
+	PurchaseToken          *string `json:"purchase_token,omitempty"`
+	PurchaseTokenExpiresAt *string `json:"purchase_token_expires_at,omitempty"`
+	JoinedAt               string  `json:"joined_at"`
+	ExpiredAt              string  `json:"expired_at"`
+}
+
+type QueueStatusResponse struct {
+	QueueToken             string  `json:"queue_token"`
+	Status                 int8    `json:"status"`
+	EventID                int64   `json:"event_id"`
+	UserID                 int64   `json:"user_id"`
+	QueuePosition          int64   `json:"queue_position"`
+	AheadCount             int64   `json:"ahead_count"`
+	EstimatedWaitSeconds   int64   `json:"estimated_wait_seconds"`
+	PurchaseToken          *string `json:"purchase_token,omitempty"`
+	PurchaseTokenExpiresAt *string `json:"purchase_token_expires_at,omitempty"`
+	JoinedAt               string  `json:"joined_at"`
+	ExpiredAt              string  `json:"expired_at"`
+	UpdatedAt              string  `json:"updated_at"`
+}
+
+func newQueueStatusResponse(snapshot *service.QueueStatusSnapshot) QueueStatusResponse {
+	response := QueueStatusResponse{
+		QueueToken:           snapshot.QueueToken,
+		Status:               int8(snapshot.Status),
+		EventID:              snapshot.EventID,
+		UserID:               snapshot.UserID,
+		QueuePosition:        snapshot.QueuePosition,
+		AheadCount:           snapshot.AheadCount,
+		EstimatedWaitSeconds: snapshot.EstimatedWaitSeconds,
+		JoinedAt:             snapshot.JoinedAt.Format(time.RFC3339),
+		ExpiredAt:            snapshot.ExpiredAt.Format(time.RFC3339),
+		UpdatedAt:            snapshot.UpdatedAt.Format(time.RFC3339),
+	}
+
+	if snapshot.PurchaseToken != nil {
+		response.PurchaseToken = snapshot.PurchaseToken
+	}
+
+	if snapshot.PurchaseTokenExpiresAt != nil {
+		value := snapshot.PurchaseTokenExpiresAt.Format(time.RFC3339)
+		response.PurchaseTokenExpiresAt = &value
+	}
+
+	return response
 }
 
 func newReservationResponse(reservation *domain.Reservation) ReservationResponse {

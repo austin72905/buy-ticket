@@ -23,6 +23,7 @@ func NewBookingController(bookingService *service.BookingService) *BookingContro
 
 func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 	router.GET("/sale/status", c.GetSaleStatus)
+	router.GET("/queue/status/:queueToken", c.GetQueueStatus)
 	router.GET("/events", c.ListEvents)
 	router.GET("/events/:eventId", c.GetEvent)
 	router.GET("/events/:eventId/sections", c.GetSections)
@@ -39,6 +40,32 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 	router.POST("/payments", c.PayOrder)
 	router.POST("/reservations/expire", c.ExpireReservation)
 	router.POST("/reservations/cancel", c.CancelReservation)
+}
+
+// GetQueueStatus godoc
+// @Summary 查詢排隊狀態
+// @Description 依 queue token 查詢目前排隊進度與是否已取得 purchase token
+// @Tags queue
+// @Produce json
+// @Param queueToken path string true "Queue Token"
+// @Success 200 {object} QueueStatusResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /queue/status/{queueToken} [get]
+func (c *BookingController) GetQueueStatus(ctx *gin.Context) {
+	queueToken := ctx.Param("queueToken")
+	if queueToken == "" {
+		writeError(ctx, http.StatusBadRequest, errors.New("invalid queue token"))
+		return
+	}
+
+	status, err := c.BookingService.GetQueueStatus(ctx.Request.Context(), queueToken)
+	if err != nil {
+		writeError(ctx, http.StatusNotFound, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newQueueStatusResponse(status))
 }
 
 // GetSaleStatus godoc

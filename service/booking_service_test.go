@@ -320,6 +320,62 @@ func TestBookingServiceCloseReservation(t *testing.T) {
 	})
 }
 
+func TestBookingServiceGetQueueStatus(t *testing.T) {
+	t.Run("查得到 queue token 時應回傳快照", func(t *testing.T) {
+		now := time.Now()
+		purchaseToken := "pt_001"
+		purchaseTokenExpiresAt := now.Add(5 * time.Minute)
+
+		service := NewBookingService(
+			&fakeEventRepository{},
+			&fakeSectionRepository{},
+			&fakeReservationRepository{},
+			&fakeOrderRepository{},
+			&fakePaymentRepository{},
+		)
+		service.SaveQueueStatus(QueueStatusSnapshot{
+			QueueToken:             "qt_001",
+			Status:                 QueueStatusReady,
+			EventID:                1,
+			UserID:                 2,
+			QueuePosition:          1,
+			AheadCount:             0,
+			EstimatedWaitSeconds:   0,
+			PurchaseToken:          &purchaseToken,
+			PurchaseTokenExpiresAt: &purchaseTokenExpiresAt,
+			JoinedAt:               now.Add(-2 * time.Minute),
+			ExpiredAt:              now.Add(28 * time.Minute),
+			UpdatedAt:              now,
+		})
+
+		snapshot, err := service.GetQueueStatus(context.Background(), "qt_001")
+		if err != nil {
+			t.Fatalf("預期查詢成功，但得到錯誤: %v", err)
+		}
+		if snapshot.Status != QueueStatusReady {
+			t.Fatalf("預期 status=ready(2)，實際為 %d", snapshot.Status)
+		}
+		if snapshot.PurchaseToken == nil || *snapshot.PurchaseToken != "pt_001" {
+			t.Fatal("預期回傳 purchase token")
+		}
+	})
+
+	t.Run("查不到 queue token 時應回傳錯誤", func(t *testing.T) {
+		service := NewBookingService(
+			&fakeEventRepository{},
+			&fakeSectionRepository{},
+			&fakeReservationRepository{},
+			&fakeOrderRepository{},
+			&fakePaymentRepository{},
+		)
+
+		_, err := service.GetQueueStatus(context.Background(), "qt_not_found")
+		if !errors.Is(err, ErrQueueTokenNotFound) {
+			t.Fatalf("預期錯誤為 ErrQueueTokenNotFound，實際為 %v", err)
+		}
+	})
+}
+
 type fakeEventRepository struct {
 	event *domain.Event
 }
