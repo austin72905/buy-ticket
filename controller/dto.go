@@ -90,6 +90,18 @@ type SectionAvailabilityResponse struct {
 	Status            int8   `json:"status"`
 }
 
+type SaleStatusResponse struct {
+	EventID      int64  `json:"event_id"`
+	EventStatus  int8   `json:"event_status"`
+	IsOnSale     bool   `json:"is_on_sale"`
+	QueueEnabled bool   `json:"queue_enabled"`
+	CanJoinQueue bool   `json:"can_join_queue"`
+	CanReserve   bool   `json:"can_reserve"`
+	SaleStartAt  string `json:"sale_start_at"`
+	SaleEndAt    string `json:"sale_end_at"`
+	ServerTime   string `json:"server_time"`
+}
+
 type OrderResponse struct {
 	ID            int64  `json:"id"`
 	OrderNo       string `json:"order_no"`
@@ -146,6 +158,20 @@ func newSectionAvailabilityResponse(availability service.SectionAvailability) Se
 		ReservedQuantity:  availability.Section.ReservedQuantity,
 		SoldQuantity:      availability.Section.SoldQuantity,
 		Status:            int8(availability.Section.Status),
+	}
+}
+
+func newSaleStatusResponse(status *service.SaleStatus) SaleStatusResponse {
+	return SaleStatusResponse{
+		EventID:      status.EventID,
+		EventStatus:  int8(status.EventStatus),
+		IsOnSale:     status.IsOnSale,
+		QueueEnabled: status.QueueEnabled,
+		CanJoinQueue: status.CanJoinQueue,
+		CanReserve:   status.CanReserve,
+		SaleStartAt:  status.SaleStartAt.Format(time.RFC3339),
+		SaleEndAt:    status.SaleEndAt.Format(time.RFC3339),
+		ServerTime:   status.ServerTime.Format(time.RFC3339),
 	}
 }
 

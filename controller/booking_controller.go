@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"buy-ticket/service"
 
@@ -20,6 +22,7 @@ func NewBookingController(bookingService *service.BookingService) *BookingContro
 }
 
 func (c *BookingController) RegisterRoutes(router gin.IRouter) {
+	router.GET("/sale/status", c.GetSaleStatus)
 	router.GET("/events", c.ListEvents)
 	router.GET("/events/:eventId", c.GetEvent)
 	router.GET("/events/:eventId/sections", c.GetSections)
@@ -36,6 +39,32 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 	router.POST("/payments", c.PayOrder)
 	router.POST("/reservations/expire", c.ExpireReservation)
 	router.POST("/reservations/cancel", c.CancelReservation)
+}
+
+// GetSaleStatus godoc
+// @Summary 查詢售票狀態
+// @Description 依照 event_id 查詢活動是否開賣，以及是否可進入後續購票流程
+// @Tags sale
+// @Produce json
+// @Param event_id query int true "活動 ID"
+// @Success 200 {object} SaleStatusResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /sale/status [get]
+func (c *BookingController) GetSaleStatus(ctx *gin.Context) {
+	eventID, err := strconv.ParseInt(ctx.Query("event_id"), 10, 64)
+	if err != nil || eventID <= 0 {
+		writeError(ctx, http.StatusBadRequest, errors.New("invalid event_id"))
+		return
+	}
+
+	status, svcErr := c.BookingService.GetSaleStatus(ctx.Request.Context(), eventID, time.Now())
+	if svcErr != nil {
+		writeError(ctx, http.StatusNotFound, svcErr)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newSaleStatusResponse(status))
 }
 
 // ListEvents godoc

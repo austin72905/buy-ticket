@@ -68,6 +68,18 @@ type SectionAvailability struct {
 	Available int
 }
 
+type SaleStatus struct {
+	EventID        int64
+	EventStatus    domain.EventStatus
+	IsOnSale       bool
+	QueueEnabled   bool
+	CanJoinQueue   bool
+	CanReserve     bool
+	SaleStartAt    time.Time
+	SaleEndAt      time.Time
+	ServerTime     time.Time
+}
+
 func NewBookingService(
 	eventRepo repository.EventRepository,
 	sectionRepo repository.SectionRepository,
@@ -372,6 +384,26 @@ func (s *BookingService) GetPaymentByPaymentNo(ctx context.Context, paymentNo st
 
 func (s *BookingService) ListPaymentsByUserID(ctx context.Context, userID int64) ([]domain.Payment, error) {
 	return s.PaymentRepo.ListByUserID(ctx, userID)
+}
+
+func (s *BookingService) GetSaleStatus(ctx context.Context, eventID int64, now time.Time) (*SaleStatus, error) {
+	event, err := s.EventRepo.FindByID(ctx, eventID)
+	if err != nil {
+		return nil, err
+	}
+
+	isOnSale := event.IsOnSale(now)
+	return &SaleStatus{
+		EventID:      event.ID,
+		EventStatus:  event.Status,
+		IsOnSale:     isOnSale,
+		QueueEnabled: false,
+		CanJoinQueue: isOnSale,
+		CanReserve:   isOnSale,
+		SaleStartAt:  event.SaleStartAt,
+		SaleEndAt:    event.SaleEndAt,
+		ServerTime:   now,
+	}, nil
 }
 
 type bookingRepos struct {
