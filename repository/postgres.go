@@ -328,6 +328,20 @@ func (r *PostgresPaymentRepository) FindByPaymentNo(ctx context.Context, payment
 	return toDomainPayment(record), nil
 }
 
+func (r *PostgresPaymentRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Payment, error) {
+	records, err := r.queries.ListPaymentsByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	payments := make([]domain.Payment, 0, len(records))
+	for _, record := range records {
+		payments = append(payments, *toDomainPayment(record))
+	}
+
+	return payments, nil
+}
+
 func toDomainEvent(record db.Event) *domain.Event {
 	return &domain.Event{
 		ID:          record.ID,

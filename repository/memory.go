@@ -283,6 +283,10 @@ func (r *MemoryPaymentRepository) FindByPaymentNo(ctx context.Context, paymentNo
 	return nil, ErrPaymentNotFound
 }
 
+func (r *MemoryPaymentRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Payment, error) {
+	return []domain.Payment{}, nil
+}
+
 func (r *MemoryPaymentRepository) Save(ctx context.Context, payment *domain.Payment) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

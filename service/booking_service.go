@@ -370,6 +370,10 @@ func (s *BookingService) GetPaymentByPaymentNo(ctx context.Context, paymentNo st
 	return s.PaymentRepo.FindByPaymentNo(ctx, paymentNo)
 }
 
+func (s *BookingService) ListPaymentsByUserID(ctx context.Context, userID int64) ([]domain.Payment, error) {
+	return s.PaymentRepo.ListByUserID(ctx, userID)
+}
+
 type bookingRepos struct {
 	event       repository.EventRepository
 	section     repository.SectionRepository

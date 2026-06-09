@@ -464,6 +464,28 @@ FROM payments
 WHERE payment_no = $1
 LIMIT 1;
 
+-- name: ListPaymentsByUserID :many
+SELECT
+    id,
+    payment_no,
+    order_id,
+    order_no,
+    reservation_id,
+    event_id,
+    event_name,
+    user_id,
+    user_name,
+    method,
+    amount,
+    status,
+    paid_at,
+    failed_at,
+    created_at,
+    updated_at
+FROM payments
+WHERE user_id = $1
+ORDER BY created_at DESC, id DESC;
+
 -- name: UpdatePaymentStatus :exec
 UPDATE payments
 SET

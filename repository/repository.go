@@ -32,5 +32,6 @@ type OrderRepository interface {
 
 type PaymentRepository interface {
 	FindByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error)
+	ListByUserID(ctx context.Context, userID int64) ([]domain.Payment, error)
 	Save(ctx context.Context, payment *domain.Payment) error
 }

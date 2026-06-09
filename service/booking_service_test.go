@@ -476,6 +476,14 @@ func (f *fakePaymentRepository) FindByPaymentNo(ctx context.Context, paymentNo s
 	return nil, errors.New("payment not found")
 }
 
+func (f *fakePaymentRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Payment, error) {
+	payments := make([]domain.Payment, 0, len(f.payments))
+	for _, payment := range f.payments {
+		payments = append(payments, *payment)
+	}
+	return payments, nil
+}
+
 func (f *fakePaymentRepository) Save(ctx context.Context, payment *domain.Payment) error {
 	if f.payments == nil {
 		f.payments = map[int64]*domain.Payment{}

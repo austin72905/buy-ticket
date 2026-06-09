@@ -1005,6 +1005,66 @@ func (q *Queries) ListOrdersByUserID(ctx context.Context, userID int64) ([]Order
 	return items, nil
 }
 
+const listPaymentsByUserID = `-- name: ListPaymentsByUserID :many
+SELECT
+    id,
+    payment_no,
+    order_id,
+    order_no,
+    reservation_id,
+    event_id,
+    event_name,
+    user_id,
+    user_name,
+    method,
+    amount,
+    status,
+    paid_at,
+    failed_at,
+    created_at,
+    updated_at
+FROM payments
+WHERE user_id = $1
+ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListPaymentsByUserID(ctx context.Context, userID int64) ([]Payment, error) {
+	rows, err := q.db.Query(ctx, listPaymentsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Payment{}
+	for rows.Next() {
+		var i Payment
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaymentNo,
+			&i.OrderID,
+			&i.OrderNo,
+			&i.ReservationID,
+			&i.EventID,
+			&i.EventName,
+			&i.UserID,
+			&i.UserName,
+			&i.Method,
+			&i.Amount,
+			&i.Status,
+			&i.PaidAt,
+			&i.FailedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReservationsByUserID = `-- name: ListReservationsByUserID :many
 SELECT
     id,

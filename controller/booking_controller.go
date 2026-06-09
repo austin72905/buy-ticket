@@ -26,6 +26,7 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 	router.GET("/events/:eventId/availability", c.GetAvailability)
 	router.GET("/users/:userId/reservations", c.ListUserReservations)
 	router.GET("/users/:userId/orders", c.ListUserOrders)
+	router.GET("/users/:userId/payments", c.ListUserPayments)
 	router.GET("/reservations/:reservationId", c.GetReservation)
 	router.GET("/orders/:orderId", c.GetOrder)
 	router.GET("/orders/order-no/:orderNo", c.GetOrderByOrderNo)
@@ -200,6 +201,36 @@ func (c *BookingController) ListUserOrders(ctx *gin.Context) {
 	response := make([]OrderResponse, 0, len(orders))
 	for _, order := range orders {
 		response = append(response, newOrderResponse(&order))
+	}
+
+	ctx.JSON(http.StatusOK, response)
+}
+
+// ListUserPayments godoc
+// @Summary 查詢使用者付款列表
+// @Description 依照 user ID 取得該使用者的付款列表
+// @Tags payments
+// @Produce json
+// @Param userId path int true "使用者 ID"
+// @Success 200 {array} PaymentResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /users/{userId}/payments [get]
+func (c *BookingController) ListUserPayments(ctx *gin.Context) {
+	userID, ok := parseInt64Param(ctx, "userId")
+	if !ok {
+		return
+	}
+
+	payments, err := c.BookingService.ListPaymentsByUserID(ctx.Request.Context(), userID)
+	if err != nil {
+		writeError(ctx, http.StatusNotFound, err)
+		return
+	}
+
+	response := make([]PaymentResponse, 0, len(payments))
+	for _, payment := range payments {
+		response = append(response, newPaymentResponse(&payment))
 	}
 
 	ctx.JSON(http.StatusOK, response)
