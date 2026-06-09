@@ -49,15 +49,36 @@ func (app *BuyTicketApp) Initialize() {
 		env = "local"
 	}
 
-	configFS := map[string]embed.FS{
-		"default": defaultConfigFiles,
-		"local":   localConfigFiles,
-		"dev":     devConfigFiles,
-		"prod":    prodConfigFiles,
+	if err := app.Runtime.Property.LoadPropertiesByFS(
+		defaultConfigFiles,
+		"config/default/app.properties",
+		defaultConfigFiles,
+	); err != nil {
+		log.Fatalf("load default app.properties failed: %v", err)
 	}
 
-	if err := app.Runtime.Property.LoadProperties(configFS, env, "app.properties"); err != nil {
-		log.Fatalf("load app.properties failed: %v", err)
+	envConfigFile := map[string]string{
+		"local": "config/local/app.properties",
+		"dev":   "config/dev/app.properties",
+		"prod":  "config/prod/app.properties",
+	}
+	envFile, ok := envConfigFile[env]
+	if !ok {
+		log.Fatalf("unsupported APP_ENV %q", env)
+	}
+
+	envConfigFS := map[string]embed.FS{
+		"local": localConfigFiles,
+		"dev":   devConfigFiles,
+		"prod":  prodConfigFiles,
+	}
+
+	if err := app.Runtime.Property.LoadPropertiesByFS(
+		envConfigFS[env],
+		envFile,
+		defaultConfigFiles,
+	); err != nil {
+		log.Fatalf("load %s app.properties failed: %v", env, err)
 	}
 
 	eventRepo, sectionRepo, reservationRepo, orderRepo, paymentRepo, dbPool := buildRepositories(app.Runtime)

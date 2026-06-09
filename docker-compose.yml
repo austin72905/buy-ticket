@@ -1,0 +1,71 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: buy-ticket-postgres
+    hostname: buy-ticket-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: buy_ticket
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d buy_ticket"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - buy-ticket-network
+
+  redis:
+    image: redis:7
+    container_name: buy-ticket-redis
+    hostname: buy-ticket-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - buy-ticket-network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: buy-ticket-rabbitmq
+    hostname: buy-ticket-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - buy-ticket-network
+
+volumes:
+  postgres_data:
+    name: buy-ticket-postgres-data
+  redis_data:
+    name: buy-ticket-redis-data
+  rabbitmq_data:
+    name: buy-ticket-rabbitmq-data
+
+networks:
+  buy-ticket-network:
+    name: buy-ticket-network
