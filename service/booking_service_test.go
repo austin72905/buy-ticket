@@ -134,6 +134,86 @@ func TestBookingServiceCreateOrder(t *testing.T) {
 	})
 }
 
+func TestBookingServiceJoinQueue(t *testing.T) {
+	t.Run("活動開賣時應建立 queue token 並回 ready", func(t *testing.T) {
+		now := time.Now()
+		service := NewBookingService(
+			&fakeEventRepository{
+				event: &domain.Event{
+					ID:          1,
+					Status:      domain.EventStatusOnSale,
+					SaleStartAt: now.Add(-time.Hour),
+					SaleEndAt:   now.Add(time.Hour),
+				},
+			},
+			&fakeSectionRepository{},
+			&fakeReservationRepository{},
+			&fakeOrderRepository{},
+			&fakePaymentRepository{},
+		)
+
+		snapshot, err := service.JoinQueue(context.Background(), JoinQueueInput{
+			EventID:   1,
+			UserID:    2,
+			ClientID:  "web-device-001",
+			RequestID: "req-001",
+			Channel:   "web",
+		}, now)
+		if err != nil {
+			t.Fatalf("預期加入排隊成功，但得到錯誤: %v", err)
+		}
+		if snapshot.Status != QueueStatusReady {
+			t.Fatalf("預期 status=ready(2)，實際為 %d", snapshot.Status)
+		}
+		if snapshot.QueueToken == "" {
+			t.Fatal("預期產生 queue token")
+		}
+		if snapshot.PurchaseToken == nil || *snapshot.PurchaseToken == "" {
+			t.Fatal("預期產生 purchase token")
+		}
+	})
+
+	t.Run("同一使用者重複加入有效 queue 時應回錯誤", func(t *testing.T) {
+		now := time.Now()
+		service := NewBookingService(
+			&fakeEventRepository{
+				event: &domain.Event{
+					ID:          1,
+					Status:      domain.EventStatusOnSale,
+					SaleStartAt: now.Add(-time.Hour),
+					SaleEndAt:   now.Add(time.Hour),
+				},
+			},
+			&fakeSectionRepository{},
+			&fakeReservationRepository{},
+			&fakeOrderRepository{},
+			&fakePaymentRepository{},
+		)
+
+		_, err := service.JoinQueue(context.Background(), JoinQueueInput{
+			EventID:   1,
+			UserID:    2,
+			ClientID:  "web-device-001",
+			RequestID: "req-001",
+			Channel:   "web",
+		}, now)
+		if err != nil {
+			t.Fatalf("第一次加入不應失敗: %v", err)
+		}
+
+		_, err = service.JoinQueue(context.Background(), JoinQueueInput{
+			EventID:   1,
+			UserID:    2,
+			ClientID:  "web-device-001",
+			RequestID: "req-002",
+			Channel:   "web",
+		}, now.Add(time.Second))
+		if !errors.Is(err, ErrUserAlreadyJoinedQueue) {
+			t.Fatalf("預期錯誤為 ErrUserAlreadyJoinedQueue，實際為 %v", err)
+		}
+	})
+}
+
 func TestBookingServicePayOrder(t *testing.T) {
 	t.Run("訂單可付款時應完成付款並確認售出", func(t *testing.T) {
 		now := time.Now()

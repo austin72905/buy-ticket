@@ -215,6 +215,31 @@ type JoinQueueResponse struct {
 	ExpiredAt              string  `json:"expired_at"`
 }
 
+func newJoinQueueResponse(snapshot *service.QueueStatusSnapshot) JoinQueueResponse {
+	response := JoinQueueResponse{
+		QueueToken:           snapshot.QueueToken,
+		Status:               int8(snapshot.Status),
+		EventID:              snapshot.EventID,
+		UserID:               snapshot.UserID,
+		QueuePosition:        snapshot.QueuePosition,
+		AheadCount:           snapshot.AheadCount,
+		EstimatedWaitSeconds: snapshot.EstimatedWaitSeconds,
+		JoinedAt:             snapshot.JoinedAt.Format(time.RFC3339),
+		ExpiredAt:            snapshot.ExpiredAt.Format(time.RFC3339),
+	}
+
+	if snapshot.PurchaseToken != nil {
+		response.PurchaseToken = snapshot.PurchaseToken
+	}
+
+	if snapshot.PurchaseTokenExpiresAt != nil {
+		value := snapshot.PurchaseTokenExpiresAt.Format(time.RFC3339)
+		response.PurchaseTokenExpiresAt = &value
+	}
+
+	return response
+}
+
 type QueueStatusResponse struct {
 	QueueToken             string  `json:"queue_token"`
 	Status                 int8    `json:"status"`

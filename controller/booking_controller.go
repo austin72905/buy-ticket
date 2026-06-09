@@ -35,11 +35,45 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 	router.GET("/orders/:orderId", c.GetOrder)
 	router.GET("/orders/order-no/:orderNo", c.GetOrderByOrderNo)
 	router.GET("/payments/:paymentNo", c.GetPaymentByPaymentNo)
+	router.POST("/queue/join", c.JoinQueue)
 	router.POST("/reservations", c.ReserveTicket)
 	router.POST("/orders", c.CreateOrder)
 	router.POST("/payments", c.PayOrder)
 	router.POST("/reservations/expire", c.ExpireReservation)
 	router.POST("/reservations/cancel", c.CancelReservation)
+}
+
+// JoinQueue godoc
+// @Summary 加入排隊
+// @Description 建立 queue token，memory 版本目前直接回 ready 狀態
+// @Tags queue
+// @Accept json
+// @Produce json
+// @Param request body JoinQueueRequest true "加入排隊請求"
+// @Success 201 {object} JoinQueueResponse
+// @Failure 400 {object} ErrorResponse
+// @Router /queue/join [post]
+func (c *BookingController) JoinQueue(ctx *gin.Context) {
+	var request JoinQueueRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	status, err := c.BookingService.JoinQueue(ctx.Request.Context(), service.JoinQueueInput{
+		EventID:    request.EventID,
+		UserID:     request.UserID,
+		ClientID:   request.ClientID,
+		RequestID:  request.RequestID,
+		Channel:    request.Channel,
+		AccessCode: request.AccessCode,
+	}, time.Now())
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, newJoinQueueResponse(status))
 }
 
 // GetQueueStatus godoc
