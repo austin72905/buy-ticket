@@ -8,6 +8,7 @@ import (
 
 type EventRepository interface {
 	FindByID(ctx context.Context, eventID int64) (*domain.Event, error)
+	List(ctx context.Context) ([]domain.Event, error)
 }
 
 type SectionRepository interface {
@@ -23,9 +24,11 @@ type ReservationRepository interface {
 
 type OrderRepository interface {
 	FindByID(ctx context.Context, orderID int64) (*domain.Order, error)
+	FindByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error)
 	Save(ctx context.Context, order *domain.Order) error
 }
 
 type PaymentRepository interface {
+	FindByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error)
 	Save(ctx context.Context, payment *domain.Payment) error
 }

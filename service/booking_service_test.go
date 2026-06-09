@@ -332,6 +332,14 @@ func (f *fakeEventRepository) FindByID(ctx context.Context, eventID int64) (*dom
 	return f.event, nil
 }
 
+func (f *fakeEventRepository) List(ctx context.Context) ([]domain.Event, error) {
+	if f.event == nil {
+		return []domain.Event{}, nil
+	}
+
+	return []domain.Event{*f.event}, nil
+}
+
 type fakeSectionRepository struct {
 	section *domain.Section
 }
@@ -407,6 +415,16 @@ func (f *fakeOrderRepository) FindByID(ctx context.Context, orderID int64) (*dom
 	return order, nil
 }
 
+func (f *fakeOrderRepository) FindByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error) {
+	for _, order := range f.orders {
+		if order.OrderNo == orderNo {
+			return order, nil
+		}
+	}
+
+	return nil, errors.New("order not found")
+}
+
 func (f *fakeOrderRepository) Save(ctx context.Context, order *domain.Order) error {
 	if f.orders == nil {
 		f.orders = map[int64]*domain.Order{}
@@ -424,6 +442,16 @@ func (f *fakeOrderRepository) Save(ctx context.Context, order *domain.Order) err
 type fakePaymentRepository struct {
 	payments map[int64]*domain.Payment
 	nextID   int64
+}
+
+func (f *fakePaymentRepository) FindByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error) {
+	for _, payment := range f.payments {
+		if payment.PaymentNo == paymentNo {
+			return payment, nil
+		}
+	}
+
+	return nil, errors.New("payment not found")
 }
 
 func (f *fakePaymentRepository) Save(ctx context.Context, payment *domain.Payment) error {

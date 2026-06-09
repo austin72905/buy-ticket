@@ -21,6 +21,7 @@ type Querier interface {
 	GetReservationByID(ctx context.Context, id int64) (Reservation, error)
 	GetReservationByReservationNo(ctx context.Context, reservationNo string) (Reservation, error)
 	GetSectionByEventAndID(ctx context.Context, arg GetSectionByEventAndIDParams) (EventSection, error)
+	ListEvents(ctx context.Context) ([]Event, error)
 	ListExpiredHoldingReservations(ctx context.Context, arg ListExpiredHoldingReservationsParams) ([]Reservation, error)
 	ListExpiredPendingOrders(ctx context.Context, arg ListExpiredPendingOrdersParams) ([]Order, error)
 	ListSectionsByEventID(ctx context.Context, eventID int64) ([]EventSection, error)

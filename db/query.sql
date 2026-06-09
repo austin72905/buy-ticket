@@ -14,6 +14,21 @@ FROM events
 WHERE id = $1
 LIMIT 1;
 
+-- name: ListEvents :many
+SELECT
+    id,
+    name,
+    venue,
+    status,
+    start_at,
+    end_at,
+    sale_start_at,
+    sale_end_at,
+    created_at,
+    updated_at
+FROM events
+ORDER BY id;
+
 -- name: CreateEvent :one
 INSERT INTO events (
     name,

@@ -60,6 +60,20 @@ func (r *PostgresEventRepository) FindByID(ctx context.Context, eventID int64) (
 	return toDomainEvent(record), nil
 }
 
+func (r *PostgresEventRepository) List(ctx context.Context) ([]domain.Event, error) {
+	records, err := r.queries.ListEvents(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	events := make([]domain.Event, 0, len(records))
+	for _, record := range records {
+		events = append(events, *toDomainEvent(record))
+	}
+
+	return events, nil
+}
+
 func (r *PostgresSectionRepository) FindByEventAndID(ctx context.Context, eventID, sectionID int64) (*domain.Section, error) {
 	record, err := r.queries.GetSectionByEventAndID(ctx, db.GetSectionByEventAndIDParams{
 		EventID: eventID,
@@ -185,6 +199,15 @@ func (r *PostgresOrderRepository) FindByID(ctx context.Context, orderID int64) (
 	return toDomainOrder(record), nil
 }
 
+func (r *PostgresOrderRepository) FindByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error) {
+	record, err := r.queries.GetOrderByOrderNo(ctx, orderNo)
+	if err != nil {
+		return nil, err
+	}
+
+	return toDomainOrder(record), nil
+}
+
 func (r *PostgresOrderRepository) Save(ctx context.Context, order *domain.Order) error {
 	if order.ID == 0 {
 		reservation, err := r.queries.GetReservationByID(ctx, order.ReservationID)
@@ -266,6 +289,15 @@ func (r *PostgresPaymentRepository) Save(ctx context.Context, payment *domain.Pa
 		FailedAt:  nullablePgTimestamp(payment.FailedAt),
 		UpdatedAt: toPgTimestamp(payment.UpdatedAt),
 	})
+}
+
+func (r *PostgresPaymentRepository) FindByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error) {
+	record, err := r.queries.GetPaymentByPaymentNo(ctx, paymentNo)
+	if err != nil {
+		return nil, err
+	}
+
+	return toDomainPayment(record), nil
 }
 
 func toDomainEvent(record db.Event) *domain.Event {

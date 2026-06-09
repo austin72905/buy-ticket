@@ -758,6 +758,53 @@ func (q *Queries) GetSectionByEventAndID(ctx context.Context, arg GetSectionByEv
 	return i, err
 }
 
+const listEvents = `-- name: ListEvents :many
+SELECT
+    id,
+    name,
+    venue,
+    status,
+    start_at,
+    end_at,
+    sale_start_at,
+    sale_end_at,
+    created_at,
+    updated_at
+FROM events
+ORDER BY id
+`
+
+func (q *Queries) ListEvents(ctx context.Context) ([]Event, error) {
+	rows, err := q.db.Query(ctx, listEvents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Event{}
+	for rows.Next() {
+		var i Event
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Venue,
+			&i.Status,
+			&i.StartAt,
+			&i.EndAt,
+			&i.SaleStartAt,
+			&i.SaleEndAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listExpiredHoldingReservations = `-- name: ListExpiredHoldingReservations :many
 SELECT
     id,

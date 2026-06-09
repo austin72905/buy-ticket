@@ -20,15 +20,42 @@ func NewBookingController(bookingService *service.BookingService) *BookingContro
 }
 
 func (c *BookingController) RegisterRoutes(router gin.IRouter) {
+	router.GET("/events", c.ListEvents)
 	router.GET("/events/:eventId", c.GetEvent)
 	router.GET("/events/:eventId/sections", c.GetSections)
 	router.GET("/events/:eventId/availability", c.GetAvailability)
+	router.GET("/reservations/:reservationId", c.GetReservation)
 	router.GET("/orders/:orderId", c.GetOrder)
+	router.GET("/orders/order-no/:orderNo", c.GetOrderByOrderNo)
+	router.GET("/payments/:paymentNo", c.GetPaymentByPaymentNo)
 	router.POST("/reservations", c.ReserveTicket)
 	router.POST("/orders", c.CreateOrder)
 	router.POST("/payments", c.PayOrder)
 	router.POST("/reservations/expire", c.ExpireReservation)
 	router.POST("/reservations/cancel", c.CancelReservation)
+}
+
+// ListEvents godoc
+// @Summary 查詢活動列表
+// @Description 取得目前系統中的活動列表
+// @Tags events
+// @Produce json
+// @Success 200 {array} EventResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /events [get]
+func (c *BookingController) ListEvents(ctx *gin.Context) {
+	events, err := c.BookingService.ListEvents(ctx.Request.Context())
+	if err != nil {
+		writeError(ctx, http.StatusInternalServerError, err)
+		return
+	}
+
+	response := make([]EventResponse, 0, len(events))
+	for _, event := range events {
+		response = append(response, newEventResponse(&event))
+	}
+
+	ctx.JSON(http.StatusOK, response)
 }
 
 // GetEvent godoc
@@ -116,6 +143,31 @@ func (c *BookingController) GetAvailability(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, response)
 }
 
+// GetReservation godoc
+// @Summary 查詢 reservation
+// @Description 依照 reservation ID 取得鎖票資料
+// @Tags reservations
+// @Produce json
+// @Param reservationId path int true "reservation ID"
+// @Success 200 {object} ReservationResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /reservations/{reservationId} [get]
+func (c *BookingController) GetReservation(ctx *gin.Context) {
+	reservationID, ok := parseInt64Param(ctx, "reservationId")
+	if !ok {
+		return
+	}
+
+	reservation, err := c.BookingService.GetReservation(ctx.Request.Context(), reservationID)
+	if err != nil {
+		writeError(ctx, http.StatusNotFound, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newReservationResponse(reservation))
+}
+
 // GetOrder godoc
 // @Summary 取得訂單資訊
 // @Description 依訂單 ID 取得訂單內容
@@ -139,6 +191,44 @@ func (c *BookingController) GetOrder(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, newOrderResponse(order))
+}
+
+// GetOrderByOrderNo godoc
+// @Summary 依訂單編號查詢訂單
+// @Description 依照 order_no 取得訂單資料
+// @Tags orders
+// @Produce json
+// @Param orderNo path string true "訂單編號"
+// @Success 200 {object} OrderResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /orders/order-no/{orderNo} [get]
+func (c *BookingController) GetOrderByOrderNo(ctx *gin.Context) {
+	order, err := c.BookingService.GetOrderByOrderNo(ctx.Request.Context(), ctx.Param("orderNo"))
+	if err != nil {
+		writeError(ctx, http.StatusNotFound, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newOrderResponse(order))
+}
+
+// GetPaymentByPaymentNo godoc
+// @Summary 依付款編號查詢付款
+// @Description 依照 payment_no 取得付款資料
+// @Tags payments
+// @Produce json
+// @Param paymentNo path string true "付款編號"
+// @Success 200 {object} PaymentResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /payments/{paymentNo} [get]
+func (c *BookingController) GetPaymentByPaymentNo(ctx *gin.Context) {
+	payment, err := c.BookingService.GetPaymentByPaymentNo(ctx.Request.Context(), ctx.Param("paymentNo"))
+	if err != nil {
+		writeError(ctx, http.StatusNotFound, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newPaymentResponse(payment))
 }
 
 // ReserveTicket godoc

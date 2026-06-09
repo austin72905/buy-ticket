@@ -14,6 +14,7 @@ var (
 	ErrSectionNotFound     = errors.New("section not found")
 	ErrReservationNotFound = errors.New("reservation not found")
 	ErrOrderNotFound       = errors.New("order not found")
+	ErrPaymentNotFound     = errors.New("payment not found")
 )
 
 type MemoryEventRepository struct {
@@ -45,6 +46,19 @@ func (r *MemoryEventRepository) FindByID(ctx context.Context, eventID int64) (*d
 
 	cloned := *event
 	return &cloned, nil
+}
+
+func (r *MemoryEventRepository) List(ctx context.Context) ([]domain.Event, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	events := make([]domain.Event, 0, len(r.events))
+	for _, event := range r.events {
+		cloned := *event
+		events = append(events, cloned)
+	}
+
+	return events, nil
 }
 
 type MemorySectionRepository struct {
@@ -175,6 +189,22 @@ func (r *MemoryOrderRepository) FindByID(ctx context.Context, orderID int64) (*d
 	return &cloned, nil
 }
 
+func (r *MemoryOrderRepository) FindByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, order := range r.orders {
+		if order.OrderNo != orderNo {
+			continue
+		}
+
+		cloned := *order
+		return &cloned, nil
+	}
+
+	return nil, ErrOrderNotFound
+}
+
 func (r *MemoryOrderRepository) Save(ctx context.Context, order *domain.Order) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -201,6 +231,22 @@ func NewMemoryPaymentRepository() *MemoryPaymentRepository {
 		payments: map[int64]*domain.Payment{},
 		nextID:   1,
 	}
+}
+
+func (r *MemoryPaymentRepository) FindByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, payment := range r.payments {
+		if payment.PaymentNo != paymentNo {
+			continue
+		}
+
+		cloned := *payment
+		return &cloned, nil
+	}
+
+	return nil, ErrPaymentNotFound
 }
 
 func (r *MemoryPaymentRepository) Save(ctx context.Context, payment *domain.Payment) error {

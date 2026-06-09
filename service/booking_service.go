@@ -321,6 +321,10 @@ func (s *BookingService) GetEvent(ctx context.Context, eventID int64) (*domain.E
 	return s.EventRepo.FindByID(ctx, eventID)
 }
 
+func (s *BookingService) ListEvents(ctx context.Context) ([]domain.Event, error) {
+	return s.EventRepo.List(ctx)
+}
+
 func (s *BookingService) GetSections(ctx context.Context, eventID int64) ([]domain.Section, error) {
 	return s.SectionRepo.ListByEventID(ctx, eventID)
 }
@@ -344,6 +348,18 @@ func (s *BookingService) GetAvailability(ctx context.Context, eventID int64) ([]
 
 func (s *BookingService) GetOrder(ctx context.Context, orderID int64) (*domain.Order, error) {
 	return s.OrderRepo.FindByID(ctx, orderID)
+}
+
+func (s *BookingService) GetReservation(ctx context.Context, reservationID int64) (*domain.Reservation, error) {
+	return s.ReservationRepo.FindByID(ctx, reservationID)
+}
+
+func (s *BookingService) GetOrderByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error) {
+	return s.OrderRepo.FindByOrderNo(ctx, orderNo)
+}
+
+func (s *BookingService) GetPaymentByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error) {
+	return s.PaymentRepo.FindByPaymentNo(ctx, paymentNo)
 }
 
 type bookingRepos struct {
