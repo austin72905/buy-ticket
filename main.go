@@ -1,7 +1,7 @@
-package main
+﻿package main
 
 import (
-	"context"
+	"embed"
 	"log"
 	"os"
 
@@ -11,19 +11,56 @@ import (
 	"buy-ticket/repository"
 	"buy-ticket/service"
 
+	infraapp "github.com/austin72905/go-infra/app"
+	infrapostgres "github.com/austin72905/go-infra/postgres"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+//go:embed config/default/app.properties
+var defaultConfigFiles embed.FS
+
+//go:embed config/local/app.properties
+var localConfigFiles embed.FS
+
+//go:embed config/dev/app.properties
+var devConfigFiles embed.FS
+
+//go:embed config/prod/app.properties
+var prodConfigFiles embed.FS
+
 // @title buy-ticket API
 // @version 1.0
-// @description 演唱會搶票系統 API
+// @description 搶票系統 API
 // @BasePath /
 func main() {
-	eventRepo, sectionRepo, reservationRepo, orderRepo, paymentRepo, dbPool, cleanup := buildRepositories()
-	defer cleanup()
+	infraapp.Start(&BuyTicketApp{})
+}
+
+type BuyTicketApp struct {
+	infraapp.App
+}
+
+func (app *BuyTicketApp) Initialize() {
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = "local"
+	}
+
+	configFS := map[string]embed.FS{
+		"default": defaultConfigFiles,
+		"local":   localConfigFiles,
+		"dev":     devConfigFiles,
+		"prod":    prodConfigFiles,
+	}
+
+	if err := app.Runtime.Property.LoadProperties(configFS, env, "app.properties"); err != nil {
+		log.Fatalf("load app.properties failed: %v", err)
+	}
+
+	eventRepo, sectionRepo, reservationRepo, orderRepo, paymentRepo, dbPool := buildRepositories(app.Runtime)
 
 	bookingService := service.NewBookingService(
 		eventRepo,
@@ -36,7 +73,7 @@ func main() {
 
 	bookingController := controller.NewBookingController(bookingService)
 
-	router := gin.Default()
+	router := app.Runtime.Web.Router()
 	docs.SwaggerInfo.BasePath = "/"
 	router.GET("/healthz", func(ctx *gin.Context) {
 		ctx.JSON(200, gin.H{"status": "ok"})
@@ -44,41 +81,30 @@ func main() {
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	bookingController.RegisterRoutes(router)
 
-	log.Println("server started at :8080")
-	if err := router.Run(":8080"); err != nil {
-		log.Fatal(err)
-	}
+	addr := app.Runtime.Property.RequiredProperty("server.addr")
+	app.Runtime.Web.Listen(addr)
+	log.Printf("server configured at %s", addr)
 }
 
-// 需要設置APP_STORE, DATABASE_URL 兩個環境變數才會跑真的repo , 不然會用fake
-func buildRepositories() (
+func buildRepositories(runtime *infraapp.Runtime) (
 	repository.EventRepository,
 	repository.SectionRepository,
 	repository.ReservationRepository,
 	repository.OrderRepository,
 	repository.PaymentRepository,
 	*pgxpool.Pool,
-	func(),
 ) {
-	if os.Getenv("APP_STORE") == "postgres" {
-		dsn := os.Getenv("DATABASE_URL")
-		if dsn == "" {
-			log.Fatal("DATABASE_URL is required when APP_STORE=postgres")
-		}
-
-		pool, err := pgxpool.New(context.Background(), dsn)
-		if err != nil {
-			log.Fatalf("connect postgres failed: %v", err)
-		}
-
+	if runtime.Property.RequiredProperty("app.store") == "postgres" {
+		pg := infrapostgres.Register(runtime, "main")
+		pg.LoadFromPrefix("postgres")
+		pool := pg.Pool()
 		queries := db.New(pool)
 		return repository.NewPostgresEventRepository(queries),
 			repository.NewPostgresSectionRepository(queries),
 			repository.NewPostgresReservationRepository(queries),
 			repository.NewPostgresOrderRepository(queries),
 			repository.NewPostgresPaymentRepository(queries),
-			pool,
-			func() { pool.Close() }
+			pool
 	}
 
 	events, sections := repository.SeedSampleData()
@@ -87,6 +113,5 @@ func buildRepositories() (
 		repository.NewMemoryReservationRepository(),
 		repository.NewMemoryOrderRepository(),
 		repository.NewMemoryPaymentRepository(),
-		nil,
-		func() {}
+		nil
 }
