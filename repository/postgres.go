@@ -236,6 +236,27 @@ func (r *PostgresOrderRepository) ListByUserID(ctx context.Context, userID int64
 	return orders, nil
 }
 
+func (r *PostgresOrderRepository) ListExpiredPending(ctx context.Context, now time.Time, limit int) ([]domain.Order, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+
+	records, err := r.queries.ListExpiredPendingOrders(ctx, db.ListExpiredPendingOrdersParams{
+		ExpiresAt: toPgTimestamp(now),
+		Limit:     int32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	orders := make([]domain.Order, 0, len(records))
+	for _, record := range records {
+		orders = append(orders, *toDomainOrder(record))
+	}
+
+	return orders, nil
+}
+
 func (r *PostgresOrderRepository) Save(ctx context.Context, order *domain.Order) error {
 	if order.ID == 0 {
 		reservation, err := r.queries.GetReservationByID(ctx, order.ReservationID)

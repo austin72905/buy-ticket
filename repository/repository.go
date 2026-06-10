@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"buy-ticket/domain"
 )
@@ -26,6 +27,7 @@ type ReservationRepository interface {
 type OrderRepository interface {
 	FindByID(ctx context.Context, orderID int64) (*domain.Order, error)
 	FindByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error)
+	ListExpiredPending(ctx context.Context, now time.Time, limit int) ([]domain.Order, error)
 	ListByUserID(ctx context.Context, userID int64) ([]domain.Order, error)
 	Save(ctx context.Context, order *domain.Order) error
 }

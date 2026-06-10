@@ -239,6 +239,30 @@ func (r *MemoryOrderRepository) ListByUserID(ctx context.Context, userID int64) 
 	return orders, nil
 }
 
+func (r *MemoryOrderRepository) ListExpiredPending(ctx context.Context, now time.Time, limit int) ([]domain.Order, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 100
+	}
+
+	orders := make([]domain.Order, 0)
+	for _, order := range r.orders {
+		if order.Status != domain.OrderStatusPendingPayment || !order.IsExpired(now) {
+			continue
+		}
+
+		cloned := *order
+		orders = append(orders, cloned)
+		if len(orders) >= limit {
+			break
+		}
+	}
+
+	return orders, nil
+}
+
 func (r *MemoryOrderRepository) Save(ctx context.Context, order *domain.Order) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

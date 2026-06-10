@@ -506,6 +506,73 @@ func TestBookingServiceExpireOrder(t *testing.T) {
 	})
 }
 
+func TestBookingServiceSweepExpiredOrders(t *testing.T) {
+	t.Run("應掃出過期待付款訂單並逐筆過期", func(t *testing.T) {
+		now := time.Now()
+		orderRepo := &fakeOrderRepository{
+			orders: map[int64]*domain.Order{
+				40: {
+					ID:            40,
+					ReservationID: 21,
+					UserID:        3,
+					EventID:       1,
+					SectionID:     2,
+					Quantity:      2,
+					UnitPrice:     1800,
+					TotalAmount:   3600,
+					Status:        domain.OrderStatusPendingPayment,
+					ExpiresAt:     now.Add(-time.Minute),
+				},
+				41: {
+					ID:            41,
+					ReservationID: 22,
+					UserID:        3,
+					EventID:       1,
+					SectionID:     2,
+					Quantity:      1,
+					UnitPrice:     1800,
+					TotalAmount:   1800,
+					Status:        domain.OrderStatusPendingPayment,
+					ExpiresAt:     now.Add(time.Minute),
+				},
+			},
+		}
+		reservationRepo := &fakeReservationRepository{
+			reservations: map[int64]*domain.Reservation{
+				21: {ID: 21, EventID: 1, SectionID: 2, Quantity: 2, Status: domain.ReservationStatusHolding},
+				22: {ID: 22, EventID: 1, SectionID: 2, Quantity: 1, Status: domain.ReservationStatusHolding},
+			},
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:               2,
+				EventID:          1,
+				ReservedQuantity: 3,
+				TotalQuantity:    10,
+				Status:           domain.SectionStatusActive,
+			},
+		}
+		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, orderRepo, &fakePaymentRepository{})
+
+		count, err := svc.SweepExpiredOrders(context.Background(), SweepExpiredOrdersInput{
+			Now:   now,
+			Limit: 10,
+		})
+		if err != nil {
+			t.Fatalf("預期掃描成功，但得到錯誤: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("預期只過期 1 筆訂單，實際為 %d", count)
+		}
+		if orderRepo.orders[40].Status != domain.OrderStatusExpired {
+			t.Fatal("預期 order 40 狀態為 expired")
+		}
+		if orderRepo.orders[41].Status != domain.OrderStatusPendingPayment {
+			t.Fatal("預期 order 41 仍為 pending payment")
+		}
+	})
+}
+
 func TestBookingServiceCloseReservation(t *testing.T) {
 	t.Run("reservation 過期後應釋放區域保留數量", func(t *testing.T) {
 		now := time.Now()
@@ -835,6 +902,20 @@ func (f *fakeOrderRepository) FindByOrderNo(ctx context.Context, orderNo string)
 	}
 
 	return nil, errors.New("order not found")
+}
+
+func (f *fakeOrderRepository) ListExpiredPending(ctx context.Context, now time.Time, limit int) ([]domain.Order, error) {
+	orders := make([]domain.Order, 0)
+	for _, order := range f.orders {
+		if order.Status != domain.OrderStatusPendingPayment || !order.IsExpired(now) {
+			continue
+		}
+		orders = append(orders, *order)
+		if limit > 0 && len(orders) >= limit {
+			break
+		}
+	}
+	return orders, nil
 }
 
 func (f *fakeOrderRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Order, error) {

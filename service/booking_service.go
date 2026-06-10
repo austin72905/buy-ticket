@@ -68,6 +68,11 @@ type ExpireOrderInput struct {
 	ExpiredAt time.Time
 }
 
+type SweepExpiredOrdersInput struct {
+	Now   time.Time
+	Limit int
+}
+
 type JoinQueueInput struct {
 	EventID    int64
 	UserID     int64
@@ -363,6 +368,33 @@ func (s *BookingService) ExpireOrder(ctx context.Context, input ExpireOrderInput
 	}
 
 	return order, nil
+}
+
+func (s *BookingService) SweepExpiredOrders(ctx context.Context, input SweepExpiredOrdersInput) (int, error) {
+	if input.Now.IsZero() {
+		input.Now = time.Now()
+	}
+	if input.Limit <= 0 {
+		input.Limit = 100
+	}
+
+	orders, err := s.OrderRepo.ListExpiredPending(ctx, input.Now, input.Limit)
+	if err != nil {
+		return 0, err
+	}
+
+	expiredCount := 0
+	for _, order := range orders {
+		if _, expireErr := s.ExpireOrder(ctx, ExpireOrderInput{
+			OrderID:   order.ID,
+			ExpiredAt: input.Now,
+		}); expireErr != nil {
+			continue
+		}
+		expiredCount++
+	}
+
+	return expiredCount, nil
 }
 
 func (s *BookingService) ExpireReservation(ctx context.Context, input ExpireReservationInput) (*domain.Reservation, error) {
