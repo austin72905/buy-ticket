@@ -52,8 +52,8 @@ func TestBookingControllerGetQueueStatus(t *testing.T) {
 		if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
 			t.Fatalf("預期回傳合法 JSON，但解析失敗: %v", err)
 		}
-		if body.Status != int8(service.QueueStatusReady) {
-			t.Fatalf("預期 status=%d，實際為 %d", service.QueueStatusReady, body.Status)
+		if body.Status != int8(service.QueueStatusWaiting) {
+			t.Fatalf("預期 status=%d，實際為 %d", service.QueueStatusWaiting, body.Status)
 		}
 		if body.QueueToken != "qt_001" {
 			t.Fatalf("預期 queue_token=qt_001，實際為 %s", body.QueueToken)

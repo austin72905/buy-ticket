@@ -138,7 +138,7 @@ func NewBookingService(
 		ReservationRepo: reservationRepo,
 		OrderRepo:       orderRepo,
 		PaymentRepo:     paymentRepo,
-		QueueStore:      NewMemoryQueueStore(),
+		QueueStore:      NewMemoryQueueStore(1),
 	}
 }
 

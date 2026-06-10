@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	"buy-ticket/controller"
 	db "buy-ticket/db/sqlc"
@@ -93,6 +96,11 @@ func (app *BuyTicketApp) Initialize() {
 	)
 	bookingService.DB = dbPool
 	bookingService.QueueStore = buildQueueStore(app.Runtime)
+	dispatcher := service.NewQueueDispatcher(bookingService.QueueStore, queueDispatchInterval(app.Runtime))
+	dispatcher.Start()
+	app.Runtime.OnShutdown(func(ctx context.Context) {
+		dispatcher.Stop()
+	})
 
 	bookingController := controller.NewBookingController(bookingService)
 
@@ -110,13 +118,42 @@ func (app *BuyTicketApp) Initialize() {
 }
 
 func buildQueueStore(runtime *infraapp.Runtime) service.QueueStore {
+	releaseLimit := queueReleaseLimit(runtime)
 	if runtime.Property.Property("queue.store") == "redis" {
 		redisComponent := infraredis.Register(runtime, "queue")
 		redisComponent.LoadFromPrefix("redis")
-		return service.NewRedisQueueStore(redisComponent.Client())
+		return service.NewRedisQueueStore(redisComponent.Client(), releaseLimit)
 	}
 
-	return service.NewMemoryQueueStore()
+	return service.NewMemoryQueueStore(releaseLimit)
+}
+
+func queueDispatchInterval(runtime *infraapp.Runtime) time.Duration {
+	value := runtime.Property.Property("queue.dispatch.interval.ms")
+	if value == "" {
+		return time.Second
+	}
+
+	milliseconds, err := strconv.Atoi(value)
+	if err != nil || milliseconds <= 0 {
+		return time.Second
+	}
+
+	return time.Duration(milliseconds) * time.Millisecond
+}
+
+func queueReleaseLimit(runtime *infraapp.Runtime) int {
+	value := runtime.Property.Property("queue.release.limit")
+	if value == "" {
+		return 1
+	}
+
+	limit, err := strconv.Atoi(value)
+	if err != nil || limit <= 0 {
+		return 1
+	}
+
+	return limit
 }
 
 func buildRepositories(runtime *infraapp.Runtime) (

@@ -555,6 +555,82 @@ func TestBookingServiceGetQueueStatus(t *testing.T) {
 	})
 }
 
+func TestMemoryQueueStorePromoteReady(t *testing.T) {
+	t.Run("前一位完成後應放行下一位", func(t *testing.T) {
+		now := time.Now()
+		store := NewMemoryQueueStore(1)
+
+		first, err := store.Join(context.Background(), JoinQueueInput{
+			EventID: 1,
+			UserID:  1,
+		}, now)
+		if err != nil {
+			t.Fatalf("第一位加入失敗: %v", err)
+		}
+		second, err := store.Join(context.Background(), JoinQueueInput{
+			EventID: 1,
+			UserID:  2,
+		}, now.Add(time.Millisecond))
+		if err != nil {
+			t.Fatalf("第二位加入失敗: %v", err)
+		}
+		if second.Status != QueueStatusWaiting {
+			t.Fatalf("預期第二位初始為 waiting，實際為 %d", second.Status)
+		}
+
+		if first.PurchaseToken == nil {
+			t.Fatal("預期第一位有 purchase token")
+		}
+		_, err = store.ConsumePurchaseToken(context.Background(), *first.PurchaseToken, first.EventID, first.UserID, now.Add(time.Second))
+		if err != nil {
+			t.Fatalf("第一位消耗 purchase token 失敗: %v", err)
+		}
+
+		if err := store.PromoteReady(context.Background(), now.Add(2*time.Second)); err != nil {
+			t.Fatalf("promote ready 失敗: %v", err)
+		}
+
+		snapshot, err := store.Get(context.Background(), second.QueueToken, now.Add(2*time.Second))
+		if err != nil {
+			t.Fatalf("查第二位 queue status 失敗: %v", err)
+		}
+		if snapshot.Status != QueueStatusReady {
+			t.Fatalf("預期第二位被放行為 ready，實際為 %d", snapshot.Status)
+		}
+		if snapshot.PurchaseToken == nil {
+			t.Fatal("預期第二位取得 purchase token")
+		}
+	})
+
+	t.Run("放行上限為 2 時前兩位應直接 ready", func(t *testing.T) {
+		now := time.Now()
+		store := NewMemoryQueueStore(2)
+
+		first, err := store.Join(context.Background(), JoinQueueInput{EventID: 1, UserID: 1}, now)
+		if err != nil {
+			t.Fatalf("第一位加入失敗: %v", err)
+		}
+		second, err := store.Join(context.Background(), JoinQueueInput{EventID: 1, UserID: 2}, now.Add(time.Millisecond))
+		if err != nil {
+			t.Fatalf("第二位加入失敗: %v", err)
+		}
+		third, err := store.Join(context.Background(), JoinQueueInput{EventID: 1, UserID: 3}, now.Add(2*time.Millisecond))
+		if err != nil {
+			t.Fatalf("第三位加入失敗: %v", err)
+		}
+
+		if first.Status != QueueStatusReady {
+			t.Fatalf("預期第一位為 ready，實際為 %d", first.Status)
+		}
+		if second.Status != QueueStatusReady {
+			t.Fatalf("預期第二位為 ready，實際為 %d", second.Status)
+		}
+		if third.Status != QueueStatusWaiting {
+			t.Fatalf("預期第三位為 waiting，實際為 %d", third.Status)
+		}
+	})
+}
+
 type fakeEventRepository struct {
 	event *domain.Event
 }
