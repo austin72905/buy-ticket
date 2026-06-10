@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"embed"
@@ -13,6 +13,7 @@ import (
 
 	infraapp "github.com/austin72905/go-infra/app"
 	infrapostgres "github.com/austin72905/go-infra/postgres"
+	infraredis "github.com/austin72905/go-infra/redis"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	swaggerFiles "github.com/swaggo/files"
@@ -91,6 +92,7 @@ func (app *BuyTicketApp) Initialize() {
 		paymentRepo,
 	)
 	bookingService.DB = dbPool
+	bookingService.QueueStore = buildQueueStore(app.Runtime)
 
 	bookingController := controller.NewBookingController(bookingService)
 
@@ -105,6 +107,16 @@ func (app *BuyTicketApp) Initialize() {
 	addr := app.Runtime.Property.RequiredProperty("server.addr")
 	app.Runtime.Web.Listen(addr)
 	log.Printf("server configured at %s", addr)
+}
+
+func buildQueueStore(runtime *infraapp.Runtime) service.QueueStore {
+	if runtime.Property.Property("queue.store") == "redis" {
+		redisComponent := infraredis.Register(runtime, "queue")
+		redisComponent.LoadFromPrefix("redis")
+		return service.NewRedisQueueStore(redisComponent.Client())
+	}
+
+	return service.NewMemoryQueueStore()
 }
 
 func buildRepositories(runtime *infraapp.Runtime) (

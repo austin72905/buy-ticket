@@ -36,6 +36,7 @@ func TestBookingServiceReserveTicket(t *testing.T) {
 		svc := NewBookingService(eventRepo, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
 		svc.SaveQueueStatus(QueueStatusSnapshot{
 			QueueToken:             "qt_reserve_ok",
+			QueueSequence:          1,
 			Status:                 QueueStatusReady,
 			EventID:                1,
 			UserID:                 3,
@@ -95,6 +96,7 @@ func TestBookingServiceReserveTicket(t *testing.T) {
 		svc := NewBookingService(eventRepo, sectionRepo, &fakeReservationRepository{}, &fakeOrderRepository{}, &fakePaymentRepository{})
 		svc.SaveQueueStatus(QueueStatusSnapshot{
 			QueueToken:             "qt_event_not_on_sale",
+			QueueSequence:          1,
 			Status:                 QueueStatusReady,
 			EventID:                1,
 			UserID:                 3,
@@ -147,6 +149,7 @@ func TestBookingServiceReserveTicket(t *testing.T) {
 		svc := NewBookingService(eventRepo, sectionRepo, &fakeReservationRepository{}, &fakeOrderRepository{}, &fakePaymentRepository{})
 		svc.SaveQueueStatus(QueueStatusSnapshot{
 			QueueToken:             "qt_used_once",
+			QueueSequence:          1,
 			Status:                 QueueStatusReady,
 			EventID:                1,
 			UserID:                 3,
@@ -510,6 +513,7 @@ func TestBookingServiceGetQueueStatus(t *testing.T) {
 		)
 		svc.SaveQueueStatus(QueueStatusSnapshot{
 			QueueToken:             "qt_001",
+			QueueSequence:          1,
 			Status:                 QueueStatusReady,
 			EventID:                1,
 			UserID:                 2,

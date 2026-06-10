@@ -3,8 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"strconv"
-	"sync"
 	"time"
 
 	"buy-ticket/db/sqlc"
@@ -38,10 +36,7 @@ type BookingService struct {
 	ReservationRepo repository.ReservationRepository
 	OrderRepo       repository.OrderRepository
 	PaymentRepo     repository.PaymentRepository
-	queueMu         sync.RWMutex
-	queueStatuses   map[string]QueueStatusSnapshot
-	queueUserEvent  map[string]string
-	purchaseTokens  map[string]string
+	QueueStore      QueueStore
 }
 
 type ReserveTicketInput struct {
@@ -115,6 +110,7 @@ const (
 
 type QueueStatusSnapshot struct {
 	QueueToken             string
+	QueueSequence          int64
 	Status                 QueueStatus
 	EventID                int64
 	UserID                 int64
@@ -142,9 +138,7 @@ func NewBookingService(
 		ReservationRepo: reservationRepo,
 		OrderRepo:       orderRepo,
 		PaymentRepo:     paymentRepo,
-		queueStatuses:   map[string]QueueStatusSnapshot{},
-		queueUserEvent:  map[string]string{},
-		purchaseTokens:  map[string]string{},
+		QueueStore:      NewMemoryQueueStore(),
 	}
 }
 
@@ -156,10 +150,8 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 	now := time.Now()
 	var reservation *domain.Reservation
 
-	s.queueMu.Lock()
-	queueSnapshot, err := s.consumePurchaseTokenLocked(input.PurchaseToken, input.EventID, input.UserID, now)
+	queueSnapshot, err := s.QueueStore.ConsumePurchaseToken(ctx, input.PurchaseToken, input.EventID, input.UserID, now)
 	if err != nil {
-		s.queueMu.Unlock()
 		return nil, err
 	}
 
@@ -203,12 +195,10 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 		return repos.reservation.Save(ctx, reservation)
 	})
 	if err != nil {
-		s.restorePurchaseTokenLocked(queueSnapshot)
-		s.queueMu.Unlock()
+		_ = s.QueueStore.RestorePurchaseToken(ctx, *queueSnapshot)
 		return nil, err
 	}
 
-	s.queueMu.Unlock()
 	return reservation, nil
 }
 
@@ -482,123 +472,15 @@ func (s *BookingService) JoinQueue(ctx context.Context, input JoinQueueInput, no
 		return nil, ErrEventNotOnSale
 	}
 
-	key := queueUserEventKey(input.EventID, input.UserID)
-
-	s.queueMu.Lock()
-	defer s.queueMu.Unlock()
-
-	if token, ok := s.queueUserEvent[key]; ok {
-		if snapshot, exists := s.queueStatuses[token]; exists && isQueueStatusActive(snapshot, now) {
-			return nil, ErrUserAlreadyJoinedQueue
-		}
-	}
-
-	queueToken := "qt_" + now.Format("20060102150405.000000000")
-	purchaseToken := "pt_" + now.Format("20060102150405.000000000")
-	purchaseTokenExpiresAt := now.Add(5 * time.Minute)
-	expiresAt := now.Add(30 * time.Minute)
-
-	snapshot := QueueStatusSnapshot{
-		QueueToken:             queueToken,
-		Status:                 QueueStatusReady,
-		EventID:                input.EventID,
-		UserID:                 input.UserID,
-		QueuePosition:          1,
-		AheadCount:             0,
-		EstimatedWaitSeconds:   0,
-		PurchaseToken:          &purchaseToken,
-		PurchaseTokenExpiresAt: &purchaseTokenExpiresAt,
-		JoinedAt:               now,
-		ExpiredAt:              expiresAt,
-		UpdatedAt:              now,
-	}
-
-	s.queueStatuses[queueToken] = snapshot
-	s.queueUserEvent[key] = queueToken
-	s.purchaseTokens[purchaseToken] = queueToken
-
-	cloned := snapshot
-	return &cloned, nil
+	return s.QueueStore.Join(ctx, input, now)
 }
 
 func (s *BookingService) GetQueueStatus(ctx context.Context, queueToken string) (*QueueStatusSnapshot, error) {
-	s.queueMu.RLock()
-	defer s.queueMu.RUnlock()
-
-	snapshot, ok := s.queueStatuses[queueToken]
-	if !ok {
-		return nil, ErrQueueTokenNotFound
-	}
-
-	cloned := snapshot
-	return &cloned, nil
+	return s.QueueStore.Get(ctx, queueToken, time.Now())
 }
 
 func (s *BookingService) SaveQueueStatus(snapshot QueueStatusSnapshot) {
-	s.queueMu.Lock()
-	defer s.queueMu.Unlock()
-
-	s.queueStatuses[snapshot.QueueToken] = snapshot
-	s.queueUserEvent[queueUserEventKey(snapshot.EventID, snapshot.UserID)] = snapshot.QueueToken
-	if snapshot.PurchaseToken != nil {
-		s.purchaseTokens[*snapshot.PurchaseToken] = snapshot.QueueToken
-	}
-}
-
-func queueUserEventKey(eventID, userID int64) string {
-	return strconv.FormatInt(eventID, 10) + ":" + strconv.FormatInt(userID, 10)
-}
-
-func isQueueStatusActive(snapshot QueueStatusSnapshot, now time.Time) bool {
-	if snapshot.ExpiredAt.Before(now) {
-		return false
-	}
-
-	return snapshot.Status == QueueStatusWaiting || snapshot.Status == QueueStatusReady
-}
-
-func (s *BookingService) consumePurchaseTokenLocked(purchaseToken string, eventID, userID int64, now time.Time) (QueueStatusSnapshot, error) {
-	queueToken, ok := s.purchaseTokens[purchaseToken]
-	if !ok {
-		return QueueStatusSnapshot{}, ErrPurchaseTokenNotFound
-	}
-
-	snapshot, ok := s.queueStatuses[queueToken]
-	if !ok {
-		return QueueStatusSnapshot{}, ErrPurchaseTokenNotFound
-	}
-
-	if snapshot.PurchaseToken == nil {
-		return QueueStatusSnapshot{}, ErrPurchaseTokenUsed
-	}
-
-	original := snapshot
-
-	if snapshot.EventID != eventID || snapshot.UserID != userID {
-		return QueueStatusSnapshot{}, ErrPurchaseTokenMismatch
-	}
-
-	if snapshot.PurchaseTokenExpiresAt == nil || snapshot.PurchaseTokenExpiresAt.Before(now) {
-		return QueueStatusSnapshot{}, ErrPurchaseTokenExpired
-	}
-
-	usedAt := now
-	snapshot.PurchaseToken = nil
-	snapshot.PurchaseTokenExpiresAt = nil
-	snapshot.PurchaseTokenUsedAt = &usedAt
-	snapshot.UpdatedAt = now
-	s.queueStatuses[queueToken] = snapshot
-	delete(s.purchaseTokens, purchaseToken)
-
-	return original, nil
-}
-
-func (s *BookingService) restorePurchaseTokenLocked(snapshot QueueStatusSnapshot) {
-	if snapshot.PurchaseToken == nil {
-		return
-	}
-	s.queueStatuses[snapshot.QueueToken] = snapshot
-	s.purchaseTokens[*snapshot.PurchaseToken] = snapshot.QueueToken
+	_ = s.QueueStore.SaveSnapshot(context.Background(), snapshot)
 }
 
 type bookingRepos struct {
