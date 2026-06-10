@@ -19,6 +19,7 @@ var (
 	ErrReservationAlreadyUsed = errors.New("reservation already confirmed or closed")
 	ErrReservationCannotClose = errors.New("reservation cannot be expired or cancelled")
 	ErrOrderCannotBePaid      = errors.New("order cannot be paid")
+	ErrOrderCannotExpire      = errors.New("order cannot be expired")
 	ErrPaymentAmountMismatch  = errors.New("payment amount mismatch")
 	ErrQueueTokenNotFound     = errors.New("queue token not found")
 	ErrUserAlreadyJoinedQueue = errors.New("user already joined queue")
@@ -60,6 +61,11 @@ type PayOrderInput struct {
 	Method    string
 	Amount    int64
 	PaidAt    time.Time
+}
+
+type ExpireOrderInput struct {
+	OrderID   int64
+	ExpiredAt time.Time
 }
 
 type JoinQueueInput struct {
@@ -307,6 +313,56 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 	}
 
 	return payment, nil
+}
+
+func (s *BookingService) ExpireOrder(ctx context.Context, input ExpireOrderInput) (*domain.Order, error) {
+	var order *domain.Order
+
+	err := s.withTx(ctx, func(repos bookingRepos) error {
+		var err error
+		order, err = repos.order.FindByID(ctx, input.OrderID)
+		if err != nil {
+			return err
+		}
+
+		if !order.Expire(input.ExpiredAt) {
+			return ErrOrderCannotExpire
+		}
+
+		reservation, err := repos.reservation.FindByID(ctx, order.ReservationID)
+		if err != nil {
+			return err
+		}
+
+		if !reservation.Expire(input.ExpiredAt) {
+			return ErrReservationCannotClose
+		}
+
+		section, err := repos.section.FindByEventAndID(ctx, reservation.EventID, reservation.SectionID)
+		if err != nil {
+			return err
+		}
+
+		if !section.Release(reservation.Quantity) {
+			return ErrReservationCannotClose
+		}
+
+		section.UpdatedAt = input.ExpiredAt
+		if err := repos.section.Save(ctx, section); err != nil {
+			return err
+		}
+
+		if err := repos.reservation.Save(ctx, reservation); err != nil {
+			return err
+		}
+
+		return repos.order.Save(ctx, order)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return order, nil
 }
 
 func (s *BookingService) ExpireReservation(ctx context.Context, input ExpireReservationInput) (*domain.Reservation, error) {

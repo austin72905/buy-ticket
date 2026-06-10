@@ -416,6 +416,96 @@ func TestBookingServicePayOrder(t *testing.T) {
 	})
 }
 
+func TestBookingServiceExpireOrder(t *testing.T) {
+	t.Run("訂單過期時應同時釋放 reservation 與 section", func(t *testing.T) {
+		now := time.Now()
+		orderRepo := &fakeOrderRepository{
+			orders: map[int64]*domain.Order{
+				30: {
+					ID:            30,
+					OrderNo:       "ORD-EXPIRE-001",
+					ReservationID: 11,
+					UserID:        3,
+					EventID:       1,
+					SectionID:     2,
+					Quantity:      2,
+					UnitPrice:     1800,
+					TotalAmount:   3600,
+					Status:        domain.OrderStatusPendingPayment,
+					ExpiresAt:     now.Add(-time.Minute),
+				},
+			},
+			nextID: 30,
+		}
+		reservationRepo := &fakeReservationRepository{
+			reservations: map[int64]*domain.Reservation{
+				11: {
+					ID:          11,
+					EventID:     1,
+					SectionID:   2,
+					UserID:      3,
+					Quantity:    2,
+					UnitPrice:   1800,
+					TotalAmount: 3600,
+					Status:      domain.ReservationStatusHolding,
+					ExpiresAt:   now.Add(5 * time.Minute),
+				},
+			},
+			nextID: 11,
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:               2,
+				EventID:          1,
+				ReservedQuantity: 2,
+				TotalQuantity:    10,
+				Status:           domain.SectionStatusActive,
+			},
+		}
+		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, orderRepo, &fakePaymentRepository{})
+
+		order, err := svc.ExpireOrder(context.Background(), ExpireOrderInput{
+			OrderID:   30,
+			ExpiredAt: now,
+		})
+		if err != nil {
+			t.Fatalf("預期訂單過期成功，但得到錯誤: %v", err)
+		}
+		if order.Status != domain.OrderStatusExpired {
+			t.Fatal("預期 order 狀態為 expired")
+		}
+		if reservationRepo.reservations[11].Status != domain.ReservationStatusExpired {
+			t.Fatal("預期 reservation 狀態為 expired")
+		}
+		if sectionRepo.section.ReservedQuantity != 0 {
+			t.Fatalf("預期區域保留數量為 0，實際為 %d", sectionRepo.section.ReservedQuantity)
+		}
+	})
+
+	t.Run("已付款訂單不可過期", func(t *testing.T) {
+		now := time.Now()
+		orderRepo := &fakeOrderRepository{
+			orders: map[int64]*domain.Order{
+				31: {
+					ID:            31,
+					ReservationID: 12,
+					Status:        domain.OrderStatusPaid,
+					ExpiresAt:     now.Add(-time.Minute),
+				},
+			},
+		}
+		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, &fakeReservationRepository{}, orderRepo, &fakePaymentRepository{})
+
+		_, err := svc.ExpireOrder(context.Background(), ExpireOrderInput{
+			OrderID:   31,
+			ExpiredAt: now,
+		})
+		if !errors.Is(err, ErrOrderCannotExpire) {
+			t.Fatalf("預期錯誤為 ErrOrderCannotExpire，實際為 %v", err)
+		}
+	})
+}
+
 func TestBookingServiceCloseReservation(t *testing.T) {
 	t.Run("reservation 過期後應釋放區域保留數量", func(t *testing.T) {
 		now := time.Now()
