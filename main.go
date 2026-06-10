@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"embed"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -130,8 +129,7 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	scheduler := infrascheduler.Register(runtime, "")
 	scheduler.SetPanicOnAnyAddError(true)
 
-	queueSpec := mustCronSpec(queueDispatchInterval(runtime))
-	_, err := scheduler.AddFuncJobWithName(queueSpec, "queue-promote-ready", func(ctx context.Context) {
+	_, err := scheduler.AddFuncJobWithName("*/1 * * * * *", "queue-promote-ready", func(ctx context.Context) {
 		now := time.Now()
 		if err := bookingService.QueueStore.PromoteReady(ctx, now); err != nil {
 			log.Printf("queue scheduler promote failed: %v", err)
@@ -141,8 +139,7 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 		log.Fatalf("register queue scheduler failed: %v", err)
 	}
 
-	orderExpireSpec := mustCronSpec(orderExpireInterval(runtime))
-	_, err = scheduler.AddFuncJobWithName(orderExpireSpec, "order-expire-sweep", func(ctx context.Context) {
+	_, err = scheduler.AddFuncJobWithName("*/5 * * * * *", "order-expire-sweep", func(ctx context.Context) {
 		count, err := bookingService.SweepExpiredOrders(ctx, service.SweepExpiredOrdersInput{
 			Now:   time.Now(),
 			Limit: orderExpireBatchSize(runtime),
@@ -160,58 +157,6 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	}
 }
 
-func mustCronSpec(interval time.Duration) string {
-	spec, err := durationToCronSpec(interval)
-	if err != nil {
-		log.Fatalf("invalid scheduler interval %s: %v", interval, err)
-	}
-	return spec
-}
-
-func durationToCronSpec(interval time.Duration) (string, error) {
-	if interval <= 0 {
-		return "", fmt.Errorf("interval must be positive")
-	}
-
-	if interval%time.Hour == 0 {
-		hours := int(interval / time.Hour)
-		if hours > 0 && hours <= 23 {
-			return fmt.Sprintf("0 0 */%d * * *", hours), nil
-		}
-	}
-
-	if interval%time.Minute == 0 {
-		minutes := int(interval / time.Minute)
-		if minutes > 0 && minutes <= 59 {
-			return fmt.Sprintf("0 */%d * * * *", minutes), nil
-		}
-	}
-
-	seconds := interval / time.Second
-	if interval%time.Second != 0 {
-		seconds++
-	}
-	if seconds <= 0 || seconds > 59 {
-		return "", fmt.Errorf("only intervals up to 59 seconds, 59 minutes, or 23 hours are supported")
-	}
-
-	return fmt.Sprintf("*/%d * * * * *", seconds), nil
-}
-
-func queueDispatchInterval(runtime *infraapp.Runtime) time.Duration {
-	value := runtime.Property.Property("queue.dispatch.interval.ms")
-	if value == "" {
-		return time.Second
-	}
-
-	milliseconds, err := strconv.Atoi(value)
-	if err != nil || milliseconds <= 0 {
-		return time.Second
-	}
-
-	return time.Duration(milliseconds) * time.Millisecond
-}
-
 func queueReleaseLimit(runtime *infraapp.Runtime) int {
 	value := runtime.Property.Property("queue.release.limit")
 	if value == "" {
@@ -224,20 +169,6 @@ func queueReleaseLimit(runtime *infraapp.Runtime) int {
 	}
 
 	return limit
-}
-
-func orderExpireInterval(runtime *infraapp.Runtime) time.Duration {
-	value := runtime.Property.Property("order.expire.interval.ms")
-	if value == "" {
-		return 5 * time.Second
-	}
-
-	milliseconds, err := strconv.Atoi(value)
-	if err != nil || milliseconds <= 0 {
-		return 5 * time.Second
-	}
-
-	return time.Duration(milliseconds) * time.Millisecond
 }
 
 func orderExpireBatchSize(runtime *infraapp.Runtime) int {
