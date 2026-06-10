@@ -101,11 +101,9 @@ type SaleStatus struct {
 type QueueStatus int8
 
 const (
-	QueueStatusWaiting   QueueStatus = 1
-	QueueStatusReady     QueueStatus = 2
-	QueueStatusExpired   QueueStatus = 3
-	QueueStatusCancelled QueueStatus = 4
-	QueueStatusRejected  QueueStatus = 5
+	QueueStatusWaiting QueueStatus = 1
+	QueueStatusReady   QueueStatus = 2
+	QueueStatusExpired QueueStatus = 3
 )
 
 type QueueStatusSnapshot struct {
