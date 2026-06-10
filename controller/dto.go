@@ -8,11 +8,12 @@ import (
 )
 
 type ReserveTicketRequest struct {
-	UserID    int64     `json:"user_id"`
-	EventID   int64     `json:"event_id"`
-	SectionID int64     `json:"section_id"`
-	Quantity  int       `json:"quantity"`
-	HoldUntil time.Time `json:"hold_until"`
+	UserID        int64     `json:"user_id" example:"1"`
+	EventID       int64     `json:"event_id" example:"1"`
+	SectionID     int64     `json:"section_id" example:"1"`
+	Quantity      int       `json:"quantity" example:"2"`
+	HoldUntil     time.Time `json:"hold_until" example:"2026-06-10T19:00:00+08:00"`
+	PurchaseToken string    `json:"purchase_token" example:"pt_01JXABCDEFG1234567890"`
 }
 
 type JoinQueueRequest struct {

@@ -51,6 +51,46 @@ definitions:
       reservation_id:
         type: integer
     type: object
+  controller.JoinQueueRequest:
+    properties:
+      access_code:
+        type: string
+      channel:
+        type: string
+      client_id:
+        type: string
+      event_id:
+        type: integer
+      request_id:
+        type: string
+      user_id:
+        type: integer
+    type: object
+  controller.JoinQueueResponse:
+    properties:
+      ahead_count:
+        type: integer
+      estimated_wait_seconds:
+        type: integer
+      event_id:
+        type: integer
+      expired_at:
+        type: string
+      joined_at:
+        type: string
+      purchase_token:
+        type: string
+      purchase_token_expires_at:
+        type: string
+      queue_position:
+        type: integer
+      queue_token:
+        type: string
+      status:
+        type: integer
+      user_id:
+        type: integer
+    type: object
   controller.OrderResponse:
     properties:
       created_at:
@@ -116,6 +156,33 @@ definitions:
       updated_at:
         type: string
     type: object
+  controller.QueueStatusResponse:
+    properties:
+      ahead_count:
+        type: integer
+      estimated_wait_seconds:
+        type: integer
+      event_id:
+        type: integer
+      expired_at:
+        type: string
+      joined_at:
+        type: string
+      purchase_token:
+        type: string
+      purchase_token_expires_at:
+        type: string
+      queue_position:
+        type: integer
+      queue_token:
+        type: string
+      status:
+        type: integer
+      updated_at:
+        type: string
+      user_id:
+        type: integer
+    type: object
   controller.ReservationResponse:
     properties:
       created_at:
@@ -144,15 +211,44 @@ definitions:
   controller.ReserveTicketRequest:
     properties:
       event_id:
+        example: 1
         type: integer
       hold_until:
+        example: "2026-06-10T19:00:00+08:00"
+        type: string
+      purchase_token:
+        example: pt_01JXABCDEFG1234567890
         type: string
       quantity:
+        example: 2
         type: integer
       section_id:
+        example: 1
         type: integer
       user_id:
+        example: 1
         type: integer
+    type: object
+  controller.SaleStatusResponse:
+    properties:
+      can_join_queue:
+        type: boolean
+      can_reserve:
+        type: boolean
+      event_id:
+        type: integer
+      event_status:
+        type: integer
+      is_on_sale:
+        type: boolean
+      queue_enabled:
+        type: boolean
+      sale_end_at:
+        type: string
+      sale_start_at:
+        type: string
+      server_time:
+        type: string
     type: object
   controller.SectionAvailabilityResponse:
     properties:
@@ -198,10 +294,29 @@ definitions:
     type: object
 info:
   contact: {}
-  description: 演唱會搶票系統 API
+  description: 搶票系統 API
   title: buy-ticket API
   version: "1.0"
 paths:
+  /events:
+    get:
+      description: 取得目前系統中的活動列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.EventResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 查詢活動列表
+      tags:
+      - events
   /events/{eventId}:
     get:
       description: 依活動 ID 取得活動基本資訊
@@ -340,6 +455,29 @@ paths:
       summary: 取得訂單資訊
       tags:
       - orders
+  /orders/order-no/{orderNo}:
+    get:
+      description: 依照 order_no 取得訂單資料
+      parameters:
+      - description: 訂單編號
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.OrderResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 依訂單編號查詢訂單
+      tags:
+      - orders
   /payments:
     post:
       consumes:
@@ -366,6 +504,82 @@ paths:
       summary: 訂單付款
       tags:
       - payments
+  /payments/{paymentNo}:
+    get:
+      description: 依照 payment_no 取得付款資料
+      parameters:
+      - description: 付款編號
+        in: path
+        name: paymentNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.PaymentResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 依付款編號查詢付款
+      tags:
+      - payments
+  /queue/join:
+    post:
+      consumes:
+      - application/json
+      description: 建立 queue token，memory 版本目前直接回 ready 狀態
+      parameters:
+      - description: 加入排隊請求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.JoinQueueRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/controller.JoinQueueResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 加入排隊
+      tags:
+      - queue
+  /queue/status/{queueToken}:
+    get:
+      description: 依 queue token 查詢目前排隊進度與是否已取得 purchase token
+      parameters:
+      - description: Queue Token
+        in: path
+        name: queueToken
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.QueueStatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 查詢排隊狀態
+      tags:
+      - queue
   /reservations:
     post:
       consumes:
@@ -390,6 +604,33 @@ paths:
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
       summary: 保留票券
+      tags:
+      - reservations
+  /reservations/{reservationId}:
+    get:
+      description: 依照 reservation ID 取得鎖票資料
+      parameters:
+      - description: reservation ID
+        in: path
+        name: reservationId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.ReservationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 查詢 reservation
       tags:
       - reservations
   /reservations/cancel:
@@ -442,6 +683,120 @@ paths:
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
       summary: 過期 reservation
+      tags:
+      - reservations
+  /sale/status:
+    get:
+      description: 依照 event_id 查詢活動是否開賣，以及是否可進入後續購票流程
+      parameters:
+      - description: 活動 ID
+        in: query
+        name: event_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.SaleStatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 查詢售票狀態
+      tags:
+      - sale
+  /users/{userId}/orders:
+    get:
+      description: 依照 user ID 取得該使用者的訂單列表
+      parameters:
+      - description: 使用者 ID
+        in: path
+        name: userId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.OrderResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 查詢使用者訂單列表
+      tags:
+      - orders
+  /users/{userId}/payments:
+    get:
+      description: 依照 user ID 取得該使用者的付款列表
+      parameters:
+      - description: 使用者 ID
+        in: path
+        name: userId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.PaymentResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 查詢使用者付款列表
+      tags:
+      - payments
+  /users/{userId}/reservations:
+    get:
+      description: 依照 user ID 取得該使用者的鎖票列表
+      parameters:
+      - description: 使用者 ID
+        in: path
+        name: userId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.ReservationResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: 查詢使用者 reservation 列表
       tags:
       - reservations
 swagger: "2.0"

@@ -432,11 +432,12 @@ func (c *BookingController) ReserveTicket(ctx *gin.Context) {
 	}
 
 	reservation, err := c.BookingService.ReserveTicket(ctx.Request.Context(), service.ReserveTicketInput{
-		UserID:    request.UserID,
-		EventID:   request.EventID,
-		SectionID: request.SectionID,
-		Quantity:  request.Quantity,
-		HoldUntil: request.HoldUntil,
+		UserID:        request.UserID,
+		EventID:       request.EventID,
+		SectionID:     request.SectionID,
+		Quantity:      request.Quantity,
+		HoldUntil:     request.HoldUntil,
+		PurchaseToken: request.PurchaseToken,
 	})
 	if err != nil {
 		writeError(ctx, http.StatusBadRequest, err)

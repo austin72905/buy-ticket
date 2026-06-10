@@ -15,6 +15,35 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/events": {
+            "get": {
+                "description": "取得目前系統中的活動列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "查詢活動列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/controller.EventResponse"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/events/{eventId}": {
             "get": {
                 "description": "依活動 ID 取得活動基本資訊",
@@ -184,6 +213,41 @@ const docTemplate = `{
                 }
             }
         },
+        "/orders/order-no/{orderNo}": {
+            "get": {
+                "description": "依照 order_no 取得訂單資料",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "orders"
+                ],
+                "summary": "依訂單編號查詢訂單",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "訂單編號",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.OrderResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/orders/{orderId}": {
             "get": {
                 "description": "依訂單 ID 取得訂單內容",
@@ -258,6 +322,122 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/payments/{paymentNo}": {
+            "get": {
+                "description": "依照 payment_no 取得付款資料",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "payments"
+                ],
+                "summary": "依付款編號查詢付款",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "付款編號",
+                        "name": "paymentNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.PaymentResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/queue/join": {
+            "post": {
+                "description": "建立 queue token，memory 版本目前直接回 ready 狀態",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "queue"
+                ],
+                "summary": "加入排隊",
+                "parameters": [
+                    {
+                        "description": "加入排隊請求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.JoinQueueRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/controller.JoinQueueResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/queue/status/{queueToken}": {
+            "get": {
+                "description": "依 queue token 查詢目前排隊進度與是否已取得 purchase token",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "queue"
+                ],
+                "summary": "查詢排隊狀態",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Queue Token",
+                        "name": "queueToken",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.QueueStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/controller.ErrorResponse"
                         }
@@ -384,6 +564,220 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/reservations/{reservationId}": {
+            "get": {
+                "description": "依照 reservation ID 取得鎖票資料",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reservations"
+                ],
+                "summary": "查詢 reservation",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "reservation ID",
+                        "name": "reservationId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ReservationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sale/status": {
+            "get": {
+                "description": "依照 event_id 查詢活動是否開賣，以及是否可進入後續購票流程",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sale"
+                ],
+                "summary": "查詢售票狀態",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "活動 ID",
+                        "name": "event_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.SaleStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{userId}/orders": {
+            "get": {
+                "description": "依照 user ID 取得該使用者的訂單列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "orders"
+                ],
+                "summary": "查詢使用者訂單列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "使用者 ID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/controller.OrderResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{userId}/payments": {
+            "get": {
+                "description": "依照 user ID 取得該使用者的付款列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "payments"
+                ],
+                "summary": "查詢使用者付款列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "使用者 ID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/controller.PaymentResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{userId}/reservations": {
+            "get": {
+                "description": "依照 user ID 取得該使用者的鎖票列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reservations"
+                ],
+                "summary": "查詢使用者 reservation 列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "使用者 ID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/controller.ReservationResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -462,6 +856,67 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "reservation_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "controller.JoinQueueRequest": {
+            "type": "object",
+            "properties": {
+                "access_code": {
+                    "type": "string"
+                },
+                "channel": {
+                    "type": "string"
+                },
+                "client_id": {
+                    "type": "string"
+                },
+                "event_id": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "controller.JoinQueueResponse": {
+            "type": "object",
+            "properties": {
+                "ahead_count": {
+                    "type": "integer"
+                },
+                "estimated_wait_seconds": {
+                    "type": "integer"
+                },
+                "event_id": {
+                    "type": "integer"
+                },
+                "expired_at": {
+                    "type": "string"
+                },
+                "joined_at": {
+                    "type": "string"
+                },
+                "purchase_token": {
+                    "type": "string"
+                },
+                "purchase_token_expires_at": {
+                    "type": "string"
+                },
+                "queue_position": {
+                    "type": "integer"
+                },
+                "queue_token": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "user_id": {
                     "type": "integer"
                 }
             }
@@ -565,6 +1020,47 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.QueueStatusResponse": {
+            "type": "object",
+            "properties": {
+                "ahead_count": {
+                    "type": "integer"
+                },
+                "estimated_wait_seconds": {
+                    "type": "integer"
+                },
+                "event_id": {
+                    "type": "integer"
+                },
+                "expired_at": {
+                    "type": "string"
+                },
+                "joined_at": {
+                    "type": "string"
+                },
+                "purchase_token": {
+                    "type": "string"
+                },
+                "purchase_token_expires_at": {
+                    "type": "string"
+                },
+                "queue_position": {
+                    "type": "integer"
+                },
+                "queue_token": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "controller.ReservationResponse": {
             "type": "object",
             "properties": {
@@ -607,19 +1103,60 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "event_id": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1
                 },
                 "hold_until": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "2026-06-10T19:00:00+08:00"
+                },
+                "purchase_token": {
+                    "type": "string",
+                    "example": "pt_01JXABCDEFG1234567890"
                 },
                 "quantity": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 2
                 },
                 "section_id": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1
                 },
                 "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "controller.SaleStatusResponse": {
+            "type": "object",
+            "properties": {
+                "can_join_queue": {
+                    "type": "boolean"
+                },
+                "can_reserve": {
+                    "type": "boolean"
+                },
+                "event_id": {
                     "type": "integer"
+                },
+                "event_status": {
+                    "type": "integer"
+                },
+                "is_on_sale": {
+                    "type": "boolean"
+                },
+                "queue_enabled": {
+                    "type": "boolean"
+                },
+                "sale_end_at": {
+                    "type": "string"
+                },
+                "sale_start_at": {
+                    "type": "string"
+                },
+                "server_time": {
+                    "type": "string"
                 }
             }
         },
@@ -697,7 +1234,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "buy-ticket API",
-	Description:      "演唱會搶票系統 API",
+	Description:      "搶票系統 API",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

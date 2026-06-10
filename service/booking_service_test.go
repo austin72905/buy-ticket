@@ -10,8 +10,9 @@ import (
 )
 
 func TestBookingServiceReserveTicket(t *testing.T) {
-	t.Run("開賣中且票區可保留時應建立 reservation", func(t *testing.T) {
+	t.Run("驗證 purchase token 後成功建立 reservation", func(t *testing.T) {
 		now := time.Now()
+		purchaseToken := "pt_reserve_ok"
 		eventRepo := &fakeEventRepository{
 			event: &domain.Event{
 				ID:          1,
@@ -32,18 +33,33 @@ func TestBookingServiceReserveTicket(t *testing.T) {
 			},
 		}
 		reservationRepo := &fakeReservationRepository{}
-		service := NewBookingService(eventRepo, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc := NewBookingService(eventRepo, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc.SaveQueueStatus(QueueStatusSnapshot{
+			QueueToken:             "qt_reserve_ok",
+			Status:                 QueueStatusReady,
+			EventID:                1,
+			UserID:                 3,
+			QueuePosition:          1,
+			AheadCount:             0,
+			EstimatedWaitSeconds:   0,
+			PurchaseToken:          &purchaseToken,
+			PurchaseTokenExpiresAt: ptrTime(now.Add(5 * time.Minute)),
+			JoinedAt:               now.Add(-time.Minute),
+			ExpiredAt:              now.Add(29 * time.Minute),
+			UpdatedAt:              now,
+		})
 
-		reservation, err := service.ReserveTicket(context.Background(), ReserveTicketInput{
-			UserID:    3,
-			EventID:   1,
-			SectionID: 2,
-			Quantity:  2,
-			HoldUntil: now.Add(5 * time.Minute),
+		reservation, err := svc.ReserveTicket(context.Background(), ReserveTicketInput{
+			UserID:        3,
+			EventID:       1,
+			SectionID:     2,
+			Quantity:      2,
+			HoldUntil:     now.Add(5 * time.Minute),
+			PurchaseToken: purchaseToken,
 		})
 
 		if err != nil {
-			t.Fatalf("預期保留成功，實際錯誤: %v", err)
+			t.Fatalf("預期建立 reservation 成功，但得到錯誤: %v", err)
 		}
 		if reservation.Status != domain.ReservationStatusHolding {
 			t.Fatal("預期 reservation 狀態為 holding")
@@ -52,12 +68,13 @@ func TestBookingServiceReserveTicket(t *testing.T) {
 			t.Fatalf("預期總金額為 3600，實際為 %d", reservation.TotalAmount)
 		}
 		if sectionRepo.section.ReservedQuantity != 2 {
-			t.Fatalf("預期票區保留數量為 2，實際為 %d", sectionRepo.section.ReservedQuantity)
+			t.Fatalf("預期區域保留數量為 2，實際為 %d", sectionRepo.section.ReservedQuantity)
 		}
 	})
 
-	t.Run("未開賣時應回傳 event is not on sale", func(t *testing.T) {
+	t.Run("活動未開賣時應回傳 event is not on sale", func(t *testing.T) {
 		now := time.Now()
+		purchaseToken := "pt_event_not_on_sale"
 		eventRepo := &fakeEventRepository{
 			event: &domain.Event{
 				ID:          1,
@@ -75,24 +92,102 @@ func TestBookingServiceReserveTicket(t *testing.T) {
 				Status:        domain.SectionStatusActive,
 			},
 		}
-		service := NewBookingService(eventRepo, sectionRepo, &fakeReservationRepository{}, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc := NewBookingService(eventRepo, sectionRepo, &fakeReservationRepository{}, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc.SaveQueueStatus(QueueStatusSnapshot{
+			QueueToken:             "qt_event_not_on_sale",
+			Status:                 QueueStatusReady,
+			EventID:                1,
+			UserID:                 3,
+			QueuePosition:          1,
+			AheadCount:             0,
+			EstimatedWaitSeconds:   0,
+			PurchaseToken:          &purchaseToken,
+			PurchaseTokenExpiresAt: ptrTime(now.Add(5 * time.Minute)),
+			JoinedAt:               now.Add(-time.Minute),
+			ExpiredAt:              now.Add(29 * time.Minute),
+			UpdatedAt:              now,
+		})
 
-		_, err := service.ReserveTicket(context.Background(), ReserveTicketInput{
-			UserID:    3,
-			EventID:   1,
-			SectionID: 2,
-			Quantity:  2,
-			HoldUntil: now.Add(5 * time.Minute),
+		_, err := svc.ReserveTicket(context.Background(), ReserveTicketInput{
+			UserID:        3,
+			EventID:       1,
+			SectionID:     2,
+			Quantity:      2,
+			HoldUntil:     now.Add(5 * time.Minute),
+			PurchaseToken: purchaseToken,
 		})
 
 		if !errors.Is(err, ErrEventNotOnSale) {
 			t.Fatalf("預期錯誤為 ErrEventNotOnSale，實際為 %v", err)
 		}
 	})
+
+	t.Run("purchase token 重複使用時應失敗", func(t *testing.T) {
+		now := time.Now()
+		purchaseToken := "pt_used_once"
+		eventRepo := &fakeEventRepository{
+			event: &domain.Event{
+				ID:          1,
+				Name:        "Jay Concert",
+				Status:      domain.EventStatusOnSale,
+				SaleStartAt: now.Add(-time.Hour),
+				SaleEndAt:   now.Add(time.Hour),
+			},
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:            2,
+				EventID:       1,
+				Name:          "A 區",
+				Price:         1800,
+				TotalQuantity: 10,
+				Status:        domain.SectionStatusActive,
+			},
+		}
+		svc := NewBookingService(eventRepo, sectionRepo, &fakeReservationRepository{}, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc.SaveQueueStatus(QueueStatusSnapshot{
+			QueueToken:             "qt_used_once",
+			Status:                 QueueStatusReady,
+			EventID:                1,
+			UserID:                 3,
+			QueuePosition:          1,
+			AheadCount:             0,
+			EstimatedWaitSeconds:   0,
+			PurchaseToken:          &purchaseToken,
+			PurchaseTokenExpiresAt: ptrTime(now.Add(5 * time.Minute)),
+			JoinedAt:               now.Add(-time.Minute),
+			ExpiredAt:              now.Add(29 * time.Minute),
+			UpdatedAt:              now,
+		})
+
+		_, err := svc.ReserveTicket(context.Background(), ReserveTicketInput{
+			UserID:        3,
+			EventID:       1,
+			SectionID:     2,
+			Quantity:      1,
+			HoldUntil:     now.Add(5 * time.Minute),
+			PurchaseToken: purchaseToken,
+		})
+		if err != nil {
+			t.Fatalf("第一次使用 purchase token 不應失敗: %v", err)
+		}
+
+		_, err = svc.ReserveTicket(context.Background(), ReserveTicketInput{
+			UserID:        3,
+			EventID:       1,
+			SectionID:     2,
+			Quantity:      1,
+			HoldUntil:     now.Add(5 * time.Minute),
+			PurchaseToken: purchaseToken,
+		})
+		if !errors.Is(err, ErrPurchaseTokenNotFound) {
+			t.Fatalf("預期錯誤為 ErrPurchaseTokenNotFound，實際為 %v", err)
+		}
+	})
 }
 
 func TestBookingServiceCreateOrder(t *testing.T) {
-	t.Run("有效 reservation 應建立待付款訂單", func(t *testing.T) {
+	t.Run("從有效 reservation 建立待付款訂單", func(t *testing.T) {
 		now := time.Now()
 		reservationRepo := &fakeReservationRepository{
 			reservations: map[int64]*domain.Reservation{
@@ -111,16 +206,16 @@ func TestBookingServiceCreateOrder(t *testing.T) {
 			nextID: 10,
 		}
 		orderRepo := &fakeOrderRepository{}
-		service := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, reservationRepo, orderRepo, &fakePaymentRepository{})
+		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, reservationRepo, orderRepo, &fakePaymentRepository{})
 
-		order, err := service.CreateOrder(context.Background(), CreateOrderInput{
+		order, err := svc.CreateOrder(context.Background(), CreateOrderInput{
 			ReservationID: 10,
 			OrderNo:       "ORD-001",
 			ExpiresAt:     now.Add(10 * time.Minute),
 		})
 
 		if err != nil {
-			t.Fatalf("預期建單成功，實際錯誤: %v", err)
+			t.Fatalf("預期建立訂單成功，但得到錯誤: %v", err)
 		}
 		if order.Status != domain.OrderStatusPendingPayment {
 			t.Fatal("預期訂單狀態為 pending payment")
@@ -129,7 +224,7 @@ func TestBookingServiceCreateOrder(t *testing.T) {
 			t.Fatalf("預期訂單金額為 3600，實際為 %d", order.TotalAmount)
 		}
 		if order.Quantity != 2 || order.UnitPrice != 1800 {
-			t.Fatalf("預期訂單快照 quantity=2 unit_price=1800，實際 quantity=%d unit_price=%d", order.Quantity, order.UnitPrice)
+			t.Fatalf("預期 quantity=2 unit_price=1800，實際為 quantity=%d unit_price=%d", order.Quantity, order.UnitPrice)
 		}
 	})
 }
@@ -137,7 +232,7 @@ func TestBookingServiceCreateOrder(t *testing.T) {
 func TestBookingServiceJoinQueue(t *testing.T) {
 	t.Run("活動開賣時應建立 queue token 並回 ready", func(t *testing.T) {
 		now := time.Now()
-		service := NewBookingService(
+		svc := NewBookingService(
 			&fakeEventRepository{
 				event: &domain.Event{
 					ID:          1,
@@ -152,7 +247,7 @@ func TestBookingServiceJoinQueue(t *testing.T) {
 			&fakePaymentRepository{},
 		)
 
-		snapshot, err := service.JoinQueue(context.Background(), JoinQueueInput{
+		snapshot, err := svc.JoinQueue(context.Background(), JoinQueueInput{
 			EventID:   1,
 			UserID:    2,
 			ClientID:  "web-device-001",
@@ -175,7 +270,7 @@ func TestBookingServiceJoinQueue(t *testing.T) {
 
 	t.Run("同一使用者重複加入有效 queue 時應回錯誤", func(t *testing.T) {
 		now := time.Now()
-		service := NewBookingService(
+		svc := NewBookingService(
 			&fakeEventRepository{
 				event: &domain.Event{
 					ID:          1,
@@ -190,7 +285,7 @@ func TestBookingServiceJoinQueue(t *testing.T) {
 			&fakePaymentRepository{},
 		)
 
-		_, err := service.JoinQueue(context.Background(), JoinQueueInput{
+		_, err := svc.JoinQueue(context.Background(), JoinQueueInput{
 			EventID:   1,
 			UserID:    2,
 			ClientID:  "web-device-001",
@@ -201,7 +296,7 @@ func TestBookingServiceJoinQueue(t *testing.T) {
 			t.Fatalf("第一次加入不應失敗: %v", err)
 		}
 
-		_, err = service.JoinQueue(context.Background(), JoinQueueInput{
+		_, err = svc.JoinQueue(context.Background(), JoinQueueInput{
 			EventID:   1,
 			UserID:    2,
 			ClientID:  "web-device-001",
@@ -215,7 +310,7 @@ func TestBookingServiceJoinQueue(t *testing.T) {
 }
 
 func TestBookingServicePayOrder(t *testing.T) {
-	t.Run("訂單可付款時應完成付款並確認售出", func(t *testing.T) {
+	t.Run("付款成功後應更新 payment、order、reservation、section", func(t *testing.T) {
 		now := time.Now()
 		orderRepo := &fakeOrderRepository{
 			orders: map[int64]*domain.Order{
@@ -262,9 +357,9 @@ func TestBookingServicePayOrder(t *testing.T) {
 			},
 		}
 		paymentRepo := &fakePaymentRepository{}
-		service := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, orderRepo, paymentRepo)
+		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, orderRepo, paymentRepo)
 
-		payment, err := service.PayOrder(context.Background(), PayOrderInput{
+		payment, err := svc.PayOrder(context.Background(), PayOrderInput{
 			OrderID:   20,
 			PaymentNo: "PAY-001",
 			Method:    "credit_card",
@@ -273,7 +368,7 @@ func TestBookingServicePayOrder(t *testing.T) {
 		})
 
 		if err != nil {
-			t.Fatalf("預期付款成功，實際錯誤: %v", err)
+			t.Fatalf("預期付款成功，但得到錯誤: %v", err)
 		}
 		if payment.Status != domain.PaymentStatusPaid {
 			t.Fatal("預期 payment 狀態為 paid")
@@ -285,11 +380,11 @@ func TestBookingServicePayOrder(t *testing.T) {
 			t.Fatal("預期 reservation 狀態為 confirmed")
 		}
 		if sectionRepo.section.ReservedQuantity != 0 || sectionRepo.section.SoldQuantity != 5 {
-			t.Fatalf("預期票區 reserved=0 sold=5，實際 reserved=%d sold=%d", sectionRepo.section.ReservedQuantity, sectionRepo.section.SoldQuantity)
+			t.Fatalf("預期 reserved=0 sold=5，實際為 reserved=%d sold=%d", sectionRepo.section.ReservedQuantity, sectionRepo.section.SoldQuantity)
 		}
 	})
 
-	t.Run("付款金額不符時應回傳錯誤", func(t *testing.T) {
+	t.Run("付款金額不一致時應回傳錯誤", func(t *testing.T) {
 		now := time.Now()
 		orderRepo := &fakeOrderRepository{
 			orders: map[int64]*domain.Order{
@@ -302,9 +397,9 @@ func TestBookingServicePayOrder(t *testing.T) {
 				},
 			},
 		}
-		service := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, &fakeReservationRepository{}, orderRepo, &fakePaymentRepository{})
+		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, &fakeReservationRepository{}, orderRepo, &fakePaymentRepository{})
 
-		_, err := service.PayOrder(context.Background(), PayOrderInput{
+		_, err := svc.PayOrder(context.Background(), PayOrderInput{
 			OrderID:   20,
 			PaymentNo: "PAY-001",
 			Method:    "credit_card",
@@ -319,7 +414,7 @@ func TestBookingServicePayOrder(t *testing.T) {
 }
 
 func TestBookingServiceCloseReservation(t *testing.T) {
-	t.Run("reservation 過期時應釋放票區保留量", func(t *testing.T) {
+	t.Run("reservation 過期後應釋放區域保留數量", func(t *testing.T) {
 		now := time.Now()
 		reservationRepo := &fakeReservationRepository{
 			reservations: map[int64]*domain.Reservation{
@@ -341,25 +436,25 @@ func TestBookingServiceCloseReservation(t *testing.T) {
 				Status:           domain.SectionStatusActive,
 			},
 		}
-		service := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
 
-		reservation, err := service.ExpireReservation(context.Background(), ExpireReservationInput{
+		reservation, err := svc.ExpireReservation(context.Background(), ExpireReservationInput{
 			ReservationID: 10,
 			ExpiredAt:     now,
 		})
 
 		if err != nil {
-			t.Fatalf("預期過期成功，實際錯誤: %v", err)
+			t.Fatalf("預期過期成功，但得到錯誤: %v", err)
 		}
 		if reservation.Status != domain.ReservationStatusExpired {
 			t.Fatal("預期 reservation 狀態為 expired")
 		}
 		if sectionRepo.section.ReservedQuantity != 0 {
-			t.Fatalf("預期票區保留數量為 0，實際為 %d", sectionRepo.section.ReservedQuantity)
+			t.Fatalf("預期區域保留數量為 0，實際為 %d", sectionRepo.section.ReservedQuantity)
 		}
 	})
 
-	t.Run("reservation 取消時應釋放票區保留量", func(t *testing.T) {
+	t.Run("reservation 取消後應釋放區域保留數量", func(t *testing.T) {
 		now := time.Now()
 		reservationRepo := &fakeReservationRepository{
 			reservations: map[int64]*domain.Reservation{
@@ -381,21 +476,21 @@ func TestBookingServiceCloseReservation(t *testing.T) {
 				Status:           domain.SectionStatusActive,
 			},
 		}
-		service := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
 
-		reservation, err := service.CancelReservation(context.Background(), CancelReservationInput{
+		reservation, err := svc.CancelReservation(context.Background(), CancelReservationInput{
 			ReservationID: 11,
 			CancelledAt:   now,
 		})
 
 		if err != nil {
-			t.Fatalf("預期取消成功，實際錯誤: %v", err)
+			t.Fatalf("預期取消成功，但得到錯誤: %v", err)
 		}
 		if reservation.Status != domain.ReservationStatusCancelled {
 			t.Fatal("預期 reservation 狀態為 cancelled")
 		}
 		if sectionRepo.section.ReservedQuantity != 0 {
-			t.Fatalf("預期票區保留數量為 0，實際為 %d", sectionRepo.section.ReservedQuantity)
+			t.Fatalf("預期區域保留數量為 0，實際為 %d", sectionRepo.section.ReservedQuantity)
 		}
 	})
 }
@@ -406,14 +501,14 @@ func TestBookingServiceGetQueueStatus(t *testing.T) {
 		purchaseToken := "pt_001"
 		purchaseTokenExpiresAt := now.Add(5 * time.Minute)
 
-		service := NewBookingService(
+		svc := NewBookingService(
 			&fakeEventRepository{},
 			&fakeSectionRepository{},
 			&fakeReservationRepository{},
 			&fakeOrderRepository{},
 			&fakePaymentRepository{},
 		)
-		service.SaveQueueStatus(QueueStatusSnapshot{
+		svc.SaveQueueStatus(QueueStatusSnapshot{
 			QueueToken:             "qt_001",
 			Status:                 QueueStatusReady,
 			EventID:                1,
@@ -428,7 +523,7 @@ func TestBookingServiceGetQueueStatus(t *testing.T) {
 			UpdatedAt:              now,
 		})
 
-		snapshot, err := service.GetQueueStatus(context.Background(), "qt_001")
+		snapshot, err := svc.GetQueueStatus(context.Background(), "qt_001")
 		if err != nil {
 			t.Fatalf("預期查詢成功，但得到錯誤: %v", err)
 		}
@@ -441,7 +536,7 @@ func TestBookingServiceGetQueueStatus(t *testing.T) {
 	})
 
 	t.Run("查不到 queue token 時應回傳錯誤", func(t *testing.T) {
-		service := NewBookingService(
+		svc := NewBookingService(
 			&fakeEventRepository{},
 			&fakeSectionRepository{},
 			&fakeReservationRepository{},
@@ -449,7 +544,7 @@ func TestBookingServiceGetQueueStatus(t *testing.T) {
 			&fakePaymentRepository{},
 		)
 
-		_, err := service.GetQueueStatus(context.Background(), "qt_not_found")
+		_, err := svc.GetQueueStatus(context.Background(), "qt_not_found")
 		if !errors.Is(err, ErrQueueTokenNotFound) {
 			t.Fatalf("預期錯誤為 ErrQueueTokenNotFound，實際為 %v", err)
 		}
@@ -632,4 +727,8 @@ func (f *fakePaymentRepository) Save(ctx context.Context, payment *domain.Paymen
 
 	f.payments[payment.ID] = payment
 	return nil
+}
+
+func ptrTime(value time.Time) *time.Time {
+	return &value
 }
