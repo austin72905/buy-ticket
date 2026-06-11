@@ -535,12 +535,23 @@ func (c *BookingController) HandleECPayCallback(ctx *gin.Context) {
 	}
 
 	if err := c.BookingService.HandleECPayCallback(ctx.Request.Context(), service.HandleECPayCallbackInput{
-		MerchantTradeNo: request.MerchantTradeNo,
-		RtnCode:         request.RtnCode,
-		TradeNo:         request.TradeNo,
-		TradeAmt:        request.TradeAmt,
-		PaymentDate:     request.PaymentDate,
-		PaymentType:     request.PaymentType,
+		MerchantID:           request.MerchantID,
+		MerchantTradeNo:      request.MerchantTradeNo,
+		RtnCode:              request.RtnCode,
+		RtnMsg:               request.RtnMsg,
+		TradeNo:              request.TradeNo,
+		TradeAmt:             request.TradeAmt,
+		PaymentDate:          request.PaymentDate,
+		PaymentType:          request.PaymentType,
+		PaymentTypeChargeFee: request.PaymentTypeChargeFee,
+		TradeDate:            request.TradeDate,
+		SimulatePaid:         request.SimulatePaid,
+		CustomField1:         request.CustomField1,
+		CustomField2:         request.CustomField2,
+		CustomField3:         request.CustomField3,
+		CustomField4:         request.CustomField4,
+		CheckMacValue:        request.CheckMacValue,
+		ReturnStatus:         request.ReturnStatus,
 	}); err != nil {
 		writeError(ctx, http.StatusBadRequest, err)
 		return

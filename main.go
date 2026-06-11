@@ -98,6 +98,11 @@ func (app *BuyTicketApp) Initialize() {
 	bookingService.DB = dbPool
 	bookingService.QueueStore = buildQueueStore(app.Runtime)
 	bookingService.StockStore = buildStockStore(app.Runtime)
+	bookingService.MockPaymentSignature = service.MockPaymentSignatureConfig{
+		MerchantID: app.Runtime.Property.Property("payment.mock.merchant_id"),
+		HashKey:    app.Runtime.Property.Property("payment.mock.hash_key"),
+		HashIV:     app.Runtime.Property.Property("payment.mock.hash_iv"),
+	}
 	if err := bookingService.RebuildStock(context.Background()); err != nil {
 		log.Fatalf("rebuild stock failed: %v", err)
 	}

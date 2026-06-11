@@ -462,14 +462,39 @@ func TestBookingServiceHandleECPayCallback(t *testing.T) {
 		}
 		paymentRepo := &fakePaymentRepository{}
 		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, orderRepo, paymentRepo)
-
-		err := svc.HandleECPayCallback(context.Background(), HandleECPayCallbackInput{
+		callback := VerifyMockPaymentCallbackInput{
+			MerchantID:      "TEST_MERCHANT",
 			MerchantTradeNo: "ORD-CB-001",
 			RtnCode:         "1",
+			RtnMsg:          "交易成功",
 			TradeNo:         "TRADE-001",
 			TradeAmt:        "3600",
 			PaymentDate:     "2026/06/11 18:30:00",
 			PaymentType:     "Credit",
+			TradeDate:       "2026/06/11 18:29:59",
+			SimulatePaid:    "1",
+			ReturnStatus:    "1",
+		}
+		svc.MockPaymentSignature = MockPaymentSignatureConfig{
+			MerchantID: "TEST_MERCHANT",
+			HashKey:    "TEST_SECRET",
+			HashIV:     "TEST_HASH_IV",
+		}
+		callback.CheckMacValue = buildMockPaymentCheckMacValue(callback, svc.MockPaymentSignature)
+
+		err := svc.HandleECPayCallback(context.Background(), HandleECPayCallbackInput{
+			MerchantID:      callback.MerchantID,
+			MerchantTradeNo: callback.MerchantTradeNo,
+			RtnCode:         callback.RtnCode,
+			RtnMsg:          callback.RtnMsg,
+			TradeNo:         callback.TradeNo,
+			TradeAmt:        callback.TradeAmt,
+			PaymentDate:     callback.PaymentDate,
+			PaymentType:     callback.PaymentType,
+			TradeDate:       callback.TradeDate,
+			SimulatePaid:    callback.SimulatePaid,
+			CheckMacValue:   callback.CheckMacValue,
+			ReturnStatus:    callback.ReturnStatus,
 		})
 		if err != nil {
 			t.Fatalf("預期 callback 可成功入帳，實際錯誤: %v", err)
@@ -504,12 +529,39 @@ func TestBookingServiceHandleECPayCallback(t *testing.T) {
 		}
 		paymentRepo := &fakePaymentRepository{}
 		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, &fakeReservationRepository{}, orderRepo, paymentRepo)
-
-		err := svc.HandleECPayCallback(context.Background(), HandleECPayCallbackInput{
+		callback := VerifyMockPaymentCallbackInput{
+			MerchantID:      "TEST_MERCHANT",
 			MerchantTradeNo: "ORD-CB-002",
 			RtnCode:         "0",
+			RtnMsg:          "交易失敗",
 			TradeNo:         "TRADE-FAIL-001",
 			TradeAmt:        "3600",
+			PaymentDate:     "2026/06/11 18:30:00",
+			PaymentType:     "Credit",
+			TradeDate:       "2026/06/11 18:29:59",
+			SimulatePaid:    "1",
+			ReturnStatus:    "0",
+		}
+		svc.MockPaymentSignature = MockPaymentSignatureConfig{
+			MerchantID: "TEST_MERCHANT",
+			HashKey:    "TEST_SECRET",
+			HashIV:     "TEST_HASH_IV",
+		}
+		callback.CheckMacValue = buildMockPaymentCheckMacValue(callback, svc.MockPaymentSignature)
+
+		err := svc.HandleECPayCallback(context.Background(), HandleECPayCallbackInput{
+			MerchantID:      callback.MerchantID,
+			MerchantTradeNo: callback.MerchantTradeNo,
+			RtnCode:         callback.RtnCode,
+			RtnMsg:          callback.RtnMsg,
+			TradeNo:         callback.TradeNo,
+			TradeAmt:        callback.TradeAmt,
+			PaymentDate:     callback.PaymentDate,
+			PaymentType:     callback.PaymentType,
+			TradeDate:       callback.TradeDate,
+			SimulatePaid:    callback.SimulatePaid,
+			CheckMacValue:   callback.CheckMacValue,
+			ReturnStatus:    callback.ReturnStatus,
 		})
 		if err != nil {
 			t.Fatalf("預期失敗回呼直接略過，實際錯誤: %v", err)
@@ -519,6 +571,62 @@ func TestBookingServiceHandleECPayCallback(t *testing.T) {
 		}
 		if orderRepo.orders[21].Status != domain.OrderStatusPendingPayment {
 			t.Fatal("預期 order 維持 pending_payment")
+		}
+	})
+}
+
+func TestBookingServiceVerifyMockPaymentCallback(t *testing.T) {
+	t.Run("簽章正確可通過驗證", func(t *testing.T) {
+		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, &fakeReservationRepository{}, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc.MockPaymentSignature = MockPaymentSignatureConfig{
+			MerchantID: "TEST_MERCHANT",
+			HashKey:    "TEST_SECRET",
+			HashIV:     "TEST_HASH_IV",
+		}
+		input := VerifyMockPaymentCallbackInput{
+			MerchantID:      "TEST_MERCHANT",
+			MerchantTradeNo: "ORD-SIGN-001",
+			RtnCode:         "1",
+			RtnMsg:          "交易成功",
+			TradeNo:         "TRADE-SIGN-001",
+			TradeAmt:        "1200",
+			PaymentDate:     "2026/06/11 18:30:00",
+			PaymentType:     "Credit",
+			TradeDate:       "2026/06/11 18:29:59",
+			SimulatePaid:    "1",
+			ReturnStatus:    "1",
+		}
+		input.CheckMacValue = buildMockPaymentCheckMacValue(input, svc.MockPaymentSignature)
+
+		if err := svc.VerifyMockPaymentCallback(input); err != nil {
+			t.Fatalf("預期驗簽成功，實際錯誤: %v", err)
+		}
+	})
+
+	t.Run("簽章錯誤會被拒絕", func(t *testing.T) {
+		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, &fakeReservationRepository{}, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc.MockPaymentSignature = MockPaymentSignatureConfig{
+			MerchantID: "TEST_MERCHANT",
+			HashKey:    "TEST_SECRET",
+			HashIV:     "TEST_HASH_IV",
+		}
+
+		err := svc.VerifyMockPaymentCallback(VerifyMockPaymentCallbackInput{
+			MerchantID:      "TEST_MERCHANT",
+			MerchantTradeNo: "ORD-SIGN-002",
+			RtnCode:         "1",
+			RtnMsg:          "交易成功",
+			TradeNo:         "TRADE-SIGN-002",
+			TradeAmt:        "1200",
+			PaymentDate:     "2026/06/11 18:30:00",
+			PaymentType:     "Credit",
+			TradeDate:       "2026/06/11 18:29:59",
+			SimulatePaid:    "1",
+			ReturnStatus:    "1",
+			CheckMacValue:   "BAD_SIGNATURE",
+		})
+		if !errors.Is(err, ErrInvalidPaymentSignature) {
+			t.Fatalf("預期錯誤為 ErrInvalidPaymentSignature，實際為 %v", err)
 		}
 	})
 }

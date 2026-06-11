@@ -31,14 +31,15 @@ var (
 )
 
 type BookingService struct {
-	DB              *pgxpool.Pool
-	EventRepo       repository.EventRepository
-	SectionRepo     repository.SectionRepository
-	ReservationRepo repository.ReservationRepository
-	OrderRepo       repository.OrderRepository
-	PaymentRepo     repository.PaymentRepository
-	QueueStore      QueueStore
-	StockStore      StockStore
+	DB                   *pgxpool.Pool
+	EventRepo            repository.EventRepository
+	SectionRepo          repository.SectionRepository
+	ReservationRepo      repository.ReservationRepository
+	OrderRepo            repository.OrderRepository
+	PaymentRepo          repository.PaymentRepository
+	QueueStore           QueueStore
+	StockStore           StockStore
+	MockPaymentSignature MockPaymentSignatureConfig
 }
 
 type ReserveTicketInput struct {
