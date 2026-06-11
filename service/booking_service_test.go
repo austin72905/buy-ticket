@@ -824,6 +824,36 @@ func TestMemoryQueueStoreCleanupExpiredPurchaseTokens(t *testing.T) {
 	})
 }
 
+func TestMemoryQueueStoreCleanupExpiredQueues(t *testing.T) {
+	t.Run("應清掉已過期 queue 並移除相關索引", func(t *testing.T) {
+		now := time.Now()
+		store := NewMemoryQueueStore(1)
+		snapshot, err := store.Join(context.Background(), JoinQueueInput{
+			EventID: 1,
+			UserID:  1,
+		}, now)
+		if err != nil {
+			t.Fatalf("join queue 不應失敗: %v", err)
+		}
+
+		cleaned, err := store.CleanupExpiredQueues(context.Background(), now.Add(31*time.Minute))
+		if err != nil {
+			t.Fatalf("cleanup 不應失敗: %v", err)
+		}
+		if cleaned != 1 {
+			t.Fatalf("預期清掉 1 筆，實際 %d", cleaned)
+		}
+
+		status, err := store.Get(context.Background(), snapshot.QueueToken, now.Add(31*time.Minute))
+		if err != nil {
+			t.Fatalf("get queue status 不應失敗: %v", err)
+		}
+		if status.Status != QueueStatusExpired {
+			t.Fatalf("預期 status=expired(3)，實際 %d", status.Status)
+		}
+	})
+}
+
 func TestBookingServiceReserveTicketWithStockStore(t *testing.T) {
 	t.Run("建立 reservation 時應先保留 Redis stock", func(t *testing.T) {
 		now := time.Now()

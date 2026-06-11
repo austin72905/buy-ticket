@@ -13,4 +13,5 @@ type QueueStore interface {
 	SaveSnapshot(ctx context.Context, snapshot QueueStatusSnapshot) error
 	PromoteReady(ctx context.Context, now time.Time) error
 	CleanupExpiredPurchaseTokens(ctx context.Context, now time.Time) (int, error)
+	CleanupExpiredQueues(ctx context.Context, now time.Time) (int, error)
 }

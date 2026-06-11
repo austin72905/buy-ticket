@@ -183,6 +183,20 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	if err != nil {
 		log.Fatalf("register purchase token cleanup failed: %v", err)
 	}
+
+	_, err = scheduler.AddFuncJobWithName("*/10 * * * * *", "queue-timeout-cleanup", func(ctx context.Context) {
+		count, err := bookingService.CleanupExpiredQueues(ctx, time.Now())
+		if err != nil {
+			log.Printf("queue timeout cleanup failed: %v", err)
+			return
+		}
+		if count > 0 {
+			log.Printf("queue timeout cleanup expired %d queues", count)
+		}
+	})
+	if err != nil {
+		log.Fatalf("register queue timeout cleanup failed: %v", err)
+	}
 }
 
 func queueReleaseLimit(runtime *infraapp.Runtime) int {

@@ -642,6 +642,13 @@ func (s *BookingService) CleanupExpiredPurchaseTokens(ctx context.Context, now t
 	return s.QueueStore.CleanupExpiredPurchaseTokens(ctx, now)
 }
 
+func (s *BookingService) CleanupExpiredQueues(ctx context.Context, now time.Time) (int, error) {
+	if now.IsZero() {
+		now = time.Now()
+	}
+	return s.QueueStore.CleanupExpiredQueues(ctx, now)
+}
+
 func (s *BookingService) SaveQueueStatus(snapshot QueueStatusSnapshot) {
 	_ = s.QueueStore.SaveSnapshot(context.Background(), snapshot)
 }

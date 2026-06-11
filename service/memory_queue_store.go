@@ -206,6 +206,33 @@ func (s *MemoryQueueStore) CleanupExpiredPurchaseTokens(ctx context.Context, now
 	return cleaned, nil
 }
 
+func (s *MemoryQueueStore) CleanupExpiredQueues(ctx context.Context, now time.Time) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cleaned := 0
+	for queueToken, snapshot := range s.queueStatuses {
+		if !snapshot.ExpiredAt.Before(now) {
+			continue
+		}
+
+		if snapshot.PurchaseToken != nil {
+			delete(s.purchaseTokens, *snapshot.PurchaseToken)
+		}
+		delete(s.queueUserEvent, queueUserEventKey(snapshot.EventID, snapshot.UserID))
+		s.eventQueues[snapshot.EventID] = removeToken(s.eventQueues[snapshot.EventID], queueToken)
+
+		snapshot.Status = QueueStatusExpired
+		snapshot.PurchaseToken = nil
+		snapshot.PurchaseTokenExpiresAt = nil
+		snapshot.UpdatedAt = now
+		s.queueStatuses[queueToken] = snapshot
+		cleaned++
+	}
+
+	return cleaned, nil
+}
+
 func (s *MemoryQueueStore) promoteReadyLocked(eventID int64, now time.Time) {
 	readyCount := s.readyCountLocked(eventID, now)
 	if readyCount >= s.releaseLimit {
