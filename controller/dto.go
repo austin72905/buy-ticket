@@ -39,6 +39,26 @@ type PayOrderRequest struct {
 	PaidAt    time.Time `json:"paid_at"`
 }
 
+type ECPayCallbackRequest struct {
+	MerchantID           string `form:"MerchantID" json:"MerchantID"`
+	MerchantTradeNo      string `form:"MerchantTradeNo" json:"MerchantTradeNo"`
+	RtnCode              string `form:"RtnCode" json:"RtnCode"`
+	RtnMsg               string `form:"RtnMsg" json:"RtnMsg"`
+	TradeNo              string `form:"TradeNo" json:"TradeNo"`
+	TradeAmt             string `form:"TradeAmt" json:"TradeAmt"`
+	PaymentDate          string `form:"PaymentDate" json:"PaymentDate"`
+	PaymentType          string `form:"PaymentType" json:"PaymentType"`
+	PaymentTypeChargeFee string `form:"PaymentTypeChargeFee" json:"PaymentTypeChargeFee"`
+	TradeDate            string `form:"TradeDate" json:"TradeDate"`
+	SimulatePaid         string `form:"SimulatePaid" json:"SimulatePaid"`
+	CustomField1         string `form:"CustomField1" json:"CustomField1"`
+	CustomField2         string `form:"CustomField2" json:"CustomField2"`
+	CustomField3         string `form:"CustomField3" json:"CustomField3"`
+	CustomField4         string `form:"CustomField4" json:"CustomField4"`
+	CheckMacValue        string `form:"CheckMacValue" json:"CheckMacValue"`
+	ReturnStatus         string `form:"ReturnStatus" json:"ReturnStatus"`
+}
+
 type ExpireReservationRequest struct {
 	ReservationID int64     `json:"reservation_id"`
 	ExpiredAt     time.Time `json:"expired_at"`

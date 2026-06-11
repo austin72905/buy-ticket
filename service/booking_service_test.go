@@ -416,6 +416,113 @@ func TestBookingServicePayOrder(t *testing.T) {
 	})
 }
 
+func TestBookingServiceHandleECPayCallback(t *testing.T) {
+	t.Run("成功回呼會依訂單編號完成付款", func(t *testing.T) {
+		orderRepo := &fakeOrderRepository{
+			orders: map[int64]*domain.Order{
+				20: {
+					ID:            20,
+					OrderNo:       "ORD-CB-001",
+					ReservationID: 10,
+					UserID:        3,
+					EventID:       1,
+					SectionID:     2,
+					Quantity:      2,
+					UnitPrice:     1800,
+					TotalAmount:   3600,
+					Status:        domain.OrderStatusPendingPayment,
+					ExpiresAt:     time.Now().Add(10 * time.Minute),
+				},
+			},
+		}
+		reservationRepo := &fakeReservationRepository{
+			reservations: map[int64]*domain.Reservation{
+				10: {
+					ID:          10,
+					EventID:     1,
+					SectionID:   2,
+					UserID:      3,
+					Quantity:    2,
+					UnitPrice:   1800,
+					TotalAmount: 3600,
+					Status:      domain.ReservationStatusHolding,
+					ExpiresAt:   time.Now().Add(5 * time.Minute),
+				},
+			},
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:               2,
+				EventID:          1,
+				ReservedQuantity: 2,
+				SoldQuantity:     0,
+				TotalQuantity:    10,
+				Status:           domain.SectionStatusActive,
+			},
+		}
+		paymentRepo := &fakePaymentRepository{}
+		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, orderRepo, paymentRepo)
+
+		err := svc.HandleECPayCallback(context.Background(), HandleECPayCallbackInput{
+			MerchantTradeNo: "ORD-CB-001",
+			RtnCode:         "1",
+			TradeNo:         "TRADE-001",
+			TradeAmt:        "3600",
+			PaymentDate:     "2026/06/11 18:30:00",
+			PaymentType:     "Credit",
+		})
+		if err != nil {
+			t.Fatalf("預期 callback 可成功入帳，實際錯誤: %v", err)
+		}
+		if orderRepo.orders[20].Status != domain.OrderStatusPaid {
+			t.Fatal("預期 order 狀態變成 paid")
+		}
+		if reservationRepo.reservations[10].Status != domain.ReservationStatusConfirmed {
+			t.Fatal("預期 reservation 狀態變成 confirmed")
+		}
+		payment, err := paymentRepo.FindByPaymentNo(context.Background(), "TRADE-001")
+		if err != nil {
+			t.Fatalf("預期建立 payment，實際錯誤: %v", err)
+		}
+		if payment.Method != "ecpay_credit" {
+			t.Fatalf("預期 payment method=ecpay_credit，實際為 %s", payment.Method)
+		}
+	})
+
+	t.Run("失敗回呼不會建立付款", func(t *testing.T) {
+		orderRepo := &fakeOrderRepository{
+			orders: map[int64]*domain.Order{
+				21: {
+					ID:            21,
+					OrderNo:       "ORD-CB-002",
+					ReservationID: 11,
+					Status:        domain.OrderStatusPendingPayment,
+					TotalAmount:   3600,
+					ExpiresAt:     time.Now().Add(10 * time.Minute),
+				},
+			},
+		}
+		paymentRepo := &fakePaymentRepository{}
+		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, &fakeReservationRepository{}, orderRepo, paymentRepo)
+
+		err := svc.HandleECPayCallback(context.Background(), HandleECPayCallbackInput{
+			MerchantTradeNo: "ORD-CB-002",
+			RtnCode:         "0",
+			TradeNo:         "TRADE-FAIL-001",
+			TradeAmt:        "3600",
+		})
+		if err != nil {
+			t.Fatalf("預期失敗回呼直接略過，實際錯誤: %v", err)
+		}
+		if len(paymentRepo.payments) != 0 {
+			t.Fatal("預期失敗回呼不建立 payment")
+		}
+		if orderRepo.orders[21].Status != domain.OrderStatusPendingPayment {
+			t.Fatal("預期 order 維持 pending_payment")
+		}
+	})
+}
+
 func TestBookingServiceExpireOrder(t *testing.T) {
 	t.Run("訂單過期時應同時釋放 reservation 與 section", func(t *testing.T) {
 		now := time.Now()

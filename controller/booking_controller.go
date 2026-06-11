@@ -39,6 +39,7 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 	router.POST("/reservations", c.ReserveTicket)
 	router.POST("/orders", c.CreateOrder)
 	router.POST("/payments", c.PayOrder)
+	router.POST("/payments/provider/ecpay/callback", c.HandleECPayCallback)
 	router.POST("/reservations/expire", c.ExpireReservation)
 	router.POST("/reservations/cancel", c.CancelReservation)
 }
@@ -507,6 +508,45 @@ func (c *BookingController) PayOrder(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, newPaymentResponse(payment))
+}
+
+// HandleECPayCallback godoc
+// @Summary ECPay 支付回呼
+// @Description 接收第三方支付回呼，依 MerchantTradeNo 與 RtnCode 轉成訂單付款
+// @Tags payments
+// @Accept x-www-form-urlencoded
+// @Produce plain
+// @Param MerchantID formData string false "特店編號"
+// @Param MerchantTradeNo formData string true "訂單編號"
+// @Param RtnCode formData string true "回傳碼"
+// @Param RtnMsg formData string false "回傳訊息"
+// @Param TradeNo formData string false "支付交易編號"
+// @Param TradeAmt formData string false "交易金額"
+// @Param PaymentDate formData string false "付款時間"
+// @Param PaymentType formData string false "付款方式"
+// @Success 200 {string} string "1|OK"
+// @Failure 400 {object} ErrorResponse
+// @Router /payments/provider/ecpay/callback [post]
+func (c *BookingController) HandleECPayCallback(ctx *gin.Context) {
+	var request ECPayCallbackRequest
+	if err := ctx.ShouldBind(&request); err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	if err := c.BookingService.HandleECPayCallback(ctx.Request.Context(), service.HandleECPayCallbackInput{
+		MerchantTradeNo: request.MerchantTradeNo,
+		RtnCode:         request.RtnCode,
+		TradeNo:         request.TradeNo,
+		TradeAmt:        request.TradeAmt,
+		PaymentDate:     request.PaymentDate,
+		PaymentType:     request.PaymentType,
+	}); err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	ctx.Data(http.StatusOK, "text/plain; charset=utf-8", []byte("1|OK"))
 }
 
 // ExpireReservation godoc

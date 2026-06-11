@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -119,6 +120,82 @@ func TestBookingControllerJoinQueue(t *testing.T) {
 	})
 }
 
+func TestBookingControllerHandleECPayCallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("成功回呼會回 1|OK", func(t *testing.T) {
+		bookingService := service.NewBookingService(
+			&fakeEventRepositoryForController{},
+			&fakeSectionRepositoryForController{
+				section: &domain.Section{
+					ID:               2,
+					EventID:          1,
+					ReservedQuantity: 2,
+					TotalQuantity:    10,
+					Status:           domain.SectionStatusActive,
+				},
+			},
+			&fakeReservationRepositoryForController{
+				reservations: map[int64]*domain.Reservation{
+					10: {
+						ID:          10,
+						EventID:     1,
+						SectionID:   2,
+						UserID:      3,
+						Quantity:    2,
+						UnitPrice:   1800,
+						TotalAmount: 3600,
+						Status:      domain.ReservationStatusHolding,
+						ExpiresAt:   time.Now().Add(5 * time.Minute),
+					},
+				},
+			},
+			&fakeOrderRepositoryForController{
+				orders: map[int64]*domain.Order{
+					20: {
+						ID:            20,
+						OrderNo:       "ORD-CB-HTTP-001",
+						ReservationID: 10,
+						UserID:        3,
+						EventID:       1,
+						SectionID:     2,
+						Quantity:      2,
+						UnitPrice:     1800,
+						TotalAmount:   3600,
+						Status:        domain.OrderStatusPendingPayment,
+						ExpiresAt:     time.Now().Add(10 * time.Minute),
+					},
+				},
+			},
+			&fakePaymentRepositoryForController{},
+		)
+
+		controller := NewBookingController(bookingService)
+		router := gin.New()
+		controller.RegisterRoutes(router)
+
+		form := url.Values{}
+		form.Set("MerchantTradeNo", "ORD-CB-HTTP-001")
+		form.Set("RtnCode", "1")
+		form.Set("TradeNo", "TRADE-HTTP-001")
+		form.Set("TradeAmt", "3600")
+		form.Set("PaymentDate", "2026/06/11 18:30:00")
+		form.Set("PaymentType", "Credit")
+
+		req := httptest.NewRequest(http.MethodPost, "/payments/provider/ecpay/callback", bytes.NewBufferString(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("預期狀態碼 200，實際為 %d", resp.Code)
+		}
+		if resp.Body.String() != "1|OK" {
+			t.Fatalf("預期回應 1|OK，實際為 %s", resp.Body.String())
+		}
+	})
+}
+
 type fakeEventRepositoryForController struct {
 	eventID     int64
 	saleStartAt time.Time
@@ -140,4 +217,109 @@ func (f *fakeEventRepositoryForController) FindByID(ctx context.Context, eventID
 
 func (f *fakeEventRepositoryForController) List(ctx context.Context) ([]domain.Event, error) {
 	return []domain.Event{}, nil
+}
+
+type fakeSectionRepositoryForController struct {
+	section *domain.Section
+}
+
+func (f *fakeSectionRepositoryForController) FindByEventAndID(ctx context.Context, eventID, sectionID int64) (*domain.Section, error) {
+	if f.section == nil || f.section.EventID != eventID || f.section.ID != sectionID {
+		return nil, errors.New("section not found")
+	}
+	return f.section, nil
+}
+
+func (f *fakeSectionRepositoryForController) ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error) {
+	return []domain.Section{}, nil
+}
+
+func (f *fakeSectionRepositoryForController) Save(ctx context.Context, section *domain.Section) error {
+	f.section = section
+	return nil
+}
+
+type fakeReservationRepositoryForController struct {
+	reservations map[int64]*domain.Reservation
+}
+
+func (f *fakeReservationRepositoryForController) FindByID(ctx context.Context, reservationID int64) (*domain.Reservation, error) {
+	reservation, ok := f.reservations[reservationID]
+	if !ok {
+		return nil, errors.New("reservation not found")
+	}
+	return reservation, nil
+}
+
+func (f *fakeReservationRepositoryForController) ListByUserID(ctx context.Context, userID int64) ([]domain.Reservation, error) {
+	return []domain.Reservation{}, nil
+}
+
+func (f *fakeReservationRepositoryForController) Save(ctx context.Context, reservation *domain.Reservation) error {
+	f.reservations[reservation.ID] = reservation
+	return nil
+}
+
+type fakeOrderRepositoryForController struct {
+	orders map[int64]*domain.Order
+}
+
+func (f *fakeOrderRepositoryForController) FindByID(ctx context.Context, orderID int64) (*domain.Order, error) {
+	order, ok := f.orders[orderID]
+	if !ok {
+		return nil, errors.New("order not found")
+	}
+	return order, nil
+}
+
+func (f *fakeOrderRepositoryForController) FindByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error) {
+	for _, order := range f.orders {
+		if order.OrderNo == orderNo {
+			return order, nil
+		}
+	}
+	return nil, errors.New("order not found")
+}
+
+func (f *fakeOrderRepositoryForController) ListExpiredPending(ctx context.Context, now time.Time, limit int) ([]domain.Order, error) {
+	return []domain.Order{}, nil
+}
+
+func (f *fakeOrderRepositoryForController) ListByUserID(ctx context.Context, userID int64) ([]domain.Order, error) {
+	return []domain.Order{}, nil
+}
+
+func (f *fakeOrderRepositoryForController) Save(ctx context.Context, order *domain.Order) error {
+	f.orders[order.ID] = order
+	return nil
+}
+
+type fakePaymentRepositoryForController struct {
+	payments map[int64]*domain.Payment
+	nextID   int64
+}
+
+func (f *fakePaymentRepositoryForController) FindByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error) {
+	for _, payment := range f.payments {
+		if payment.PaymentNo == paymentNo {
+			return payment, nil
+		}
+	}
+	return nil, errors.New("payment not found")
+}
+
+func (f *fakePaymentRepositoryForController) ListByUserID(ctx context.Context, userID int64) ([]domain.Payment, error) {
+	return []domain.Payment{}, nil
+}
+
+func (f *fakePaymentRepositoryForController) Save(ctx context.Context, payment *domain.Payment) error {
+	if f.payments == nil {
+		f.payments = map[int64]*domain.Payment{}
+	}
+	if payment.ID == 0 {
+		f.nextID++
+		payment.ID = f.nextID
+	}
+	f.payments[payment.ID] = payment
+	return nil
 }
