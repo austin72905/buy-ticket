@@ -788,8 +788,188 @@ func TestMemoryQueueStorePromoteReady(t *testing.T) {
 	})
 }
 
+func TestBookingServiceReserveTicketWithStockStore(t *testing.T) {
+	t.Run("建立 reservation 時應先保留 Redis stock", func(t *testing.T) {
+		now := time.Now()
+		purchaseToken := "pt_stock_ok"
+		stockStore := &fakeStockStore{}
+		eventRepo := &fakeEventRepository{
+			event: &domain.Event{
+				ID:          1,
+				Name:        "Jay Concert",
+				Status:      domain.EventStatusOnSale,
+				SaleStartAt: now.Add(-time.Hour),
+				SaleEndAt:   now.Add(time.Hour),
+			},
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:            2,
+				EventID:       1,
+				Name:          "A 區",
+				Price:         1800,
+				TotalQuantity: 10,
+				Status:        domain.SectionStatusActive,
+			},
+		}
+		reservationRepo := &fakeReservationRepository{}
+		svc := NewBookingService(eventRepo, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc.StockStore = stockStore
+		svc.SaveQueueStatus(QueueStatusSnapshot{
+			QueueToken:             "qt_stock_ok",
+			QueueSequence:          1,
+			Status:                 QueueStatusReady,
+			EventID:                1,
+			UserID:                 3,
+			QueuePosition:          1,
+			AheadCount:             0,
+			EstimatedWaitSeconds:   0,
+			PurchaseToken:          &purchaseToken,
+			PurchaseTokenExpiresAt: ptrTime(now.Add(5 * time.Minute)),
+			JoinedAt:               now.Add(-time.Minute),
+			ExpiredAt:              now.Add(29 * time.Minute),
+			UpdatedAt:              now,
+		})
+
+		_, err := svc.ReserveTicket(context.Background(), ReserveTicketInput{
+			UserID:        3,
+			EventID:       1,
+			SectionID:     2,
+			Quantity:      2,
+			HoldUntil:     now.Add(5 * time.Minute),
+			PurchaseToken: purchaseToken,
+		})
+		if err != nil {
+			t.Fatalf("reserve ticket 不應失敗: %v", err)
+		}
+		if len(stockStore.reserveCalls) != 1 {
+			t.Fatalf("預期 reserve stock 1 次，實際 %d", len(stockStore.reserveCalls))
+		}
+		if len(stockStore.releaseCalls) != 0 {
+			t.Fatalf("預期不需要 release stock，實際 %d", len(stockStore.releaseCalls))
+		}
+	})
+
+	t.Run("建立 reservation 失敗時應補回 Redis stock", func(t *testing.T) {
+		now := time.Now()
+		purchaseToken := "pt_stock_restore"
+		stockStore := &fakeStockStore{}
+		eventRepo := &fakeEventRepository{
+			event: &domain.Event{
+				ID:          1,
+				Name:        "Jay Concert",
+				Status:      domain.EventStatusOnSale,
+				SaleStartAt: now.Add(-time.Hour),
+				SaleEndAt:   now.Add(time.Hour),
+			},
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:            2,
+				EventID:       1,
+				Name:          "A 區",
+				Price:         1800,
+				TotalQuantity: 10,
+				Status:        domain.SectionStatusActive,
+			},
+		}
+		reservationRepo := &fakeReservationRepository{saveErr: errors.New("save reservation failed")}
+		svc := NewBookingService(eventRepo, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc.StockStore = stockStore
+		svc.SaveQueueStatus(QueueStatusSnapshot{
+			QueueToken:             "qt_stock_restore",
+			QueueSequence:          1,
+			Status:                 QueueStatusReady,
+			EventID:                1,
+			UserID:                 3,
+			QueuePosition:          1,
+			AheadCount:             0,
+			EstimatedWaitSeconds:   0,
+			PurchaseToken:          &purchaseToken,
+			PurchaseTokenExpiresAt: ptrTime(now.Add(5 * time.Minute)),
+			JoinedAt:               now.Add(-time.Minute),
+			ExpiredAt:              now.Add(29 * time.Minute),
+			UpdatedAt:              now,
+		})
+
+		_, err := svc.ReserveTicket(context.Background(), ReserveTicketInput{
+			UserID:        3,
+			EventID:       1,
+			SectionID:     2,
+			Quantity:      2,
+			HoldUntil:     now.Add(5 * time.Minute),
+			PurchaseToken: purchaseToken,
+		})
+		if err == nil {
+			t.Fatal("預期 reservation save 失敗")
+		}
+		if len(stockStore.reserveCalls) != 1 {
+			t.Fatalf("預期 reserve stock 1 次，實際 %d", len(stockStore.reserveCalls))
+		}
+		if len(stockStore.releaseCalls) != 1 {
+			t.Fatalf("預期 release stock 1 次，實際 %d", len(stockStore.releaseCalls))
+		}
+	})
+}
+
+func TestBookingServiceRebuildStock(t *testing.T) {
+	t.Run("應將所有 event section 重建到 stock store", func(t *testing.T) {
+		now := time.Now()
+		stockStore := &fakeStockStore{}
+		svc := NewBookingService(
+			&fakeEventRepository{
+				events: []domain.Event{
+					{
+						ID:          1,
+						Name:        "Jay Concert",
+						Status:      domain.EventStatusOnSale,
+						SaleStartAt: now.Add(-time.Hour),
+						SaleEndAt:   now.Add(time.Hour),
+					},
+				},
+			},
+			&fakeSectionRepository{
+				sections: []domain.Section{
+					{
+						ID:               2,
+						EventID:          1,
+						Name:             "A 區",
+						Price:            1800,
+						TotalQuantity:    100,
+						ReservedQuantity: 10,
+						SoldQuantity:     20,
+						Status:           domain.SectionStatusActive,
+					},
+					{
+						ID:               3,
+						EventID:          1,
+						Name:             "B 區",
+						Price:            1500,
+						TotalQuantity:    80,
+						ReservedQuantity: 5,
+						SoldQuantity:     10,
+						Status:           domain.SectionStatusActive,
+					},
+				},
+			},
+			&fakeReservationRepository{},
+			&fakeOrderRepository{},
+			&fakePaymentRepository{},
+		)
+		svc.StockStore = stockStore
+
+		if err := svc.RebuildStock(context.Background()); err != nil {
+			t.Fatalf("rebuild stock 不應失敗: %v", err)
+		}
+		if len(stockStore.rebuildSections) != 2 {
+			t.Fatalf("預期 rebuild 2 個 section，實際 %d", len(stockStore.rebuildSections))
+		}
+	})
+}
+
 type fakeEventRepository struct {
-	event *domain.Event
+	event  *domain.Event
+	events []domain.Event
 }
 
 func (f *fakeEventRepository) FindByID(ctx context.Context, eventID int64) (*domain.Event, error) {
@@ -801,6 +981,9 @@ func (f *fakeEventRepository) FindByID(ctx context.Context, eventID int64) (*dom
 }
 
 func (f *fakeEventRepository) List(ctx context.Context) ([]domain.Event, error) {
+	if len(f.events) > 0 {
+		return f.events, nil
+	}
 	if f.event == nil {
 		return []domain.Event{}, nil
 	}
@@ -809,7 +992,8 @@ func (f *fakeEventRepository) List(ctx context.Context) ([]domain.Event, error) 
 }
 
 type fakeSectionRepository struct {
-	section *domain.Section
+	section  *domain.Section
+	sections []domain.Section
 }
 
 func (f *fakeSectionRepository) FindByEventAndID(ctx context.Context, eventID, sectionID int64) (*domain.Section, error) {
@@ -821,6 +1005,19 @@ func (f *fakeSectionRepository) FindByEventAndID(ctx context.Context, eventID, s
 }
 
 func (f *fakeSectionRepository) ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error) {
+	if len(f.sections) > 0 {
+		sections := make([]domain.Section, 0)
+		for _, section := range f.sections {
+			if section.EventID != eventID {
+				continue
+			}
+			sections = append(sections, section)
+		}
+		if len(sections) == 0 {
+			return nil, errors.New("section not found")
+		}
+		return sections, nil
+	}
 	if f.section == nil || f.section.EventID != eventID {
 		return nil, errors.New("section not found")
 	}
@@ -836,6 +1033,7 @@ func (f *fakeSectionRepository) Save(ctx context.Context, section *domain.Sectio
 type fakeReservationRepository struct {
 	reservations map[int64]*domain.Reservation
 	nextID       int64
+	saveErr      error
 }
 
 func (f *fakeReservationRepository) FindByID(ctx context.Context, reservationID int64) (*domain.Reservation, error) {
@@ -863,6 +1061,9 @@ func (f *fakeReservationRepository) ListByUserID(ctx context.Context, userID int
 }
 
 func (f *fakeReservationRepository) Save(ctx context.Context, reservation *domain.Reservation) error {
+	if f.saveErr != nil {
+		return f.saveErr
+	}
 	if f.reservations == nil {
 		f.reservations = map[int64]*domain.Reservation{}
 	}
@@ -982,4 +1183,41 @@ func (f *fakePaymentRepository) Save(ctx context.Context, payment *domain.Paymen
 
 func ptrTime(value time.Time) *time.Time {
 	return &value
+}
+
+type fakeStockStore struct {
+	reserveCalls    []stockCall
+	releaseCalls    []stockCall
+	rebuildSections []domain.Section
+	reserveErr      error
+	releaseErr      error
+}
+
+type stockCall struct {
+	eventID   int64
+	sectionID int64
+	quantity  int
+}
+
+func (f *fakeStockStore) Reserve(ctx context.Context, section domain.Section, quantity int) error {
+	f.reserveCalls = append(f.reserveCalls, stockCall{
+		eventID:   section.EventID,
+		sectionID: section.ID,
+		quantity:  quantity,
+	})
+	return f.reserveErr
+}
+
+func (f *fakeStockStore) Release(ctx context.Context, section domain.Section, quantity int) error {
+	f.releaseCalls = append(f.releaseCalls, stockCall{
+		eventID:   section.EventID,
+		sectionID: section.ID,
+		quantity:  quantity,
+	})
+	return f.releaseErr
+}
+
+func (f *fakeStockStore) RebuildAll(ctx context.Context, sections []domain.Section) error {
+	f.rebuildSections = append([]domain.Section(nil), sections...)
+	return nil
 }

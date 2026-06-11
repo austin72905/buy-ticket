@@ -97,6 +97,10 @@ func (app *BuyTicketApp) Initialize() {
 	)
 	bookingService.DB = dbPool
 	bookingService.QueueStore = buildQueueStore(app.Runtime)
+	bookingService.StockStore = buildStockStore(app.Runtime)
+	if err := bookingService.RebuildStock(context.Background()); err != nil {
+		log.Fatalf("rebuild stock failed: %v", err)
+	}
 	registerBackgroundJobs(app.Runtime, bookingService)
 
 	bookingController := controller.NewBookingController(bookingService)
@@ -123,6 +127,16 @@ func buildQueueStore(runtime *infraapp.Runtime) service.QueueStore {
 	}
 
 	return service.NewMemoryQueueStore(releaseLimit)
+}
+
+func buildStockStore(runtime *infraapp.Runtime) service.StockStore {
+	if runtime.Property.Property("redis.addr") == "" {
+		return nil
+	}
+
+	redisComponent := infraredis.Register(runtime, "stock")
+	redisComponent.LoadFromPrefix("redis")
+	return service.NewRedisStockStore(redisComponent.Client())
 }
 
 func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.BookingService) {

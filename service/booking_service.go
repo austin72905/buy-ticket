@@ -38,6 +38,7 @@ type BookingService struct {
 	OrderRepo       repository.OrderRepository
 	PaymentRepo     repository.PaymentRepository
 	QueueStore      QueueStore
+	StockStore      StockStore
 }
 
 type ReserveTicketInput struct {
@@ -158,6 +159,8 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 
 	now := time.Now()
 	var reservation *domain.Reservation
+	var reservedSection *domain.Section
+	stockReserved := false
 
 	queueSnapshot, err := s.QueueStore.ConsumePurchaseToken(ctx, input.PurchaseToken, input.EventID, input.UserID, now)
 	if err != nil {
@@ -179,7 +182,22 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 			return err
 		}
 
+		reservedSection = section
+		if s.StockStore != nil {
+			if err := s.StockStore.Reserve(ctx, *section, input.Quantity); err != nil {
+				if errors.Is(err, ErrInsufficientStock) {
+					return ErrSectionNotReservable
+				}
+				return err
+			}
+			stockReserved = true
+		}
+
 		if !section.Reserve(input.Quantity) {
+			if stockReserved {
+				_ = s.StockStore.Release(ctx, *section, input.Quantity)
+				stockReserved = false
+			}
 			return ErrSectionNotReservable
 		}
 
@@ -204,6 +222,10 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 		return repos.reservation.Save(ctx, reservation)
 	})
 	if err != nil {
+		if stockReserved && reservedSection != nil {
+			_ = reservedSection.Release(input.Quantity)
+			_ = s.StockStore.Release(ctx, *reservedSection, input.Quantity)
+		}
 		_ = s.QueueStore.RestorePurchaseToken(ctx, *queueSnapshot)
 		return nil, err
 	}
@@ -322,6 +344,9 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 
 func (s *BookingService) ExpireOrder(ctx context.Context, input ExpireOrderInput) (*domain.Order, error) {
 	var order *domain.Order
+	var releasedSection *domain.Section
+	var releaseQuantity int
+	stockReleased := false
 
 	err := s.withTx(ctx, func(repos bookingRepos) error {
 		var err error
@@ -352,6 +377,15 @@ func (s *BookingService) ExpireOrder(ctx context.Context, input ExpireOrderInput
 			return ErrReservationCannotClose
 		}
 
+		releasedSection = section
+		releaseQuantity = reservation.Quantity
+		if s.StockStore != nil {
+			if err := s.StockStore.Release(ctx, *section, reservation.Quantity); err != nil {
+				return err
+			}
+			stockReleased = true
+		}
+
 		section.UpdatedAt = input.ExpiredAt
 		if err := repos.section.Save(ctx, section); err != nil {
 			return err
@@ -364,6 +398,10 @@ func (s *BookingService) ExpireOrder(ctx context.Context, input ExpireOrderInput
 		return repos.order.Save(ctx, order)
 	})
 	if err != nil {
+		if stockReleased && releasedSection != nil {
+			_ = releasedSection.Reserve(releaseQuantity)
+			_ = s.StockStore.Reserve(ctx, *releasedSection, releaseQuantity)
+		}
 		return nil, err
 	}
 
@@ -399,6 +437,9 @@ func (s *BookingService) SweepExpiredOrders(ctx context.Context, input SweepExpi
 
 func (s *BookingService) ExpireReservation(ctx context.Context, input ExpireReservationInput) (*domain.Reservation, error) {
 	var reservation *domain.Reservation
+	var releasedSection *domain.Section
+	var releaseQuantity int
+	stockReleased := false
 
 	err := s.withTx(ctx, func(repos bookingRepos) error {
 		var err error
@@ -420,6 +461,15 @@ func (s *BookingService) ExpireReservation(ctx context.Context, input ExpireRese
 			return ErrReservationCannotClose
 		}
 
+		releasedSection = section
+		releaseQuantity = reservation.Quantity
+		if s.StockStore != nil {
+			if err := s.StockStore.Release(ctx, *section, reservation.Quantity); err != nil {
+				return err
+			}
+			stockReleased = true
+		}
+
 		section.UpdatedAt = input.ExpiredAt
 		if err := repos.section.Save(ctx, section); err != nil {
 			return err
@@ -428,6 +478,10 @@ func (s *BookingService) ExpireReservation(ctx context.Context, input ExpireRese
 		return repos.reservation.Save(ctx, reservation)
 	})
 	if err != nil {
+		if stockReleased && releasedSection != nil {
+			_ = releasedSection.Reserve(releaseQuantity)
+			_ = s.StockStore.Reserve(ctx, *releasedSection, releaseQuantity)
+		}
 		return nil, err
 	}
 
@@ -436,6 +490,9 @@ func (s *BookingService) ExpireReservation(ctx context.Context, input ExpireRese
 
 func (s *BookingService) CancelReservation(ctx context.Context, input CancelReservationInput) (*domain.Reservation, error) {
 	var reservation *domain.Reservation
+	var releasedSection *domain.Section
+	var releaseQuantity int
+	stockReleased := false
 
 	err := s.withTx(ctx, func(repos bookingRepos) error {
 		var err error
@@ -457,6 +514,15 @@ func (s *BookingService) CancelReservation(ctx context.Context, input CancelRese
 			return ErrReservationCannotClose
 		}
 
+		releasedSection = section
+		releaseQuantity = reservation.Quantity
+		if s.StockStore != nil {
+			if err := s.StockStore.Release(ctx, *section, reservation.Quantity); err != nil {
+				return err
+			}
+			stockReleased = true
+		}
+
 		section.UpdatedAt = input.CancelledAt
 		if err := repos.section.Save(ctx, section); err != nil {
 			return err
@@ -465,6 +531,10 @@ func (s *BookingService) CancelReservation(ctx context.Context, input CancelRese
 		return repos.reservation.Save(ctx, reservation)
 	})
 	if err != nil {
+		if stockReleased && releasedSection != nil {
+			_ = releasedSection.Reserve(releaseQuantity)
+			_ = s.StockStore.Reserve(ctx, *releasedSection, releaseQuantity)
+		}
 		return nil, err
 	}
 
