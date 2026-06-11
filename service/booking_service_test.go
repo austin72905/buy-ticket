@@ -788,6 +788,42 @@ func TestMemoryQueueStorePromoteReady(t *testing.T) {
 	})
 }
 
+func TestMemoryQueueStoreCleanupExpiredPurchaseTokens(t *testing.T) {
+	t.Run("應清掉過期 purchase token 並將 queue 狀態改成 expired", func(t *testing.T) {
+		now := time.Now()
+		store := NewMemoryQueueStore(1)
+		snapshot, err := store.Join(context.Background(), JoinQueueInput{
+			EventID: 1,
+			UserID:  1,
+		}, now)
+		if err != nil {
+			t.Fatalf("join queue 不應失敗: %v", err)
+		}
+		if snapshot.PurchaseToken == nil {
+			t.Fatal("預期第一位直接取得 purchase token")
+		}
+
+		cleaned, err := store.CleanupExpiredPurchaseTokens(context.Background(), now.Add(6*time.Minute))
+		if err != nil {
+			t.Fatalf("cleanup 不應失敗: %v", err)
+		}
+		if cleaned != 1 {
+			t.Fatalf("預期清掉 1 筆，實際 %d", cleaned)
+		}
+
+		status, err := store.Get(context.Background(), snapshot.QueueToken, now.Add(6*time.Minute))
+		if err != nil {
+			t.Fatalf("get queue status 不應失敗: %v", err)
+		}
+		if status.Status != QueueStatusExpired {
+			t.Fatalf("預期 status=expired(3)，實際 %d", status.Status)
+		}
+		if status.PurchaseToken != nil {
+			t.Fatal("預期 purchase token 已被清掉")
+		}
+	})
+}
+
 func TestBookingServiceReserveTicketWithStockStore(t *testing.T) {
 	t.Run("建立 reservation 時應先保留 Redis stock", func(t *testing.T) {
 		now := time.Now()

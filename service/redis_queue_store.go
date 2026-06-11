@@ -198,6 +198,29 @@ func (s *RedisQueueStore) PromoteReady(ctx context.Context, now time.Time) error
 	return nil
 }
 
+func (s *RedisQueueStore) CleanupExpiredPurchaseTokens(ctx context.Context, now time.Time) (int, error) {
+	eventIDs, err := s.client.SMembers(ctx, redisActiveEventsKey()).Result()
+	if err != nil {
+		return 0, err
+	}
+
+	cleaned := 0
+	for _, eventIDValue := range eventIDs {
+		eventID, parseErr := strconv.ParseInt(eventIDValue, 10, 64)
+		if parseErr != nil {
+			continue
+		}
+
+		count, cleanupErr := s.cleanupExpiredPurchaseTokensByEvent(ctx, eventID, now)
+		if cleanupErr != nil {
+			return cleaned, cleanupErr
+		}
+		cleaned += count
+	}
+
+	return cleaned, nil
+}
+
 func (s *RedisQueueStore) promoteReady(ctx context.Context, eventID int64, now time.Time) error {
 	readyCount, err := s.readyCount(ctx, eventID, now)
 	if err != nil {
@@ -239,6 +262,48 @@ func (s *RedisQueueStore) promoteReady(ctx context.Context, eventID int64, now t
 	}
 
 	return nil
+}
+
+func (s *RedisQueueStore) cleanupExpiredPurchaseTokensByEvent(ctx context.Context, eventID int64, now time.Time) (int, error) {
+	tokens, err := s.client.ZRange(ctx, redisEventQueueKey(eventID), 0, -1).Result()
+	if err != nil || len(tokens) == 0 {
+		return 0, err
+	}
+
+	cleaned := 0
+	for _, token := range tokens {
+		snapshot, loadErr := s.loadSnapshot(ctx, token)
+		if loadErr != nil {
+			continue
+		}
+		if snapshot.Status != QueueStatusReady || snapshot.PurchaseToken == nil || snapshot.PurchaseTokenExpiresAt == nil {
+			continue
+		}
+		if snapshot.PurchaseTokenExpiresAt.After(now) {
+			continue
+		}
+
+		if err := s.client.Del(ctx, redisPurchaseTokenKey(*snapshot.PurchaseToken)).Err(); err != nil {
+			return cleaned, err
+		}
+		if err := s.client.Del(ctx, redisUserEventKey(queueUserEventKey(snapshot.EventID, snapshot.UserID))).Err(); err != nil {
+			return cleaned, err
+		}
+		if err := s.client.ZRem(ctx, redisEventQueueKey(snapshot.EventID), snapshot.QueueToken).Err(); err != nil {
+			return cleaned, err
+		}
+
+		snapshot.Status = QueueStatusExpired
+		snapshot.PurchaseToken = nil
+		snapshot.PurchaseTokenExpiresAt = nil
+		snapshot.UpdatedAt = now
+		if err := s.saveSnapshot(ctx, *snapshot); err != nil {
+			return cleaned, err
+		}
+		cleaned++
+	}
+
+	return cleaned, nil
 }
 
 func (s *RedisQueueStore) loadSnapshot(ctx context.Context, queueToken string) (*QueueStatusSnapshot, error) {

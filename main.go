@@ -169,6 +169,20 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	if err != nil {
 		log.Fatalf("register order expire scheduler failed: %v", err)
 	}
+
+	_, err = scheduler.AddFuncJobWithName("*/1 * * * * *", "purchase-token-cleanup", func(ctx context.Context) {
+		count, err := bookingService.CleanupExpiredPurchaseTokens(ctx, time.Now())
+		if err != nil {
+			log.Printf("purchase token cleanup failed: %v", err)
+			return
+		}
+		if count > 0 {
+			log.Printf("purchase token cleanup expired %d tokens", count)
+		}
+	})
+	if err != nil {
+		log.Fatalf("register purchase token cleanup failed: %v", err)
+	}
 }
 
 func queueReleaseLimit(runtime *infraapp.Runtime) int {
