@@ -26,6 +26,7 @@ type SectionRepository interface {
 
 type ReservationRepository interface {
 	FindByID(ctx context.Context, reservationID int64) (*domain.Reservation, error)
+	FindActiveByUserAndEvent(ctx context.Context, userID, eventID int64, now time.Time) (*domain.Reservation, error)
 	ListByUserID(ctx context.Context, userID int64) ([]domain.Reservation, error)
 	Save(ctx context.Context, reservation *domain.Reservation) error
 }

@@ -300,6 +300,10 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
       setError('createOrder', 'Reservation is required.')
       return
     }
+    if (!purchaseToken.value) {
+      setError('createOrder', 'Purchase token is required.')
+      return
+    }
 
     const expiresAt = new Date(Date.now() + input.holdMinutes * 60 * 1000).toISOString()
 
@@ -308,6 +312,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
         reservation_id: reservation.value!.id,
         order_no: input.orderNo,
         expires_at: expiresAt,
+        purchase_token: purchaseToken.value,
       }),
     )
   }
@@ -324,7 +329,6 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
         cancelled_at: new Date().toISOString(),
       }),
     )
-    resetQueueFlow()
     order.value = null
     payment.value = null
   }

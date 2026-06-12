@@ -13,21 +13,22 @@ import (
 )
 
 var (
-	ErrEventNotOnSale         = errors.New("event is not on sale")
-	ErrSectionNotReservable   = errors.New("section cannot reserve requested quantity")
-	ErrReservationNotActive   = errors.New("reservation is not active")
-	ErrReservationAlreadyUsed = errors.New("reservation already confirmed or closed")
-	ErrReservationCannotClose = errors.New("reservation cannot be expired or cancelled")
-	ErrOrderCannotBePaid      = errors.New("order cannot be paid")
-	ErrOrderCannotExpire      = errors.New("order cannot be expired")
-	ErrPaymentAmountMismatch  = errors.New("payment amount mismatch")
-	ErrQueueTokenNotFound     = errors.New("queue token not found")
-	ErrUserAlreadyJoinedQueue = errors.New("user already joined queue")
-	ErrPurchaseTokenRequired  = errors.New("purchase token is required")
-	ErrPurchaseTokenNotFound  = errors.New("purchase token not found")
-	ErrPurchaseTokenExpired   = errors.New("purchase token expired")
-	ErrPurchaseTokenUsed      = errors.New("purchase token already used")
-	ErrPurchaseTokenMismatch  = errors.New("purchase token does not match user or event")
+	ErrEventNotOnSale          = errors.New("event is not on sale")
+	ErrSectionNotReservable    = errors.New("section cannot reserve requested quantity")
+	ErrReservationNotActive    = errors.New("reservation is not active")
+	ErrActiveReservationExists = errors.New("active reservation already exists")
+	ErrReservationAlreadyUsed  = errors.New("reservation already confirmed or closed")
+	ErrReservationCannotClose  = errors.New("reservation cannot be expired or cancelled")
+	ErrOrderCannotBePaid       = errors.New("order cannot be paid")
+	ErrOrderCannotExpire       = errors.New("order cannot be expired")
+	ErrPaymentAmountMismatch   = errors.New("payment amount mismatch")
+	ErrQueueTokenNotFound      = errors.New("queue token not found")
+	ErrUserAlreadyJoinedQueue  = errors.New("user already joined queue")
+	ErrPurchaseTokenRequired   = errors.New("purchase token is required")
+	ErrPurchaseTokenNotFound   = errors.New("purchase token not found")
+	ErrPurchaseTokenExpired    = errors.New("purchase token expired")
+	ErrPurchaseTokenUsed       = errors.New("purchase token already used")
+	ErrPurchaseTokenMismatch   = errors.New("purchase token does not match user or event")
 )
 
 type BookingService struct {
@@ -55,6 +56,7 @@ type CreateOrderInput struct {
 	ReservationID int64
 	OrderNo       string
 	ExpiresAt     time.Time
+	PurchaseToken string
 }
 
 type PayOrderInput struct {
@@ -163,12 +165,11 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 	var reservedSection *domain.Section
 	stockReserved := false
 
-	queueSnapshot, err := s.QueueStore.ConsumePurchaseToken(ctx, input.PurchaseToken, input.EventID, input.UserID, now)
-	if err != nil {
+	if _, err := s.QueueStore.ValidatePurchaseToken(ctx, input.PurchaseToken, input.EventID, input.UserID, now); err != nil {
 		return nil, err
 	}
 
-	err = s.withTx(ctx, func(repos bookingRepos) error {
+	err := s.withTx(ctx, func(repos bookingRepos) error {
 		event, err := repos.event.FindByID(ctx, input.EventID)
 		if err != nil {
 			return err
@@ -176,6 +177,14 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 
 		if !event.IsOnSale(now) {
 			return ErrEventNotOnSale
+		}
+
+		activeReservation, err := repos.reservation.FindActiveByUserAndEvent(ctx, input.UserID, input.EventID, now)
+		if err != nil && !errors.Is(err, repository.ErrReservationNotFound) {
+			return err
+		}
+		if activeReservation != nil {
+			return ErrActiveReservationExists
 		}
 
 		section, err := repos.section.FindByEventAndID(ctx, input.EventID, input.SectionID)
@@ -227,7 +236,6 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 			_ = reservedSection.Release(input.Quantity)
 			_ = s.StockStore.Release(ctx, *reservedSection, input.Quantity)
 		}
-		_ = s.QueueStore.RestorePurchaseToken(ctx, *queueSnapshot)
 		return nil, err
 	}
 
@@ -237,6 +245,10 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 func (s *BookingService) CreateOrder(ctx context.Context, input CreateOrderInput) (*domain.Order, error) {
 	now := time.Now()
 
+	if input.PurchaseToken == "" {
+		return nil, ErrPurchaseTokenRequired
+	}
+
 	reservation, err := s.ReservationRepo.FindByID(ctx, input.ReservationID)
 	if err != nil {
 		return nil, err
@@ -244,6 +256,11 @@ func (s *BookingService) CreateOrder(ctx context.Context, input CreateOrderInput
 
 	if !reservation.IsActive(now) {
 		return nil, ErrReservationNotActive
+	}
+
+	queueSnapshot, err := s.QueueStore.ConsumePurchaseToken(ctx, input.PurchaseToken, reservation.EventID, reservation.UserID, now)
+	if err != nil {
+		return nil, err
 	}
 
 	order := &domain.Order{
@@ -262,6 +279,7 @@ func (s *BookingService) CreateOrder(ctx context.Context, input CreateOrderInput
 	}
 
 	if err := s.OrderRepo.Save(ctx, order); err != nil {
+		_ = s.QueueStore.RestorePurchaseToken(ctx, *queueSnapshot)
 		return nil, err
 	}
 

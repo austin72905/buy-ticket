@@ -113,26 +113,9 @@ func (s *RedisQueueStore) Get(ctx context.Context, queueToken string, now time.T
 }
 
 func (s *RedisQueueStore) ConsumePurchaseToken(ctx context.Context, purchaseToken string, eventID, userID int64, now time.Time) (*QueueStatusSnapshot, error) {
-	queueToken, err := s.client.Get(ctx, redisPurchaseTokenKey(purchaseToken)).Result()
-	if err == goredis.Nil {
-		return nil, ErrPurchaseTokenNotFound
-	}
+	snapshot, err := s.validatePurchaseToken(ctx, purchaseToken, eventID, userID, now)
 	if err != nil {
 		return nil, err
-	}
-
-	snapshot, err := s.loadSnapshot(ctx, queueToken)
-	if err != nil {
-		return nil, err
-	}
-	if snapshot.PurchaseToken == nil {
-		return nil, ErrPurchaseTokenUsed
-	}
-	if snapshot.EventID != eventID || snapshot.UserID != userID {
-		return nil, ErrPurchaseTokenMismatch
-	}
-	if snapshot.PurchaseTokenExpiresAt == nil || snapshot.PurchaseTokenExpiresAt.Before(now) {
-		return nil, ErrPurchaseTokenExpired
 	}
 
 	original := *snapshot
@@ -155,6 +138,42 @@ func (s *RedisQueueStore) ConsumePurchaseToken(ctx context.Context, purchaseToke
 	}
 
 	return &original, nil
+}
+
+func (s *RedisQueueStore) ValidatePurchaseToken(ctx context.Context, purchaseToken string, eventID, userID int64, now time.Time) (*QueueStatusSnapshot, error) {
+	snapshot, err := s.validatePurchaseToken(ctx, purchaseToken, eventID, userID, now)
+	if err != nil {
+		return nil, err
+	}
+
+	cloned := *snapshot
+	return &cloned, nil
+}
+
+func (s *RedisQueueStore) validatePurchaseToken(ctx context.Context, purchaseToken string, eventID, userID int64, now time.Time) (*QueueStatusSnapshot, error) {
+	queueToken, err := s.client.Get(ctx, redisPurchaseTokenKey(purchaseToken)).Result()
+	if err == goredis.Nil {
+		return nil, ErrPurchaseTokenNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot, err := s.loadSnapshot(ctx, queueToken)
+	if err != nil {
+		return nil, err
+	}
+	if snapshot.PurchaseToken == nil {
+		return nil, ErrPurchaseTokenUsed
+	}
+	if snapshot.EventID != eventID || snapshot.UserID != userID {
+		return nil, ErrPurchaseTokenMismatch
+	}
+	if snapshot.PurchaseTokenExpiresAt == nil || snapshot.PurchaseTokenExpiresAt.Before(now) {
+		return nil, ErrPurchaseTokenExpired
+	}
+
+	return snapshot, nil
 }
 
 func (s *RedisQueueStore) RestorePurchaseToken(ctx context.Context, snapshot QueueStatusSnapshot) error {

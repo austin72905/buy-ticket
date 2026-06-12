@@ -15,6 +15,7 @@ type Querier interface {
 	CreateReservation(ctx context.Context, arg CreateReservationParams) (Reservation, error)
 	CreateSection(ctx context.Context, arg CreateSectionParams) (EventSection, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	GetActiveReservationByUserAndEvent(ctx context.Context, arg GetActiveReservationByUserAndEventParams) (Reservation, error)
 	GetEventByID(ctx context.Context, id int64) (Event, error)
 	GetOrderByID(ctx context.Context, id int64) (Order, error)
 	GetOrderByOrderNo(ctx context.Context, orderNo string) (Order, error)

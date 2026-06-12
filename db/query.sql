@@ -303,6 +303,31 @@ FROM reservations
 WHERE user_id = $1
 ORDER BY created_at DESC, id DESC;
 
+-- name: GetActiveReservationByUserAndEvent :one
+SELECT
+    id,
+    reservation_no,
+    event_id,
+    event_name,
+    section_id,
+    section_name,
+    user_id,
+    user_name,
+    quantity,
+    unit_price,
+    total_amount,
+    status,
+    expires_at,
+    created_at,
+    updated_at
+FROM reservations
+WHERE user_id = $1
+  AND event_id = $2
+  AND status = 1
+  AND expires_at > $3
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
 -- name: GetOrderByID :one
 SELECT
     id,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"buy-ticket/domain"
+	"buy-ticket/repository"
 )
 
 func TestBookingServiceReserveTicket(t *testing.T) {
@@ -183,8 +184,8 @@ func TestBookingServiceReserveTicket(t *testing.T) {
 			HoldUntil:     now.Add(5 * time.Minute),
 			PurchaseToken: purchaseToken,
 		})
-		if !errors.Is(err, ErrPurchaseTokenNotFound) {
-			t.Fatalf("預期錯誤為 ErrPurchaseTokenNotFound，實際為 %v", err)
+		if !errors.Is(err, ErrActiveReservationExists) {
+			t.Fatalf("預期錯誤為 ErrActiveReservationExists，實際為 %v", err)
 		}
 	})
 }
@@ -210,11 +211,26 @@ func TestBookingServiceCreateOrder(t *testing.T) {
 		}
 		orderRepo := &fakeOrderRepository{}
 		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, reservationRepo, orderRepo, &fakePaymentRepository{})
+		queueStatus, err := svc.QueueStore.Join(context.Background(), JoinQueueInput{
+			EventID:   1,
+			UserID:    3,
+			ClientID:  "test-client",
+			RequestID: "test-request",
+			Channel:   "test",
+		}, now)
+		if err != nil {
+			t.Fatalf("建立 queue token 失敗: %v", err)
+		}
+		if queueStatus.PurchaseToken == nil {
+			t.Fatal("預期 queue 直接取得 purchase token")
+		}
+		purchaseToken := *queueStatus.PurchaseToken
 
 		order, err := svc.CreateOrder(context.Background(), CreateOrderInput{
 			ReservationID: 10,
 			OrderNo:       "ORD-001",
 			ExpiresAt:     now.Add(10 * time.Minute),
+			PurchaseToken: purchaseToken,
 		})
 
 		if err != nil {
@@ -1339,6 +1355,16 @@ func (f *fakeReservationRepository) ListByUserID(ctx context.Context, userID int
 		reservations = append(reservations, *reservation)
 	}
 	return reservations, nil
+}
+
+func (f *fakeReservationRepository) FindActiveByUserAndEvent(ctx context.Context, userID, eventID int64, now time.Time) (*domain.Reservation, error) {
+	for _, reservation := range f.reservations {
+		if reservation.UserID != userID || reservation.EventID != eventID || !reservation.IsActive(now) {
+			continue
+		}
+		return reservation, nil
+	}
+	return nil, repository.ErrReservationNotFound
 }
 
 func (f *fakeReservationRepository) Save(ctx context.Context, reservation *domain.Reservation) error {

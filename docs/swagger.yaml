@@ -13,6 +13,8 @@ definitions:
         type: string
       order_no:
         type: string
+      purchase_token:
+        type: string
       reservation_id:
         type: integer
     type: object
@@ -295,7 +297,7 @@ info:
 paths:
   /events:
     get:
-      description: List all available events.
+      description: 取得目前系統中的活動列表
       produces:
       - application/json
       responses:
@@ -309,14 +311,14 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: List events
+      summary: 查詢活動列表
       tags:
       - events
   /events/{eventId}:
     get:
-      description: Get event detail by event ID.
+      description: 依活動 ID 取得活動基本資訊
       parameters:
-      - description: Event ID
+      - description: 活動 ID
         in: path
         name: eventId
         required: true
@@ -336,14 +338,14 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Get event
+      summary: 取得活動資訊
       tags:
       - events
   /events/{eventId}/availability:
     get:
-      description: Get section availability for an event.
+      description: 依活動 ID 取得各票區剩餘可售量
       parameters:
-      - description: Event ID
+      - description: 活動 ID
         in: path
         name: eventId
         required: true
@@ -365,14 +367,14 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Get section availability
+      summary: 取得票區可售量
       tags:
       - events
   /events/{eventId}/sections:
     get:
-      description: Get all sections for an event.
+      description: 依活動 ID 取得票區列表
       parameters:
-      - description: Event ID
+      - description: 活動 ID
         in: path
         name: eventId
         required: true
@@ -394,7 +396,7 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Get event sections
+      summary: 取得活動票區
       tags:
       - events
   /me/orders:
@@ -458,9 +460,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Create an order from an existing reservation.
+      description: 由 reservation 建立待付款訂單
       parameters:
-      - description: Create order request
+      - description: 建立訂單請求
         in: body
         name: request
         required: true
@@ -477,14 +479,14 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Create order
+      summary: 建立訂單
       tags:
       - orders
   /orders/{orderId}:
     get:
-      description: Get order detail by order ID.
+      description: 依訂單 ID 取得訂單內容
       parameters:
-      - description: Order ID
+      - description: 訂單 ID
         in: path
         name: orderId
         required: true
@@ -504,14 +506,14 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Get order
+      summary: 取得訂單資訊
       tags:
       - orders
   /orders/order-no/{orderNo}:
     get:
-      description: Get order detail by order number.
+      description: 依照 order_no 取得訂單資料
       parameters:
-      - description: Order Number
+      - description: 訂單編號
         in: path
         name: orderNo
         required: true
@@ -527,16 +529,16 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Get order by order number
+      summary: 依訂單編號查詢訂單
       tags:
       - orders
   /payments:
     post:
       consumes:
       - application/json
-      description: Submit payment for an order.
+      description: 付款成功後確認 reservation 並轉成售出
       parameters:
-      - description: Pay order request
+      - description: 付款請求
         in: body
         name: request
         required: true
@@ -553,14 +555,14 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Pay order
+      summary: 訂單付款
       tags:
       - payments
   /payments/{paymentNo}:
     get:
-      description: Get payment detail by payment number.
+      description: 依照 payment_no 取得付款資料
       parameters:
-      - description: Payment Number
+      - description: 付款編號
         in: path
         name: paymentNo
         required: true
@@ -576,7 +578,7 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Get payment by payment number
+      summary: 依付款編號查詢付款
       tags:
       - payments
   /payments/provider/ecpay/callback:
@@ -662,7 +664,7 @@ paths:
       - queue
   /queue/status/{queueToken}:
     get:
-      description: Get queue status by queue token, including purchase token if granted.
+      description: 依 queue token 查詢目前排隊進度與是否已取得 purchase token
       parameters:
       - description: Queue Token
         in: path
@@ -684,16 +686,16 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Get queue status
+      summary: 查詢排隊狀態
       tags:
       - queue
   /reservations:
     post:
       consumes:
       - application/json
-      description: Create a reservation for selected section and quantity.
+      description: 建立 reservation 並保留票區數量
       parameters:
-      - description: Reserve ticket request
+      - description: 保留票券請求
         in: body
         name: request
         required: true
@@ -710,14 +712,14 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Reserve ticket
+      summary: 保留票券
       tags:
       - reservations
   /reservations/{reservationId}:
     get:
-      description: Get reservation detail by reservation ID.
+      description: 依照 reservation ID 取得鎖票資料
       parameters:
-      - description: Reservation ID
+      - description: reservation ID
         in: path
         name: reservationId
         required: true
@@ -737,16 +739,16 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Get reservation
+      summary: 查詢 reservation
       tags:
       - reservations
   /reservations/cancel:
     post:
       consumes:
       - application/json
-      description: Cancel a reservation.
+      description: 主動取消 reservation 並釋放保留量
       parameters:
-      - description: Cancel reservation request
+      - description: 取消請求
         in: body
         name: request
         required: true
@@ -763,16 +765,16 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Cancel reservation
+      summary: 取消 reservation
       tags:
       - reservations
   /reservations/expire:
     post:
       consumes:
       - application/json
-      description: Mark a reservation as expired.
+      description: 將 reservation 標記為 expired 並釋放保留量
       parameters:
-      - description: Expire reservation request
+      - description: 過期請求
         in: body
         name: request
         required: true
@@ -789,14 +791,14 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Expire reservation
+      summary: 過期 reservation
       tags:
       - reservations
   /sale/status:
     get:
-      description: Get sale status for an event by event_id.
+      description: 依照 event_id 查詢活動是否開賣，以及是否可進入後續購票流程
       parameters:
-      - description: Event ID
+      - description: 活動 ID
         in: query
         name: event_id
         required: true
@@ -816,7 +818,7 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: Get sale status
+      summary: 查詢售票狀態
       tags:
       - sale
 swagger: "2.0"

@@ -268,6 +268,10 @@ func (f *fakeReservationRepositoryForController) ListByUserID(ctx context.Contex
 	return []domain.Reservation{}, nil
 }
 
+func (f *fakeReservationRepositoryForController) FindActiveByUserAndEvent(ctx context.Context, userID, eventID int64, now time.Time) (*domain.Reservation, error) {
+	return nil, repository.ErrReservationNotFound
+}
+
 func (f *fakeReservationRepositoryForController) Save(ctx context.Context, reservation *domain.Reservation) error {
 	f.reservations[reservation.ID] = reservation
 	return nil

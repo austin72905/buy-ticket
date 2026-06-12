@@ -497,6 +497,7 @@ func (c *BookingController) CreateOrder(ctx *gin.Context) {
 		ReservationID: request.ReservationID,
 		OrderNo:       request.OrderNo,
 		ExpiresAt:     request.ExpiresAt,
+		PurchaseToken: request.PurchaseToken,
 	})
 	if err != nil {
 		writeError(ctx, http.StatusBadRequest, err)

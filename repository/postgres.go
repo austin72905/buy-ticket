@@ -214,6 +214,22 @@ func (r *PostgresReservationRepository) ListByUserID(ctx context.Context, userID
 	return reservations, nil
 }
 
+func (r *PostgresReservationRepository) FindActiveByUserAndEvent(ctx context.Context, userID, eventID int64, now time.Time) (*domain.Reservation, error) {
+	record, err := r.queries.GetActiveReservationByUserAndEvent(ctx, db.GetActiveReservationByUserAndEventParams{
+		UserID:    userID,
+		EventID:   eventID,
+		ExpiresAt: toPgTimestamp(now),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrReservationNotFound
+		}
+		return nil, err
+	}
+
+	return toDomainReservation(record), nil
+}
+
 func (r *PostgresReservationRepository) Save(ctx context.Context, reservation *domain.Reservation) error {
 	if reservation.ID == 0 {
 		event, err := r.queries.GetEventByID(ctx, reservation.EventID)

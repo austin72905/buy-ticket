@@ -241,6 +241,22 @@ func (r *MemoryReservationRepository) ListByUserID(ctx context.Context, userID i
 	return reservations, nil
 }
 
+func (r *MemoryReservationRepository) FindActiveByUserAndEvent(ctx context.Context, userID, eventID int64, now time.Time) (*domain.Reservation, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, reservation := range r.reservations {
+		if reservation.UserID != userID || reservation.EventID != eventID || !reservation.IsActive(now) {
+			continue
+		}
+
+		cloned := *reservation
+		return &cloned, nil
+	}
+
+	return nil, ErrReservationNotFound
+}
+
 func (r *MemoryReservationRepository) Save(ctx context.Context, reservation *domain.Reservation) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

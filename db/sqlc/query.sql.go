@@ -485,6 +485,61 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
+const getActiveReservationByUserAndEvent = `-- name: GetActiveReservationByUserAndEvent :one
+SELECT
+    id,
+    reservation_no,
+    event_id,
+    event_name,
+    section_id,
+    section_name,
+    user_id,
+    user_name,
+    quantity,
+    unit_price,
+    total_amount,
+    status,
+    expires_at,
+    created_at,
+    updated_at
+FROM reservations
+WHERE user_id = $1
+  AND event_id = $2
+  AND status = 1
+  AND expires_at > $3
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetActiveReservationByUserAndEventParams struct {
+	UserID    int64              `json:"user_id"`
+	EventID   int64              `json:"event_id"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) GetActiveReservationByUserAndEvent(ctx context.Context, arg GetActiveReservationByUserAndEventParams) (Reservation, error) {
+	row := q.db.QueryRow(ctx, getActiveReservationByUserAndEvent, arg.UserID, arg.EventID, arg.ExpiresAt)
+	var i Reservation
+	err := row.Scan(
+		&i.ID,
+		&i.ReservationNo,
+		&i.EventID,
+		&i.EventName,
+		&i.SectionID,
+		&i.SectionName,
+		&i.UserID,
+		&i.UserName,
+		&i.Quantity,
+		&i.UnitPrice,
+		&i.TotalAmount,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getEventByID = `-- name: GetEventByID :one
 SELECT
     id,

@@ -105,26 +105,13 @@ func (s *MemoryQueueStore) ConsumePurchaseToken(ctx context.Context, purchaseTok
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	queueToken, ok := s.purchaseTokens[purchaseToken]
-	if !ok {
-		return nil, ErrPurchaseTokenNotFound
-	}
-
-	snapshot, ok := s.queueStatuses[queueToken]
-	if !ok {
-		return nil, ErrPurchaseTokenNotFound
-	}
-	if snapshot.PurchaseToken == nil {
-		return nil, ErrPurchaseTokenUsed
-	}
-	if snapshot.EventID != eventID || snapshot.UserID != userID {
-		return nil, ErrPurchaseTokenMismatch
-	}
-	if snapshot.PurchaseTokenExpiresAt == nil || snapshot.PurchaseTokenExpiresAt.Before(now) {
-		return nil, ErrPurchaseTokenExpired
+	snapshot, err := s.validatePurchaseTokenLocked(purchaseToken, eventID, userID, now)
+	if err != nil {
+		return nil, err
 	}
 
 	original := snapshot
+	queueToken := snapshot.QueueToken
 	snapshot.PurchaseToken = nil
 	snapshot.PurchaseTokenExpiresAt = nil
 	snapshot.UpdatedAt = now
@@ -135,6 +122,42 @@ func (s *MemoryQueueStore) ConsumePurchaseToken(ctx context.Context, purchaseTok
 	s.eventQueues[snapshot.EventID] = removeToken(s.eventQueues[snapshot.EventID], queueToken)
 
 	return &original, nil
+}
+
+func (s *MemoryQueueStore) ValidatePurchaseToken(ctx context.Context, purchaseToken string, eventID, userID int64, now time.Time) (*QueueStatusSnapshot, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	snapshot, err := s.validatePurchaseTokenLocked(purchaseToken, eventID, userID, now)
+	if err != nil {
+		return nil, err
+	}
+
+	cloned := snapshot
+	return &cloned, nil
+}
+
+func (s *MemoryQueueStore) validatePurchaseTokenLocked(purchaseToken string, eventID, userID int64, now time.Time) (QueueStatusSnapshot, error) {
+	queueToken, ok := s.purchaseTokens[purchaseToken]
+	if !ok {
+		return QueueStatusSnapshot{}, ErrPurchaseTokenNotFound
+	}
+
+	snapshot, ok := s.queueStatuses[queueToken]
+	if !ok {
+		return QueueStatusSnapshot{}, ErrPurchaseTokenNotFound
+	}
+	if snapshot.PurchaseToken == nil {
+		return QueueStatusSnapshot{}, ErrPurchaseTokenUsed
+	}
+	if snapshot.EventID != eventID || snapshot.UserID != userID {
+		return QueueStatusSnapshot{}, ErrPurchaseTokenMismatch
+	}
+	if snapshot.PurchaseTokenExpiresAt == nil || snapshot.PurchaseTokenExpiresAt.Before(now) {
+		return QueueStatusSnapshot{}, ErrPurchaseTokenExpired
+	}
+
+	return snapshot, nil
 }
 
 func (s *MemoryQueueStore) RestorePurchaseToken(ctx context.Context, snapshot QueueStatusSnapshot) error {
