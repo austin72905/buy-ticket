@@ -2,12 +2,14 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"buy-ticket/db/sqlc"
 	"buy-ticket/domain"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -85,6 +87,9 @@ func (r *PostgresEventRepository) List(ctx context.Context) ([]domain.Event, err
 func (r *PostgresUserRepository) FindByID(ctx context.Context, userID int64) (*domain.User, error) {
 	record, err := r.queries.GetUserByID(ctx, userID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
 		return nil, err
 	}
 
@@ -94,6 +99,9 @@ func (r *PostgresUserRepository) FindByID(ctx context.Context, userID int64) (*d
 func (r *PostgresUserRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
 	record, err := r.queries.GetUserByEmail(ctx, email)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
 		return nil, err
 	}
 
