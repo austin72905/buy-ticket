@@ -5,7 +5,9 @@ import (
 	"embed"
 	"log"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"buy-ticket/controller"
@@ -42,6 +44,20 @@ var prodConfigFiles embed.FS
 // @BasePath /
 func main() {
 	infraapp.Start(&BuyTicketApp{})
+}
+
+func (app *BuyTicketApp) Start() {
+	ctx := context.Background()
+	if err := app.Runtime.Probe.Check(ctx); err != nil {
+		panic(err)
+	}
+	app.Runtime.Lifecycle.Startup.RunAll(ctx)
+	app.Runtime.Lifecycle.Started = true
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(stop)
+	<-stop
+	app.Runtime.Lifecycle.Shutdown.RunAll(ctx)
 }
 
 type BuyTicketApp struct {
