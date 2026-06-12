@@ -130,6 +130,7 @@ func (app *BuyTicketApp) Initialize() {
 	bookingController := controller.NewBookingController(bookingService)
 
 	router := app.Runtime.Web.Router()
+	router.Use(controller.AttachCurrentUser(authService))
 	docs.SwaggerInfo.BasePath = "/"
 	router.GET("/healthz", func(ctx *gin.Context) {
 		ctx.JSON(200, gin.H{"status": "ok"})

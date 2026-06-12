@@ -28,29 +28,32 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 	router.GET("/events/:eventId", c.GetEvent)
 	router.GET("/events/:eventId/sections", c.GetSections)
 	router.GET("/events/:eventId/availability", c.GetAvailability)
-	router.GET("/users/:userId/reservations", c.ListUserReservations)
-	router.GET("/users/:userId/orders", c.ListUserOrders)
-	router.GET("/users/:userId/payments", c.ListUserPayments)
 	router.GET("/reservations/:reservationId", c.GetReservation)
 	router.GET("/orders/:orderId", c.GetOrder)
 	router.GET("/orders/order-no/:orderNo", c.GetOrderByOrderNo)
 	router.GET("/payments/:paymentNo", c.GetPaymentByPaymentNo)
-	router.POST("/queue/join", c.JoinQueue)
-	router.POST("/reservations", c.ReserveTicket)
-	router.POST("/orders", c.CreateOrder)
-	router.POST("/payments", c.PayOrder)
 	router.POST("/payments/provider/ecpay/callback", c.HandleECPayCallback)
-	router.POST("/reservations/expire", c.ExpireReservation)
-	router.POST("/reservations/cancel", c.CancelReservation)
+
+	authenticated := router.Group("/")
+	authenticated.Use(RequireAuth())
+	authenticated.GET("/me/reservations", c.ListUserReservations)
+	authenticated.GET("/me/orders", c.ListUserOrders)
+	authenticated.GET("/me/payments", c.ListUserPayments)
+	authenticated.POST("/queue/join", c.JoinQueue)
+	authenticated.POST("/reservations", c.ReserveTicket)
+	authenticated.POST("/orders", c.CreateOrder)
+	authenticated.POST("/payments", c.PayOrder)
+	authenticated.POST("/reservations/expire", c.ExpireReservation)
+	authenticated.POST("/reservations/cancel", c.CancelReservation)
 }
 
 // JoinQueue godoc
-// @Summary 加入排隊
-// @Description 建立 queue token，memory 版本目前直接回 ready 狀態
+// @Summary Join queue
+// @Description Join the queue for an event and return queue status.
 // @Tags queue
 // @Accept json
 // @Produce json
-// @Param request body JoinQueueRequest true "加入排隊請求"
+// @Param request body JoinQueueRequest true "Join queue request"
 // @Success 201 {object} JoinQueueResponse
 // @Failure 400 {object} ErrorResponse
 // @Router /queue/join [post]
@@ -61,9 +64,15 @@ func (c *BookingController) JoinQueue(ctx *gin.Context) {
 		return
 	}
 
+	user, ok := CurrentUser(ctx)
+	if !ok {
+		writeError(ctx, http.StatusUnauthorized, service.ErrUnauthorized)
+		return
+	}
+
 	status, err := c.BookingService.JoinQueue(ctx.Request.Context(), service.JoinQueueInput{
 		EventID:    request.EventID,
-		UserID:     request.UserID,
+		UserID:     user.ID,
 		ClientID:   request.ClientID,
 		RequestID:  request.RequestID,
 		Channel:    request.Channel,
@@ -238,22 +247,21 @@ func (c *BookingController) GetAvailability(ctx *gin.Context) {
 }
 
 // ListUserReservations godoc
-// @Summary 查詢使用者 reservation 列表
-// @Description 依照 user ID 取得該使用者的鎖票列表
+// @Summary List my reservations
+// @Description List reservations for the current authenticated user.
 // @Tags reservations
 // @Produce json
-// @Param userId path int true "使用者 ID"
 // @Success 200 {array} ReservationResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Router /users/{userId}/reservations [get]
+// @Failure 401 {object} ErrorResponse
+// @Router /me/reservations [get]
 func (c *BookingController) ListUserReservations(ctx *gin.Context) {
-	userID, ok := parseInt64Param(ctx, "userId")
+	user, ok := CurrentUser(ctx)
 	if !ok {
+		writeError(ctx, http.StatusUnauthorized, service.ErrUnauthorized)
 		return
 	}
 
-	reservations, err := c.BookingService.ListReservationsByUserID(ctx.Request.Context(), userID)
+	reservations, err := c.BookingService.ListReservationsByUserID(ctx.Request.Context(), user.ID)
 	if err != nil {
 		writeError(ctx, http.StatusNotFound, err)
 		return
@@ -268,22 +276,21 @@ func (c *BookingController) ListUserReservations(ctx *gin.Context) {
 }
 
 // ListUserOrders godoc
-// @Summary 查詢使用者訂單列表
-// @Description 依照 user ID 取得該使用者的訂單列表
+// @Summary List my orders
+// @Description List orders for the current authenticated user.
 // @Tags orders
 // @Produce json
-// @Param userId path int true "使用者 ID"
 // @Success 200 {array} OrderResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Router /users/{userId}/orders [get]
+// @Failure 401 {object} ErrorResponse
+// @Router /me/orders [get]
 func (c *BookingController) ListUserOrders(ctx *gin.Context) {
-	userID, ok := parseInt64Param(ctx, "userId")
+	user, ok := CurrentUser(ctx)
 	if !ok {
+		writeError(ctx, http.StatusUnauthorized, service.ErrUnauthorized)
 		return
 	}
 
-	orders, err := c.BookingService.ListOrdersByUserID(ctx.Request.Context(), userID)
+	orders, err := c.BookingService.ListOrdersByUserID(ctx.Request.Context(), user.ID)
 	if err != nil {
 		writeError(ctx, http.StatusNotFound, err)
 		return
@@ -298,22 +305,21 @@ func (c *BookingController) ListUserOrders(ctx *gin.Context) {
 }
 
 // ListUserPayments godoc
-// @Summary 查詢使用者付款列表
-// @Description 依照 user ID 取得該使用者的付款列表
+// @Summary List my payments
+// @Description List payments for the current authenticated user.
 // @Tags payments
 // @Produce json
-// @Param userId path int true "使用者 ID"
 // @Success 200 {array} PaymentResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Router /users/{userId}/payments [get]
+// @Failure 401 {object} ErrorResponse
+// @Router /me/payments [get]
 func (c *BookingController) ListUserPayments(ctx *gin.Context) {
-	userID, ok := parseInt64Param(ctx, "userId")
+	user, ok := CurrentUser(ctx)
 	if !ok {
+		writeError(ctx, http.StatusUnauthorized, service.ErrUnauthorized)
 		return
 	}
 
-	payments, err := c.BookingService.ListPaymentsByUserID(ctx.Request.Context(), userID)
+	payments, err := c.BookingService.ListPaymentsByUserID(ctx.Request.Context(), user.ID)
 	if err != nil {
 		writeError(ctx, http.StatusNotFound, err)
 		return
@@ -432,8 +438,14 @@ func (c *BookingController) ReserveTicket(ctx *gin.Context) {
 		return
 	}
 
+	user, ok := CurrentUser(ctx)
+	if !ok {
+		writeError(ctx, http.StatusUnauthorized, service.ErrUnauthorized)
+		return
+	}
+
 	reservation, err := c.BookingService.ReserveTicket(ctx.Request.Context(), service.ReserveTicketInput{
-		UserID:        request.UserID,
+		UserID:        user.ID,
 		EventID:       request.EventID,
 		SectionID:     request.SectionID,
 		Quantity:      request.Quantity,
@@ -462,6 +474,22 @@ func (c *BookingController) CreateOrder(ctx *gin.Context) {
 	var request CreateOrderRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
 		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	user, ok := CurrentUser(ctx)
+	if !ok {
+		writeError(ctx, http.StatusUnauthorized, service.ErrUnauthorized)
+		return
+	}
+
+	reservation, err := c.BookingService.GetReservation(ctx.Request.Context(), request.ReservationID)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+	if reservation.UserID != user.ID {
+		writeError(ctx, http.StatusForbidden, service.ErrUnauthorized)
 		return
 	}
 
@@ -495,6 +523,22 @@ func (c *BookingController) PayOrder(ctx *gin.Context) {
 		return
 	}
 
+	user, ok := CurrentUser(ctx)
+	if !ok {
+		writeError(ctx, http.StatusUnauthorized, service.ErrUnauthorized)
+		return
+	}
+
+	order, err := c.BookingService.GetOrder(ctx.Request.Context(), request.OrderID)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+	if order.UserID != user.ID {
+		writeError(ctx, http.StatusForbidden, service.ErrUnauthorized)
+		return
+	}
+
 	payment, err := c.BookingService.PayOrder(ctx.Request.Context(), service.PayOrderInput{
 		OrderID:   request.OrderID,
 		PaymentNo: request.PaymentNo,
@@ -511,19 +555,19 @@ func (c *BookingController) PayOrder(ctx *gin.Context) {
 }
 
 // HandleECPayCallback godoc
-// @Summary ECPay 支付回呼
-// @Description 接收第三方支付回呼，依 MerchantTradeNo 與 RtnCode 轉成訂單付款
+// @Summary Handle ECPay callback
+// @Description Handle ECPay callback and update payment status by MerchantTradeNo and RtnCode.
 // @Tags payments
 // @Accept x-www-form-urlencoded
 // @Produce plain
-// @Param MerchantID formData string false "特店編號"
-// @Param MerchantTradeNo formData string true "訂單編號"
-// @Param RtnCode formData string true "回傳碼"
-// @Param RtnMsg formData string false "回傳訊息"
-// @Param TradeNo formData string false "支付交易編號"
-// @Param TradeAmt formData string false "交易金額"
-// @Param PaymentDate formData string false "付款時間"
-// @Param PaymentType formData string false "付款方式"
+// @Param MerchantID formData string false "Merchant ID"
+// @Param MerchantTradeNo formData string true "Merchant Trade Number"
+// @Param RtnCode formData string true "Return Code"
+// @Param RtnMsg formData string false "Return Message"
+// @Param TradeNo formData string false "Trade Number"
+// @Param TradeAmt formData string false "Trade Amount"
+// @Param PaymentDate formData string false "Payment Date"
+// @Param PaymentType formData string false "Payment Type"
 // @Success 200 {string} string "1|OK"
 // @Failure 400 {object} ErrorResponse
 // @Router /payments/provider/ecpay/callback [post]
@@ -577,7 +621,23 @@ func (c *BookingController) ExpireReservation(ctx *gin.Context) {
 		return
 	}
 
-	reservation, err := c.BookingService.ExpireReservation(ctx.Request.Context(), service.ExpireReservationInput{
+	user, ok := CurrentUser(ctx)
+	if !ok {
+		writeError(ctx, http.StatusUnauthorized, service.ErrUnauthorized)
+		return
+	}
+
+	reservation, err := c.BookingService.GetReservation(ctx.Request.Context(), request.ReservationID)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+	if reservation.UserID != user.ID {
+		writeError(ctx, http.StatusForbidden, service.ErrUnauthorized)
+		return
+	}
+
+	reservation, err = c.BookingService.ExpireReservation(ctx.Request.Context(), service.ExpireReservationInput{
 		ReservationID: request.ReservationID,
 		ExpiredAt:     request.ExpiredAt,
 	})
@@ -606,7 +666,23 @@ func (c *BookingController) CancelReservation(ctx *gin.Context) {
 		return
 	}
 
-	reservation, err := c.BookingService.CancelReservation(ctx.Request.Context(), service.CancelReservationInput{
+	user, ok := CurrentUser(ctx)
+	if !ok {
+		writeError(ctx, http.StatusUnauthorized, service.ErrUnauthorized)
+		return
+	}
+
+	reservation, err := c.BookingService.GetReservation(ctx.Request.Context(), request.ReservationID)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+	if reservation.UserID != user.ID {
+		writeError(ctx, http.StatusForbidden, service.ErrUnauthorized)
+		return
+	}
+
+	reservation, err = c.BookingService.CancelReservation(ctx.Request.Context(), service.CancelReservationInput{
 		ReservationID: request.ReservationID,
 		CancelledAt:   request.CancelledAt,
 	})

@@ -25,8 +25,11 @@ func NewAuthController(authService *service.AuthService) *AuthController {
 func (c *AuthController) RegisterRoutes(router gin.IRouter) {
 	router.POST("/auth/register", c.Register)
 	router.POST("/auth/login", c.Login)
-	router.POST("/auth/logout", c.Logout)
-	router.GET("/me", c.Me)
+
+	authenticated := router.Group("/")
+	authenticated.Use(AttachCurrentUser(c.AuthService), RequireAuth())
+	authenticated.POST("/auth/logout", c.Logout)
+	authenticated.GET("/me", c.Me)
 }
 
 func (c *AuthController) Register(ctx *gin.Context) {
@@ -76,24 +79,7 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 }
 
 func (c *AuthController) Me(ctx *gin.Context) {
-	userIDValue, err := ctx.Cookie(sessionCookieName)
-	if err != nil {
-		writeError(ctx, http.StatusUnauthorized, err)
-		return
-	}
-
-	userID, parseErr := strconv.ParseInt(userIDValue, 10, 64)
-	if parseErr != nil {
-		writeError(ctx, http.StatusUnauthorized, parseErr)
-		return
-	}
-
-	user, err := c.AuthService.GetMe(ctx.Request.Context(), userID)
-	if err != nil {
-		writeError(ctx, http.StatusUnauthorized, err)
-		return
-	}
-
+	user, _ := CurrentUser(ctx)
 	ctx.JSON(http.StatusOK, newUserResponse(user))
 }
 

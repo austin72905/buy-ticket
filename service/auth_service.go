@@ -17,6 +17,7 @@ var (
 	ErrInvalidCredentials     = errors.New("invalid email or password")
 	ErrInvalidRegisterInput   = errors.New("name, email, and password are required")
 	ErrInvalidLoginInput      = errors.New("email and password are required")
+	ErrUnauthorized           = errors.New("unauthorized")
 )
 
 type AuthService struct {

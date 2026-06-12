@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"buy-ticket/domain"
+	"buy-ticket/repository"
 	"buy-ticket/service"
 
 	"github.com/gin-gonic/gin"
@@ -95,11 +96,23 @@ func TestBookingControllerJoinQueue(t *testing.T) {
 
 		controller := NewBookingController(bookingService)
 		router := gin.New()
+		userRepo := repository.NewMemoryUserRepository([]*domain.User{
+			{
+				ID:    1,
+				Name:  "Test User",
+				Email: "test@example.com",
+			},
+		})
+		router.Use(AttachCurrentUser(service.NewAuthService(userRepo)))
 		controller.RegisterRoutes(router)
 
-		body := `{"event_id":1,"user_id":2,"client_id":"web-device-001","request_id":"req-001","channel":"web"}`
+		body := `{"event_id":1,"client_id":"web-device-001","request_id":"req-001","channel":"web"}`
 		req := httptest.NewRequest(http.MethodPost, "/queue/join", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(&http.Cookie{
+			Name:  sessionCookieName,
+			Value: "1",
+		})
 		resp := httptest.NewRecorder()
 		router.ServeHTTP(resp, req)
 

@@ -63,8 +63,6 @@ definitions:
         type: integer
       request_id:
         type: string
-      user_id:
-        type: integer
     type: object
   controller.JoinQueueResponse:
     properties:
@@ -225,9 +223,6 @@ definitions:
       section_id:
         example: 1
         type: integer
-      user_id:
-        example: 1
-        type: integer
     type: object
   controller.SaleStatusResponse:
     properties:
@@ -300,7 +295,7 @@ info:
 paths:
   /events:
     get:
-      description: 取得目前系統中的活動列表
+      description: List all available events.
       produces:
       - application/json
       responses:
@@ -314,14 +309,14 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 查詢活動列表
+      summary: List events
       tags:
       - events
   /events/{eventId}:
     get:
-      description: 依活動 ID 取得活動基本資訊
+      description: Get event detail by event ID.
       parameters:
-      - description: 活動 ID
+      - description: Event ID
         in: path
         name: eventId
         required: true
@@ -341,14 +336,14 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 取得活動資訊
+      summary: Get event
       tags:
       - events
   /events/{eventId}/availability:
     get:
-      description: 依活動 ID 取得各票區剩餘可售量
+      description: Get section availability for an event.
       parameters:
-      - description: 活動 ID
+      - description: Event ID
         in: path
         name: eventId
         required: true
@@ -370,14 +365,14 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 取得票區可售量
+      summary: Get section availability
       tags:
       - events
   /events/{eventId}/sections:
     get:
-      description: 依活動 ID 取得票區列表
+      description: Get all sections for an event.
       parameters:
-      - description: 活動 ID
+      - description: Event ID
         in: path
         name: eventId
         required: true
@@ -399,16 +394,73 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 取得活動票區
+      summary: Get event sections
       tags:
       - events
+  /me/orders:
+    get:
+      description: List orders for the current authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.OrderResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: List my orders
+      tags:
+      - orders
+  /me/payments:
+    get:
+      description: List payments for the current authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.PaymentResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: List my payments
+      tags:
+      - payments
+  /me/reservations:
+    get:
+      description: List reservations for the current authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.ReservationResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: List my reservations
+      tags:
+      - reservations
   /orders:
     post:
       consumes:
       - application/json
-      description: 由 reservation 建立待付款訂單
+      description: Create an order from an existing reservation.
       parameters:
-      - description: 建立訂單請求
+      - description: Create order request
         in: body
         name: request
         required: true
@@ -425,14 +477,14 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 建立訂單
+      summary: Create order
       tags:
       - orders
   /orders/{orderId}:
     get:
-      description: 依訂單 ID 取得訂單內容
+      description: Get order detail by order ID.
       parameters:
-      - description: 訂單 ID
+      - description: Order ID
         in: path
         name: orderId
         required: true
@@ -452,14 +504,14 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 取得訂單資訊
+      summary: Get order
       tags:
       - orders
   /orders/order-no/{orderNo}:
     get:
-      description: 依照 order_no 取得訂單資料
+      description: Get order detail by order number.
       parameters:
-      - description: 訂單編號
+      - description: Order Number
         in: path
         name: orderNo
         required: true
@@ -475,16 +527,16 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 依訂單編號查詢訂單
+      summary: Get order by order number
       tags:
       - orders
   /payments:
     post:
       consumes:
       - application/json
-      description: 付款成功後確認 reservation 並轉成售出
+      description: Submit payment for an order.
       parameters:
-      - description: 付款請求
+      - description: Pay order request
         in: body
         name: request
         required: true
@@ -501,14 +553,14 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 訂單付款
+      summary: Pay order
       tags:
       - payments
   /payments/{paymentNo}:
     get:
-      description: 依照 payment_no 取得付款資料
+      description: Get payment detail by payment number.
       parameters:
-      - description: 付款編號
+      - description: Payment Number
         in: path
         name: paymentNo
         required: true
@@ -524,16 +576,71 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 依付款編號查詢付款
+      summary: Get payment by payment number
+      tags:
+      - payments
+  /payments/provider/ecpay/callback:
+    post:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: Handle ECPay callback and update payment status by MerchantTradeNo
+        and RtnCode.
+      parameters:
+      - description: Merchant ID
+        in: formData
+        name: MerchantID
+        type: string
+      - description: Merchant Trade Number
+        in: formData
+        name: MerchantTradeNo
+        required: true
+        type: string
+      - description: Return Code
+        in: formData
+        name: RtnCode
+        required: true
+        type: string
+      - description: Return Message
+        in: formData
+        name: RtnMsg
+        type: string
+      - description: Trade Number
+        in: formData
+        name: TradeNo
+        type: string
+      - description: Trade Amount
+        in: formData
+        name: TradeAmt
+        type: string
+      - description: Payment Date
+        in: formData
+        name: PaymentDate
+        type: string
+      - description: Payment Type
+        in: formData
+        name: PaymentType
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: 1|OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Handle ECPay callback
       tags:
       - payments
   /queue/join:
     post:
       consumes:
       - application/json
-      description: 建立 queue token，memory 版本目前直接回 ready 狀態
+      description: Join the queue for an event and return queue status.
       parameters:
-      - description: 加入排隊請求
+      - description: Join queue request
         in: body
         name: request
         required: true
@@ -550,12 +657,12 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 加入排隊
+      summary: Join queue
       tags:
       - queue
   /queue/status/{queueToken}:
     get:
-      description: 依 queue token 查詢目前排隊進度與是否已取得 purchase token
+      description: Get queue status by queue token, including purchase token if granted.
       parameters:
       - description: Queue Token
         in: path
@@ -577,16 +684,16 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 查詢排隊狀態
+      summary: Get queue status
       tags:
       - queue
   /reservations:
     post:
       consumes:
       - application/json
-      description: 建立 reservation 並保留票區數量
+      description: Create a reservation for selected section and quantity.
       parameters:
-      - description: 保留票券請求
+      - description: Reserve ticket request
         in: body
         name: request
         required: true
@@ -603,14 +710,14 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 保留票券
+      summary: Reserve ticket
       tags:
       - reservations
   /reservations/{reservationId}:
     get:
-      description: 依照 reservation ID 取得鎖票資料
+      description: Get reservation detail by reservation ID.
       parameters:
-      - description: reservation ID
+      - description: Reservation ID
         in: path
         name: reservationId
         required: true
@@ -630,16 +737,16 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 查詢 reservation
+      summary: Get reservation
       tags:
       - reservations
   /reservations/cancel:
     post:
       consumes:
       - application/json
-      description: 主動取消 reservation 並釋放保留量
+      description: Cancel a reservation.
       parameters:
-      - description: 取消請求
+      - description: Cancel reservation request
         in: body
         name: request
         required: true
@@ -656,16 +763,16 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 取消 reservation
+      summary: Cancel reservation
       tags:
       - reservations
   /reservations/expire:
     post:
       consumes:
       - application/json
-      description: 將 reservation 標記為 expired 並釋放保留量
+      description: Mark a reservation as expired.
       parameters:
-      - description: 過期請求
+      - description: Expire reservation request
         in: body
         name: request
         required: true
@@ -682,14 +789,14 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 過期 reservation
+      summary: Expire reservation
       tags:
       - reservations
   /sale/status:
     get:
-      description: 依照 event_id 查詢活動是否開賣，以及是否可進入後續購票流程
+      description: Get sale status for an event by event_id.
       parameters:
-      - description: 活動 ID
+      - description: Event ID
         in: query
         name: event_id
         required: true
@@ -709,94 +816,7 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 查詢售票狀態
+      summary: Get sale status
       tags:
       - sale
-  /users/{userId}/orders:
-    get:
-      description: 依照 user ID 取得該使用者的訂單列表
-      parameters:
-      - description: 使用者 ID
-        in: path
-        name: userId
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/controller.OrderResponse'
-            type: array
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/controller.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/controller.ErrorResponse'
-      summary: 查詢使用者訂單列表
-      tags:
-      - orders
-  /users/{userId}/payments:
-    get:
-      description: 依照 user ID 取得該使用者的付款列表
-      parameters:
-      - description: 使用者 ID
-        in: path
-        name: userId
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/controller.PaymentResponse'
-            type: array
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/controller.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/controller.ErrorResponse'
-      summary: 查詢使用者付款列表
-      tags:
-      - payments
-  /users/{userId}/reservations:
-    get:
-      description: 依照 user ID 取得該使用者的鎖票列表
-      parameters:
-      - description: 使用者 ID
-        in: path
-        name: userId
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/controller.ReservationResponse'
-            type: array
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/controller.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/controller.ErrorResponse'
-      summary: 查詢使用者 reservation 列表
-      tags:
-      - reservations
 swagger: "2.0"

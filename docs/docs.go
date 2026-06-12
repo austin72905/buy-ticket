@@ -46,18 +46,18 @@ const docTemplate = `{
         },
         "/events/{eventId}": {
             "get": {
-                "description": "依活動 ID 取得活動基本資訊",
+                "description": "Get event detail by event ID.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "events"
                 ],
-                "summary": "取得活動資訊",
+                "summary": "Get event",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "活動 ID",
+                        "description": "Event ID",
                         "name": "eventId",
                         "in": "path",
                         "required": true
@@ -87,18 +87,18 @@ const docTemplate = `{
         },
         "/events/{eventId}/availability": {
             "get": {
-                "description": "依活動 ID 取得各票區剩餘可售量",
+                "description": "Get section availability for an event.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "events"
                 ],
-                "summary": "取得票區可售量",
+                "summary": "Get section availability",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "活動 ID",
+                        "description": "Event ID",
                         "name": "eventId",
                         "in": "path",
                         "required": true
@@ -131,18 +131,18 @@ const docTemplate = `{
         },
         "/events/{eventId}/sections": {
             "get": {
-                "description": "依活動 ID 取得票區列表",
+                "description": "Get all sections for an event.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "events"
                 ],
-                "summary": "取得活動票區",
+                "summary": "Get event sections",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "活動 ID",
+                        "description": "Event ID",
                         "name": "eventId",
                         "in": "path",
                         "required": true
@@ -173,9 +173,96 @@ const docTemplate = `{
                 }
             }
         },
+        "/me/orders": {
+            "get": {
+                "description": "List orders for the current authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "orders"
+                ],
+                "summary": "List my orders",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/controller.OrderResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/me/payments": {
+            "get": {
+                "description": "List payments for the current authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "payments"
+                ],
+                "summary": "List my payments",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/controller.PaymentResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/me/reservations": {
+            "get": {
+                "description": "List reservations for the current authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reservations"
+                ],
+                "summary": "List my reservations",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/controller.ReservationResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/orders": {
             "post": {
-                "description": "由 reservation 建立待付款訂單",
+                "description": "Create an order from an existing reservation.",
                 "consumes": [
                     "application/json"
                 ],
@@ -185,10 +272,10 @@ const docTemplate = `{
                 "tags": [
                     "orders"
                 ],
-                "summary": "建立訂單",
+                "summary": "Create order",
                 "parameters": [
                     {
-                        "description": "建立訂單請求",
+                        "description": "Create order request",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -215,18 +302,18 @@ const docTemplate = `{
         },
         "/orders/order-no/{orderNo}": {
             "get": {
-                "description": "依照 order_no 取得訂單資料",
+                "description": "Get order detail by order number.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "orders"
                 ],
-                "summary": "依訂單編號查詢訂單",
+                "summary": "Get order by order number",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "訂單編號",
+                        "description": "Order Number",
                         "name": "orderNo",
                         "in": "path",
                         "required": true
@@ -250,18 +337,18 @@ const docTemplate = `{
         },
         "/orders/{orderId}": {
             "get": {
-                "description": "依訂單 ID 取得訂單內容",
+                "description": "Get order detail by order ID.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "orders"
                 ],
-                "summary": "取得訂單資訊",
+                "summary": "Get order",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "訂單 ID",
+                        "description": "Order ID",
                         "name": "orderId",
                         "in": "path",
                         "required": true
@@ -291,7 +378,7 @@ const docTemplate = `{
         },
         "/payments": {
             "post": {
-                "description": "付款成功後確認 reservation 並轉成售出",
+                "description": "Submit payment for an order.",
                 "consumes": [
                     "application/json"
                 ],
@@ -301,10 +388,10 @@ const docTemplate = `{
                 "tags": [
                     "payments"
                 ],
-                "summary": "訂單付款",
+                "summary": "Pay order",
                 "parameters": [
                     {
-                        "description": "付款請求",
+                        "description": "Pay order request",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -329,20 +416,101 @@ const docTemplate = `{
                 }
             }
         },
+        "/payments/provider/ecpay/callback": {
+            "post": {
+                "description": "Handle ECPay callback and update payment status by MerchantTradeNo and RtnCode.",
+                "consumes": [
+                    "application/x-www-form-urlencoded"
+                ],
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "payments"
+                ],
+                "summary": "Handle ECPay callback",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Merchant ID",
+                        "name": "MerchantID",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Merchant Trade Number",
+                        "name": "MerchantTradeNo",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Return Code",
+                        "name": "RtnCode",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Return Message",
+                        "name": "RtnMsg",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Trade Number",
+                        "name": "TradeNo",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Trade Amount",
+                        "name": "TradeAmt",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Payment Date",
+                        "name": "PaymentDate",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Payment Type",
+                        "name": "PaymentType",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "1|OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/payments/{paymentNo}": {
             "get": {
-                "description": "依照 payment_no 取得付款資料",
+                "description": "Get payment detail by payment number.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "payments"
                 ],
-                "summary": "依付款編號查詢付款",
+                "summary": "Get payment by payment number",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "付款編號",
+                        "description": "Payment Number",
                         "name": "paymentNo",
                         "in": "path",
                         "required": true
@@ -366,7 +534,7 @@ const docTemplate = `{
         },
         "/queue/join": {
             "post": {
-                "description": "建立 queue token，memory 版本目前直接回 ready 狀態",
+                "description": "Join the queue for an event and return queue status.",
                 "consumes": [
                     "application/json"
                 ],
@@ -376,10 +544,10 @@ const docTemplate = `{
                 "tags": [
                     "queue"
                 ],
-                "summary": "加入排隊",
+                "summary": "Join queue",
                 "parameters": [
                     {
-                        "description": "加入排隊請求",
+                        "description": "Join queue request",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -406,14 +574,14 @@ const docTemplate = `{
         },
         "/queue/status/{queueToken}": {
             "get": {
-                "description": "依 queue token 查詢目前排隊進度與是否已取得 purchase token",
+                "description": "Get queue status by queue token, including purchase token if granted.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "queue"
                 ],
-                "summary": "查詢排隊狀態",
+                "summary": "Get queue status",
                 "parameters": [
                     {
                         "type": "string",
@@ -447,7 +615,7 @@ const docTemplate = `{
         },
         "/reservations": {
             "post": {
-                "description": "建立 reservation 並保留票區數量",
+                "description": "Create a reservation for selected section and quantity.",
                 "consumes": [
                     "application/json"
                 ],
@@ -457,10 +625,10 @@ const docTemplate = `{
                 "tags": [
                     "reservations"
                 ],
-                "summary": "保留票券",
+                "summary": "Reserve ticket",
                 "parameters": [
                     {
-                        "description": "保留票券請求",
+                        "description": "Reserve ticket request",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -487,7 +655,7 @@ const docTemplate = `{
         },
         "/reservations/cancel": {
             "post": {
-                "description": "主動取消 reservation 並釋放保留量",
+                "description": "Cancel a reservation.",
                 "consumes": [
                     "application/json"
                 ],
@@ -497,10 +665,10 @@ const docTemplate = `{
                 "tags": [
                     "reservations"
                 ],
-                "summary": "取消 reservation",
+                "summary": "Cancel reservation",
                 "parameters": [
                     {
-                        "description": "取消請求",
+                        "description": "Cancel reservation request",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -527,7 +695,7 @@ const docTemplate = `{
         },
         "/reservations/expire": {
             "post": {
-                "description": "將 reservation 標記為 expired 並釋放保留量",
+                "description": "Mark a reservation as expired.",
                 "consumes": [
                     "application/json"
                 ],
@@ -537,10 +705,10 @@ const docTemplate = `{
                 "tags": [
                     "reservations"
                 ],
-                "summary": "過期 reservation",
+                "summary": "Expire reservation",
                 "parameters": [
                     {
-                        "description": "過期請求",
+                        "description": "Expire reservation request",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -567,18 +735,18 @@ const docTemplate = `{
         },
         "/reservations/{reservationId}": {
             "get": {
-                "description": "依照 reservation ID 取得鎖票資料",
+                "description": "Get reservation detail by reservation ID.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "reservations"
                 ],
-                "summary": "查詢 reservation",
+                "summary": "Get reservation",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "reservation ID",
+                        "description": "Reservation ID",
                         "name": "reservationId",
                         "in": "path",
                         "required": true
@@ -608,18 +776,18 @@ const docTemplate = `{
         },
         "/sale/status": {
             "get": {
-                "description": "依照 event_id 查詢活動是否開賣，以及是否可進入後續購票流程",
+                "description": "Get sale status for an event by event_id.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "sale"
                 ],
-                "summary": "查詢售票狀態",
+                "summary": "Get sale status",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "活動 ID",
+                        "description": "Event ID",
                         "name": "event_id",
                         "in": "query",
                         "required": true
@@ -630,138 +798,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/controller.SaleStatusResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/controller.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/controller.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/users/{userId}/orders": {
-            "get": {
-                "description": "依照 user ID 取得該使用者的訂單列表",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "orders"
-                ],
-                "summary": "查詢使用者訂單列表",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "使用者 ID",
-                        "name": "userId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/controller.OrderResponse"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/controller.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/controller.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/users/{userId}/payments": {
-            "get": {
-                "description": "依照 user ID 取得該使用者的付款列表",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "payments"
-                ],
-                "summary": "查詢使用者付款列表",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "使用者 ID",
-                        "name": "userId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/controller.PaymentResponse"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/controller.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/controller.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/users/{userId}/reservations": {
-            "get": {
-                "description": "依照 user ID 取得該使用者的鎖票列表",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "reservations"
-                ],
-                "summary": "查詢使用者 reservation 列表",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "使用者 ID",
-                        "name": "userId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/controller.ReservationResponse"
-                            }
                         }
                     },
                     "400": {
@@ -877,9 +913,6 @@ const docTemplate = `{
                 },
                 "request_id": {
                     "type": "string"
-                },
-                "user_id": {
-                    "type": "integer"
                 }
             }
         },
@@ -1119,10 +1152,6 @@ const docTemplate = `{
                     "example": 2
                 },
                 "section_id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "user_id": {
                     "type": "integer",
                     "example": 1
                 }
