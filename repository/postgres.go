@@ -15,6 +15,10 @@ type PostgresEventRepository struct {
 	queries *db.Queries
 }
 
+type PostgresUserRepository struct {
+	queries *db.Queries
+}
+
 type PostgresSectionRepository struct {
 	queries *db.Queries
 }
@@ -33,6 +37,10 @@ type PostgresPaymentRepository struct {
 
 func NewPostgresEventRepository(queries *db.Queries) *PostgresEventRepository {
 	return &PostgresEventRepository{queries: queries}
+}
+
+func NewPostgresUserRepository(queries *db.Queries) *PostgresUserRepository {
+	return &PostgresUserRepository{queries: queries}
 }
 
 func NewPostgresSectionRepository(queries *db.Queries) *PostgresSectionRepository {
@@ -72,6 +80,46 @@ func (r *PostgresEventRepository) List(ctx context.Context) ([]domain.Event, err
 	}
 
 	return events, nil
+}
+
+func (r *PostgresUserRepository) FindByID(ctx context.Context, userID int64) (*domain.User, error) {
+	record, err := r.queries.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return toDomainUserFromGetUserByID(record), nil
+}
+
+func (r *PostgresUserRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
+	record, err := r.queries.GetUserByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+
+	return toDomainUserFromGetUserByEmail(record), nil
+}
+
+func (r *PostgresUserRepository) Save(ctx context.Context, user *domain.User) error {
+	if user.ID == 0 {
+		record, err := r.queries.CreateUser(ctx, db.CreateUserParams{
+			Name:         user.Name,
+			Email:        user.Email,
+			PasswordHash: user.PasswordHash,
+		})
+		if err != nil {
+			return err
+		}
+
+		*user = *toDomainUserFromCreateUser(record)
+		return nil
+	}
+
+	return r.queries.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
+		ID:           user.ID,
+		PasswordHash: user.PasswordHash,
+		UpdatedAt:    toPgTimestamp(user.UpdatedAt),
+	})
 }
 
 func (r *PostgresSectionRepository) FindByEventAndID(ctx context.Context, eventID, sectionID int64) (*domain.Section, error) {
@@ -375,6 +423,50 @@ func toDomainEvent(record db.Event) *domain.Event {
 		Status:      domain.EventStatus(record.Status),
 		CreatedAt:   record.CreatedAt.Time,
 		UpdatedAt:   record.UpdatedAt.Time,
+	}
+}
+
+func toDomainUser(record db.User) *domain.User {
+	return &domain.User{
+		ID:           record.ID,
+		Name:         record.Name,
+		Email:        record.Email,
+		PasswordHash: record.PasswordHash,
+		CreatedAt:    record.CreatedAt.Time,
+		UpdatedAt:    record.UpdatedAt.Time,
+	}
+}
+
+func toDomainUserFromGetUserByID(record db.GetUserByIDRow) *domain.User {
+	return &domain.User{
+		ID:           record.ID,
+		Name:         record.Name,
+		Email:        record.Email,
+		PasswordHash: record.PasswordHash,
+		CreatedAt:    record.CreatedAt.Time,
+		UpdatedAt:    record.UpdatedAt.Time,
+	}
+}
+
+func toDomainUserFromGetUserByEmail(record db.GetUserByEmailRow) *domain.User {
+	return &domain.User{
+		ID:           record.ID,
+		Name:         record.Name,
+		Email:        record.Email,
+		PasswordHash: record.PasswordHash,
+		CreatedAt:    record.CreatedAt.Time,
+		UpdatedAt:    record.UpdatedAt.Time,
+	}
+}
+
+func toDomainUserFromCreateUser(record db.CreateUserRow) *domain.User {
+	return &domain.User{
+		ID:           record.ID,
+		Name:         record.Name,
+		Email:        record.Email,
+		PasswordHash: record.PasswordHash,
+		CreatedAt:    record.CreatedAt.Time,
+		UpdatedAt:    record.UpdatedAt.Time,
 	}
 }
 

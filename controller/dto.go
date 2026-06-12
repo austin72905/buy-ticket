@@ -25,6 +25,17 @@ type JoinQueueRequest struct {
 	AccessCode string `json:"access_code,omitempty"`
 }
 
+type RegisterRequest struct {
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
 type CreateOrderRequest struct {
 	ReservationID int64     `json:"reservation_id"`
 	OrderNo       string    `json:"order_no"`
@@ -96,6 +107,14 @@ type EventResponse struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+type UserResponse struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
 type SectionResponse struct {
 	ID               int64  `json:"id"`
 	EventID          int64  `json:"event_id"`
@@ -160,6 +179,16 @@ func newEventResponse(event *domain.Event) EventResponse {
 		SaleEndAt:   event.SaleEndAt.Format(time.RFC3339),
 		CreatedAt:   event.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:   event.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func newUserResponse(user *domain.User) UserResponse {
+	return UserResponse{
+		ID:        user.ID,
+		Name:      user.Name,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt.Format(time.RFC3339),
+		UpdatedAt: user.UpdatedAt.Format(time.RFC3339),
 	}
 }
 

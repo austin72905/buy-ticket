@@ -12,6 +12,12 @@ type EventRepository interface {
 	List(ctx context.Context) ([]domain.Event, error)
 }
 
+type UserRepository interface {
+	FindByID(ctx context.Context, userID int64) (*domain.User, error)
+	FindByEmail(ctx context.Context, email string) (*domain.User, error)
+	Save(ctx context.Context, user *domain.User) error
+}
+
 type SectionRepository interface {
 	FindByEventAndID(ctx context.Context, eventID, sectionID int64) (*domain.Section, error)
 	ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error)

@@ -14,6 +14,7 @@ type Querier interface {
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
 	CreateReservation(ctx context.Context, arg CreateReservationParams) (Reservation, error)
 	CreateSection(ctx context.Context, arg CreateSectionParams) (EventSection, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	GetEventByID(ctx context.Context, id int64) (Event, error)
 	GetOrderByID(ctx context.Context, id int64) (Order, error)
 	GetOrderByOrderNo(ctx context.Context, orderNo string) (Order, error)
@@ -21,6 +22,8 @@ type Querier interface {
 	GetReservationByID(ctx context.Context, id int64) (Reservation, error)
 	GetReservationByReservationNo(ctx context.Context, reservationNo string) (Reservation, error)
 	GetSectionByEventAndID(ctx context.Context, arg GetSectionByEventAndIDParams) (EventSection, error)
+	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
+	GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error)
 	ListEvents(ctx context.Context) ([]Event, error)
 	ListExpiredHoldingReservations(ctx context.Context, arg ListExpiredHoldingReservationsParams) ([]Reservation, error)
 	ListExpiredPendingOrders(ctx context.Context, arg ListExpiredPendingOrdersParams) ([]Order, error)
@@ -32,6 +35,7 @@ type Querier interface {
 	UpdatePaymentStatus(ctx context.Context, arg UpdatePaymentStatusParams) error
 	UpdateReservationStatus(ctx context.Context, arg UpdateReservationStatusParams) error
 	UpdateSectionInventory(ctx context.Context, arg UpdateSectionInventoryParams) error
+	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 }
 
 var _ Querier = (*Queries)(nil)

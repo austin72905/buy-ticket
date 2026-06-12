@@ -102,7 +102,10 @@ func (app *BuyTicketApp) Initialize() {
 		log.Fatalf("load %s app.properties failed: %v", env, err)
 	}
 
-	eventRepo, sectionRepo, reservationRepo, orderRepo, paymentRepo, dbPool := buildRepositories(app.Runtime)
+	userRepo, eventRepo, sectionRepo, reservationRepo, orderRepo, paymentRepo, dbPool := buildRepositories(app.Runtime)
+
+	authService := service.NewAuthService(userRepo)
+	authController := controller.NewAuthController(authService)
 
 	bookingService := service.NewBookingService(
 		eventRepo,
@@ -132,6 +135,7 @@ func (app *BuyTicketApp) Initialize() {
 		ctx.JSON(200, gin.H{"status": "ok"})
 	})
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	authController.RegisterRoutes(router)
 	bookingController.RegisterRoutes(router)
 
 	addr := app.Runtime.Property.RequiredProperty("server.addr")
@@ -249,6 +253,7 @@ func orderExpireBatchSize(runtime *infraapp.Runtime) int {
 }
 
 func buildRepositories(runtime *infraapp.Runtime) (
+	repository.UserRepository,
 	repository.EventRepository,
 	repository.SectionRepository,
 	repository.ReservationRepository,
@@ -261,7 +266,8 @@ func buildRepositories(runtime *infraapp.Runtime) (
 		pg.LoadFromPrefix("postgres")
 		pool := pg.Pool()
 		queries := db.New(pool)
-		return repository.NewPostgresEventRepository(queries),
+		return repository.NewPostgresUserRepository(queries),
+			repository.NewPostgresEventRepository(queries),
 			repository.NewPostgresSectionRepository(queries),
 			repository.NewPostgresReservationRepository(queries),
 			repository.NewPostgresOrderRepository(queries),
@@ -269,8 +275,9 @@ func buildRepositories(runtime *infraapp.Runtime) (
 			pool
 	}
 
-	events, sections := repository.SeedSampleData()
-	return repository.NewMemoryEventRepository(events),
+	users, events, sections := repository.SeedSampleData()
+	return repository.NewMemoryUserRepository(users),
+		repository.NewMemoryEventRepository(events),
 		repository.NewMemorySectionRepository(sections),
 		repository.NewMemoryReservationRepository(),
 		repository.NewMemoryOrderRepository(),

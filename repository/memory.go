@@ -10,12 +10,88 @@ import (
 )
 
 var (
+	ErrUserNotFound        = errors.New("user not found")
 	ErrEventNotFound       = errors.New("event not found")
 	ErrSectionNotFound     = errors.New("section not found")
 	ErrReservationNotFound = errors.New("reservation not found")
 	ErrOrderNotFound       = errors.New("order not found")
 	ErrPaymentNotFound     = errors.New("payment not found")
 )
+
+type MemoryUserRepository struct {
+	mu         sync.RWMutex
+	users      map[int64]*domain.User
+	emailIndex map[string]int64
+	nextID     int64
+}
+
+func NewMemoryUserRepository(users []*domain.User) *MemoryUserRepository {
+	repo := &MemoryUserRepository{
+		users:      make(map[int64]*domain.User, len(users)),
+		emailIndex: make(map[string]int64, len(users)),
+		nextID:     1,
+	}
+
+	var maxID int64
+	for _, user := range users {
+		cloned := *user
+		repo.users[user.ID] = &cloned
+		repo.emailIndex[user.Email] = user.ID
+		if user.ID > maxID {
+			maxID = user.ID
+		}
+	}
+
+	repo.nextID = maxID + 1
+	return repo
+}
+
+func (r *MemoryUserRepository) FindByID(ctx context.Context, userID int64) (*domain.User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	user, ok := r.users[userID]
+	if !ok {
+		return nil, ErrUserNotFound
+	}
+
+	cloned := *user
+	return &cloned, nil
+}
+
+func (r *MemoryUserRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	userID, ok := r.emailIndex[email]
+	if !ok {
+		return nil, ErrUserNotFound
+	}
+
+	user, exists := r.users[userID]
+	if !exists {
+		return nil, ErrUserNotFound
+	}
+
+	cloned := *user
+	return &cloned, nil
+}
+
+func (r *MemoryUserRepository) Save(ctx context.Context, user *domain.User) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cloned := *user
+	if cloned.ID == 0 {
+		cloned.ID = r.nextID
+		r.nextID++
+		user.ID = cloned.ID
+	}
+
+	r.users[cloned.ID] = &cloned
+	r.emailIndex[cloned.Email] = cloned.ID
+	return nil
+}
 
 type MemoryEventRepository struct {
 	mu     sync.RWMutex
@@ -326,8 +402,19 @@ func (r *MemoryPaymentRepository) Save(ctx context.Context, payment *domain.Paym
 	return nil
 }
 
-func SeedSampleData() ([]*domain.Event, []*domain.Section) {
+func SeedSampleData() ([]*domain.User, []*domain.Event, []*domain.Section) {
 	now := time.Now()
+
+	users := []*domain.User{
+		{
+			ID:           1,
+			Name:         "Austin Lin",
+			Email:        "austin@example.com",
+			PasswordHash: "PENDING_RESET",
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		},
+	}
 
 	sections := []*domain.Section{
 		{
@@ -370,5 +457,5 @@ func SeedSampleData() ([]*domain.Event, []*domain.Section) {
 		},
 	}
 
-	return events, sections
+	return users, events, sections
 }
