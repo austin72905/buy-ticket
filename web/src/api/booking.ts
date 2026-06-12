@@ -1,7 +1,9 @@
 import http from '../lib/http'
 import type {
+  CancelReservationRequest,
   CreateOrderRequest,
   EventResponse,
+  ExpireReservationRequest,
   JoinQueueRequest,
   OrderResponse,
   PaymentResponse,
@@ -56,6 +58,21 @@ export async function reserveTicket(payload: ReserveTicketRequest) {
   return data
 }
 
+export async function getReservation(reservationId: number) {
+  const { data } = await http.get<ReservationResponse>(`/reservations/${reservationId}`)
+  return data
+}
+
+export async function cancelReservation(payload: CancelReservationRequest) {
+  const { data } = await http.post<ReservationResponse>('/reservations/cancel', payload)
+  return data
+}
+
+export async function expireReservation(payload: ExpireReservationRequest) {
+  const { data } = await http.post<ReservationResponse>('/reservations/expire', payload)
+  return data
+}
+
 export async function createOrder(payload: CreateOrderRequest) {
   const { data } = await http.post<OrderResponse>('/orders', payload)
   return data
@@ -68,5 +85,30 @@ export async function payOrder(payload: PayOrderRequest) {
 
 export async function getOrder(orderId: number) {
   const { data } = await http.get<OrderResponse>(`/orders/${orderId}`)
+  return data
+}
+
+export async function getOrderByOrderNo(orderNo: string) {
+  const { data } = await http.get<OrderResponse>(`/orders/order-no/${orderNo}`)
+  return data
+}
+
+export async function getPaymentByPaymentNo(paymentNo: string) {
+  const { data } = await http.get<PaymentResponse>(`/payments/${paymentNo}`)
+  return data
+}
+
+export async function listUserReservations(userId: number) {
+  const { data } = await http.get<ReservationResponse[]>(`/users/${userId}/reservations`)
+  return data
+}
+
+export async function listUserOrders(userId: number) {
+  const { data } = await http.get<OrderResponse[]>(`/users/${userId}/orders`)
+  return data
+}
+
+export async function listUserPayments(userId: number) {
+  const { data } = await http.get<PaymentResponse[]>(`/users/${userId}/payments`)
   return data
 }

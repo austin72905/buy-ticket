@@ -2,53 +2,69 @@
 import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import Button from 'primevue/button'
-import Card from 'primevue/card'
-import Tag from 'primevue/tag'
-
-import { env } from '../config/env'
 
 const route = useRoute()
 
 const links = [
   { label: 'Events', to: '/events' },
-  { label: 'Queue', to: '/queue' },
-  { label: 'Checkout', to: '/checkout' },
+  { label: 'Tickets', to: '/events' },
+  { label: 'Highlights', to: '/events' },
+  { label: 'FAQ', to: '/events' },
+  { label: 'Shop', to: '/events' },
 ]
 
-const title = computed(() => {
-  if (route.name === 'queue') return 'Queue API Playground'
-  if (route.name === 'checkout') return 'Checkout API Playground'
-  return 'Event API Playground'
+const step = computed(() => {
+  if (route.name === 'payment') return 5
+  if (route.name === 'order-review') return 4
+  if (route.name === 'reservation-review') return 3
+  if (route.name === 'ticket-select') return 2
+  if (route.name === 'event-info') return 1
+  return 0
 })
 </script>
 
 <template>
-  <div class="shell">
-    <header class="hero-panel">
-      <div>
-        <p class="eyebrow">buy-ticket frontend</p>
-        <h1>{{ title }}</h1>
-        <p class="hero-copy">
-          Vue frontend connected to the current Go API, with shared booking flow state,
-          unified request status, and environment-based API config.
-        </p>
-      </div>
-      <div class="hero-meta">
-        <Tag severity="info" value="Vue 3 + PrimeVue + Axios" />
-        <Tag severity="secondary" :value="`API ${env.apiBaseUrl}`" />
+  <div class="site">
+    <header class="site-header">
+      <RouterLink to="/events" class="brand">
+        <span class="brand-mark">BT</span>
+        <span>
+          <strong>buy-ticket</strong>
+          <small>ticket demo</small>
+        </span>
+      </RouterLink>
+
+      <nav class="top-nav">
+        <RouterLink v-for="link in links" :key="link.label" :to="link.to">
+          {{ link.label }}
+        </RouterLink>
+      </nav>
+
+      <div class="header-actions">
+        <Button icon="pi pi-user" rounded text severity="secondary" aria-label="Member" />
+        <Button icon="pi pi-shopping-cart" rounded text severity="secondary" aria-label="Cart" />
       </div>
     </header>
 
-    <nav class="nav-tabs">
-      <RouterLink v-for="link in links" :key="link.to" :to="link.to" class="nav-link">
-        <Button :label="link.label" :severity="route.path === link.to ? 'contrast' : 'secondary'" />
-      </RouterLink>
-    </nav>
+    <div
+      v-if="
+        route.name === 'event-info' ||
+        route.name === 'ticket-select' ||
+        route.name === 'reservation-review' ||
+        route.name === 'order-review' ||
+        route.name === 'payment'
+      "
+      class="checkout-steps"
+    >
+      <div :class="['step', { active: step === 1 }]">Event / Product</div>
+      <div :class="['step', { active: step === 2 }]">Seat / Quantity</div>
+      <div class="step">Cart</div>
+      <div class="step">Checkout</div>
+      <div class="step">Complete</div>
+    </div>
 
-    <Card class="content-card">
-      <template #content>
-        <slot />
-      </template>
-    </Card>
+    <main class="page-shell">
+      <slot />
+    </main>
   </div>
 </template>

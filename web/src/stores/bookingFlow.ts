@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 import {
+  cancelReservation,
   createOrder,
   getAvailability,
   getEvent,
@@ -32,6 +33,7 @@ type TaskKey =
   | 'queueJoin'
   | 'queueStatus'
   | 'reserve'
+  | 'cancelReservation'
   | 'createOrder'
   | 'fetchOrder'
   | 'payOrder'
@@ -248,6 +250,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
         purchase_token: purchaseToken.value,
       }),
     )
+    order.value = null
     payment.value = null
   }
 
@@ -266,6 +269,22 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
         expires_at: expiresAt,
       }),
     )
+  }
+
+  async function cancelReservationAction() {
+    if (!reservation.value) {
+      setError('cancelReservation', 'Reservation is required.')
+      return
+    }
+
+    reservation.value = await runTask('cancelReservation', () =>
+      cancelReservation({
+        reservation_id: reservation.value!.id,
+        cancelled_at: new Date().toISOString(),
+      }),
+    )
+    order.value = null
+    payment.value = null
   }
 
   async function fetchOrderAction() {
@@ -296,6 +315,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
 
   return {
     availability,
+    cancelReservationAction,
     clearError,
     createOrderAction,
     currentEvent,

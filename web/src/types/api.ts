@@ -80,6 +80,16 @@ export interface ReserveTicketRequest {
   purchase_token: string
 }
 
+export interface CancelReservationRequest {
+  reservation_id: number
+  cancelled_at: string
+}
+
+export interface ExpireReservationRequest {
+  reservation_id: number
+  expired_at: string
+}
+
 export interface ReservationResponse {
   id: number
   event_id: number

@@ -1,154 +1,86 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import Button from 'primevue/button'
-import Card from 'primevue/card'
-import Column from 'primevue/column'
-import DataTable from 'primevue/datatable'
-import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 
 import StateBanner from '../components/StateBanner.vue'
 import AppShell from '../layouts/AppShell.vue'
 import { useBookingFlowStore } from '../stores/bookingFlow'
+import type { EventResponse } from '../types/api'
 
 const flow = useBookingFlowStore()
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleString()
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('zh-TW', {
-    style: 'currency',
-    currency: 'TWD',
-    maximumFractionDigits: 0,
-  }).format(value)
-}
-
-async function onEventChange(eventId: number | null) {
-  if (!eventId) return
-  try {
-    await flow.selectEvent(eventId)
-  } catch {}
-}
-
-async function reloadCurrentEvent() {
-  try {
-    if (flow.selectedEventId) {
-      await flow.loadEventBundle(flow.selectedEventId)
-      return
-    }
-
-    await flow.loadEvents()
-  } catch {}
-}
-
-onMounted(async () => {
-  try {
-    await flow.loadEvents()
-
-    if (flow.selectedEventId) {
-      await flow.selectEvent(flow.selectedEventId)
-    }
-  } catch {}
+const displayEvents = computed(() => {
+  if (flow.events.length === 0) return []
+  const repeated = [...flow.events]
+  while (repeated.length < 8) {
+    repeated.push(...flow.events)
+  }
+  return repeated.slice(0, 8).map((event, index) => ({ ...event, displayId: `${event.id}-${index}` }))
 })
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString('zh-TW', {
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+  })
+}
+
+function posterClass(index: number) {
+  return `poster poster-${(index % 6) + 1}`
+}
+
+function shortTitle(event: EventResponse) {
+  return event.name.length > 34 ? `${event.name.slice(0, 34)}...` : event.name
+}
+
+async function reload() {
+  try {
+    await flow.loadEvents()
+  } catch {}
+}
+
+onMounted(reload)
 </script>
 
 <template>
   <AppShell>
-    <section class="stack">
-      <div class="toolbar">
-        <div class="field-inline grow">
-          <label for="eventId">event_id</label>
-          <Select
-            id="eventId"
-            :model-value="flow.selectedEventId"
-            :options="flow.events"
-            option-label="name"
-            option-value="id"
-            placeholder="Select event"
-            class="full-width"
-            :loading="flow.isPending('events')"
-            @update:model-value="onEventChange"
-          />
-        </div>
-        <Button
-          label="Reload event bundle"
-          icon="pi pi-refresh"
-          :loading="flow.isPending('eventBundle')"
-          @click="reloadCurrentEvent"
-        />
-      </div>
-
-      <StateBanner
-        :loading="flow.isPending('events') || flow.isPending('eventBundle')"
-        :error="flow.getError('events') || flow.getError('eventBundle')"
-        loading-text="Loading events and availability..."
-        :retryable="true"
-        @retry="reloadCurrentEvent"
-      />
-
-      <div v-if="flow.currentEvent" class="grid-two">
-        <Card>
-          <template #title>{{ flow.currentEvent.name }}</template>
-          <template #subtitle>{{ flow.currentEvent.venue }}</template>
-          <template #content>
-            <div class="detail-list">
-              <div><span>sale_start_at</span><strong>{{ formatDate(flow.currentEvent.sale_start_at) }}</strong></div>
-              <div><span>sale_end_at</span><strong>{{ formatDate(flow.currentEvent.sale_end_at) }}</strong></div>
-              <div><span>start_at</span><strong>{{ formatDate(flow.currentEvent.start_at) }}</strong></div>
-            </div>
-          </template>
-        </Card>
-
-        <Card>
-          <template #title>Sale Status</template>
-          <template #content>
-            <div v-if="flow.saleStatus" class="detail-list">
-              <div><span>is_on_sale</span><Tag :severity="flow.saleStatus.is_on_sale ? 'success' : 'danger'" :value="String(flow.saleStatus.is_on_sale)" /></div>
-              <div><span>can_join_queue</span><Tag :severity="flow.saleStatus.can_join_queue ? 'success' : 'warning'" :value="String(flow.saleStatus.can_join_queue)" /></div>
-              <div><span>can_reserve</span><Tag :severity="flow.saleStatus.can_reserve ? 'success' : 'warning'" :value="String(flow.saleStatus.can_reserve)" /></div>
-              <div><span>server_time</span><strong>{{ formatDate(flow.saleStatus.server_time) }}</strong></div>
-            </div>
-          </template>
-        </Card>
-      </div>
-
-      <div class="grid-two">
-        <Card>
-          <template #title>Sections</template>
-          <template #content>
-            <DataTable :value="flow.sections" size="small" data-key="id">
-              <Column field="name" header="Section" />
-              <Column header="Price">
-                <template #body="{ data }">
-                  {{ formatCurrency(data.price) }}
-                </template>
-              </Column>
-              <Column field="purchase_limit" header="Limit" />
-              <Column field="reserved_quantity" header="Reserved" />
-              <Column field="sold_quantity" header="Sold" />
-            </DataTable>
-          </template>
-        </Card>
-
-        <Card>
-          <template #title>Availability</template>
-          <template #content>
-            <DataTable :value="flow.availability" size="small" data-key="section_id">
-              <Column field="name" header="Section" />
-              <Column header="Price">
-                <template #body="{ data }">
-                  {{ formatCurrency(data.price) }}
-                </template>
-              </Column>
-              <Column field="available_quantity" header="Available" />
-              <Column field="reserved_quantity" header="Reserved" />
-              <Column field="sold_quantity" header="Sold" />
-            </DataTable>
-          </template>
-        </Card>
-      </div>
+    <section class="category-title">
+      <span></span>
+      <h1>Concerts</h1>
+      <span></span>
     </section>
+
+    <StateBanner
+      :loading="flow.isPending('events')"
+      :error="flow.getError('events')"
+      loading-text="Loading events..."
+      :retryable="true"
+      @retry="reload"
+    />
+
+    <section class="event-grid">
+      <RouterLink
+        v-for="(event, index) in displayEvents"
+        :key="event.displayId"
+        class="event-card"
+        :to="`/events/${event.id}`"
+      >
+        <div :class="posterClass(index)">
+          <small>{{ formatDate(event.start_at) }}</small>
+          <strong>{{ event.name }}</strong>
+          <span>{{ event.venue }}</span>
+        </div>
+        <h2>{{ shortTitle(event) }}</h2>
+        <Tag :value="event.status === 1 ? 'On sale' : 'Preparing'" severity="danger" />
+      </RouterLink>
+    </section>
+
+    <div v-if="flow.events.length === 0 && !flow.isPending('events')" class="empty-panel">
+      <p>No events from backend yet.</p>
+      <Button label="Reload" icon="pi pi-refresh" @click="reload" />
+    </div>
   </AppShell>
 </template>
