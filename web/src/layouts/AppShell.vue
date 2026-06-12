@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import Button from 'primevue/button'
 
+import { useBookingFlowStore } from '../stores/bookingFlow'
+
 const route = useRoute()
+const flow = useBookingFlowStore()
 
 const links = [
   { label: 'Events', to: '/events' },
@@ -20,6 +23,18 @@ const step = computed(() => {
   if (route.name === 'ticket-select') return 2
   if (route.name === 'event-info') return 1
   return 0
+})
+
+async function logout() {
+  try {
+    await flow.logoutAction()
+  } catch {}
+}
+
+onMounted(async () => {
+  try {
+    await flow.loadMe()
+  } catch {}
 })
 </script>
 
@@ -41,7 +56,14 @@ const step = computed(() => {
       </nav>
 
       <div class="header-actions">
-        <Button icon="pi pi-user" rounded text severity="secondary" aria-label="Member" />
+        <div v-if="flow.currentUser" class="member-chip">
+          <span>{{ flow.currentUser.name }}</span>
+          <Button icon="pi pi-sign-out" rounded text severity="secondary" aria-label="Logout" @click="logout" />
+        </div>
+        <div v-else class="auth-panel">
+          <RouterLink class="header-link" to="/login">Login</RouterLink>
+          <RouterLink class="header-link header-link--primary" to="/register">Register</RouterLink>
+        </div>
         <Button icon="pi pi-shopping-cart" rounded text severity="secondary" aria-label="Cart" />
       </div>
     </header>

@@ -49,7 +49,6 @@ export interface SaleStatusResponse {
 
 export interface JoinQueueRequest {
   event_id: number
-  user_id: number
   client_id: string
   request_id: string
   channel: string
@@ -72,7 +71,6 @@ export interface QueueStatusResponse {
 }
 
 export interface ReserveTicketRequest {
-  user_id: number
   event_id: number
   section_id: number
   quantity: number
@@ -143,6 +141,25 @@ export interface PaymentResponse {
   status: number
   paid_at?: string
   failed_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface RegisterRequest {
+  name: string
+  email: string
+  password: string
+}
+
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+export interface UserResponse {
+  id: number
+  name: string
+  email: string
   created_at: string
   updated_at: string
 }

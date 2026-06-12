@@ -6,13 +6,17 @@ import {
   createOrder,
   getAvailability,
   getEvent,
+  getMe,
   getOrder,
   getQueueStatus,
   getSaleStatus,
   getSections,
   joinQueue,
   listEvents,
+  login,
+  logout,
   payOrder,
+  register,
   reserveTicket,
 } from '../api/booking'
 import type {
@@ -24,9 +28,11 @@ import type {
   SaleStatusResponse,
   SectionAvailabilityResponse,
   SectionResponse,
+  UserResponse,
 } from '../types/api'
 
 type TaskKey =
+  | 'auth'
   | 'events'
   | 'eventBundle'
   | 'sections'
@@ -62,7 +68,7 @@ function toErrorMessage(error: unknown) {
 }
 
 export const useBookingFlowStore = defineStore('bookingFlow', () => {
-  const userId = ref(1)
+  const currentUser = ref<UserResponse | null>(null)
   const selectedEventId = ref<number | null>(null)
   const selectedSectionId = ref<number | null>(null)
 
@@ -84,6 +90,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
   const selectedSection = computed(
     () => sections.value.find((section) => section.id === selectedSectionId.value) ?? null,
   )
+  const userId = computed(() => currentUser.value?.id ?? 0)
 
   function isPending(key: TaskKey) {
     return Boolean(pending.value[key])
@@ -153,6 +160,42 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     }
   }
 
+  async function loadMe() {
+    currentUser.value = await runTask('auth', getMe)
+  }
+
+  async function loginAction(input: { email: string; password: string }) {
+    currentUser.value = await runTask('auth', () => login(input))
+  }
+
+  async function registerAction(input: { name: string; email: string; password: string }) {
+    currentUser.value = await runTask('auth', () => register(input))
+  }
+
+  async function logoutAction() {
+    await runTask('auth', logout)
+    currentUser.value = null
+    resetQueueFlow()
+    resetCheckout()
+  }
+
+  async function loginDemoUser() {
+    const demoUser = {
+      name: 'Demo Buyer',
+      email: 'demo@buy-ticket.local',
+      password: 'password123',
+    }
+
+    try {
+      await loginAction({
+        email: demoUser.email,
+        password: demoUser.password,
+      })
+    } catch {
+      await registerAction(demoUser)
+    }
+  }
+
   async function loadEventBundle(eventId: number) {
     const [event, nextSections, nextAvailability, nextSaleStatus] = await runTask(
       'eventBundle',
@@ -209,7 +252,6 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     queueStatus.value = await runTask('queueJoin', () =>
       joinQueue({
         event_id: selectedEventId.value as number,
-        user_id: userId.value,
         client_id: payload.clientId,
         request_id: payload.requestId,
         channel: payload.channel,
@@ -242,7 +284,6 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
 
     reservation.value = await runTask('reserve', () =>
       reserveTicket({
-        user_id: userId.value,
         event_id: selectedEventId.value as number,
         section_id: selectedSectionId.value as number,
         quantity: input.quantity,
@@ -283,6 +324,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
         cancelled_at: new Date().toISOString(),
       }),
     )
+    resetQueueFlow()
     order.value = null
     payment.value = null
   }
@@ -318,6 +360,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     cancelReservationAction,
     clearError,
     createOrderAction,
+    currentUser,
     currentEvent,
     errors,
     events,
@@ -327,6 +370,10 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     joinQueueAction,
     loadEventBundle,
     loadEvents,
+    loadMe,
+    loginAction,
+    loginDemoUser,
+    logoutAction,
     order,
     payment,
     purchaseToken,
@@ -334,6 +381,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     queueToken,
     refreshQueueStatus,
     refreshSections,
+    registerAction,
     reservation,
     reserveTicketAction,
     resetCheckout,

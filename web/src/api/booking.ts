@@ -5,15 +5,18 @@ import type {
   EventResponse,
   ExpireReservationRequest,
   JoinQueueRequest,
+  LoginRequest,
   OrderResponse,
   PaymentResponse,
   PayOrderRequest,
   QueueStatusResponse,
+  RegisterRequest,
   ReservationResponse,
   ReserveTicketRequest,
   SaleStatusResponse,
   SectionAvailabilityResponse,
   SectionResponse,
+  UserResponse,
 } from '../types/api'
 
 export async function listEvents() {
@@ -40,6 +43,25 @@ export async function getSaleStatus(eventId: number) {
   const { data } = await http.get<SaleStatusResponse>('/sale/status', {
     params: { event_id: eventId },
   })
+  return data
+}
+
+export async function register(payload: RegisterRequest) {
+  const { data } = await http.post<UserResponse>('/auth/register', payload)
+  return data
+}
+
+export async function login(payload: LoginRequest) {
+  const { data } = await http.post<UserResponse>('/auth/login', payload)
+  return data
+}
+
+export async function logout() {
+  await http.post('/auth/logout')
+}
+
+export async function getMe() {
+  const { data } = await http.get<UserResponse>('/me')
   return data
 }
 
@@ -98,17 +120,17 @@ export async function getPaymentByPaymentNo(paymentNo: string) {
   return data
 }
 
-export async function listUserReservations(userId: number) {
-  const { data } = await http.get<ReservationResponse[]>(`/users/${userId}/reservations`)
+export async function listMyReservations() {
+  const { data } = await http.get<ReservationResponse[]>('/me/reservations')
   return data
 }
 
-export async function listUserOrders(userId: number) {
-  const { data } = await http.get<OrderResponse[]>(`/users/${userId}/orders`)
+export async function listMyOrders() {
+  const { data } = await http.get<OrderResponse[]>('/me/orders')
   return data
 }
 
-export async function listUserPayments(userId: number) {
-  const { data } = await http.get<PaymentResponse[]>(`/users/${userId}/payments`)
+export async function listMyPayments() {
+  const { data } = await http.get<PaymentResponse[]>('/me/payments')
   return data
 }
