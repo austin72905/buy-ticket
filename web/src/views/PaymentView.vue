@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
@@ -14,7 +14,7 @@ const router = useRouter()
 const flow = useBookingFlowStore()
 
 const eventId = computed(() => Number(route.params.eventId))
-const paymentMethod = ref('credit_card')
+const paymentMethod = 'credit_card'
 
 function formatCurrency(value?: number) {
   return new Intl.NumberFormat('zh-TW', {
@@ -29,7 +29,7 @@ async function payOrder() {
 
   try {
     await flow.payOrderAction({
-      method: paymentMethod.value,
+      method: paymentMethod,
     })
   } catch {}
 }
@@ -86,8 +86,10 @@ async function payOrder() {
 
         <aside class="action-panel">
           <h2>Payment Method</h2>
-          <label for="paymentMethod">Method</label>
-          <input id="paymentMethod" v-model="paymentMethod" class="plain-input" />
+          <div class="readonly-field">
+            <span>Method</span>
+            <strong>{{ paymentMethod }}</strong>
+          </div>
           <Button
             label="Pay Now"
             severity="danger"

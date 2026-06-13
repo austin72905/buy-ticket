@@ -426,11 +426,12 @@ a {
 
 .seat-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 350px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
   min-height: 610px;
 }
 
 .map-panel {
+  min-width: 0;
   padding: 36px 28px;
   border-right: 1px solid #e5e5e5;
 }
@@ -510,7 +511,9 @@ a {
   display: grid;
   align-content: start;
   gap: 10px;
+  min-width: 0;
   padding: 28px 24px;
+  overflow: hidden;
 }
 
 .ticket-panel-head,
@@ -556,6 +559,7 @@ a {
 .result-box {
   display: grid;
   gap: 12px;
+  min-width: 0;
   margin-top: 14px;
   padding: 16px;
   background: #f5f5f5;
@@ -566,6 +570,17 @@ a {
 .result-box div {
   grid-template-columns: 100px 1fr;
   align-items: center;
+  min-width: 0;
+}
+
+.order-line > * {
+  min-width: 0;
+}
+
+.order-box .p-inputnumber,
+.order-box .p-inputnumber-input {
+  width: 100%;
+  min-width: 0;
 }
 
 .small-muted,
@@ -577,12 +592,13 @@ a {
 
 .flow-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
   gap: 0;
   min-height: 430px;
 }
 
 .summary-card {
+  min-width: 0;
   padding: 34px 38px;
   border-right: 1px solid #e5e5e5;
 }
@@ -617,6 +633,7 @@ a {
   display: grid;
   align-content: start;
   gap: 14px;
+  min-width: 0;
   padding: 34px 28px;
 }
 
