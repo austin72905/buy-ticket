@@ -6,6 +6,7 @@ import Tag from 'primevue/tag'
 
 import StateBanner from '../components/StateBanner.vue'
 import AppShell from '../layouts/AppShell.vue'
+import { canPayOrder, orderStatusLabel, orderStatusSeverity } from '../lib/orderStatus'
 import { useBookingFlowStore } from '../stores/bookingFlow'
 
 const route = useRoute()
@@ -72,7 +73,7 @@ async function refreshOrder() {
             </div>
             <div>
               <span>Status</span>
-              <Tag :value="String(flow.order.status)" severity="warning" />
+              <Tag :value="orderStatusLabel(flow.order.status)" :severity="orderStatusSeverity(flow.order.status)" />
             </div>
             <div>
               <span>Quantity</span>
@@ -95,7 +96,12 @@ async function refreshOrder() {
             Confirm the order amount before moving to payment. The payment page calls the backend payment API.
           </p>
           <Button label="Refresh Order" severity="secondary" @click="refreshOrder" />
-          <Button label="Continue To Payment" severity="danger" @click="router.push(`/events/${eventId}/payment`)" />
+          <Button
+            label="Continue To Payment"
+            severity="danger"
+            :disabled="!canPayOrder(flow.order.status)"
+            @click="router.push(`/events/${eventId}/payment`)"
+          />
         </aside>
       </div>
     </section>

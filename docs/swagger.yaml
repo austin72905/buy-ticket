@@ -122,16 +122,10 @@ definitions:
     type: object
   controller.PayOrderRequest:
     properties:
-      amount:
-        type: integer
       method:
         type: string
       order_id:
         type: integer
-      paid_at:
-        type: string
-      payment_no:
-        type: string
     type: object
   controller.PaymentResponse:
     properties:

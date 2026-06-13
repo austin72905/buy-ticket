@@ -101,6 +101,10 @@ sequenceDiagram
     API-->>Client: order response
 
     Client->>API: POST /payments
+    API->>Booking: Load order
+    Booking->>Booking: amount = order.total_amount
+    Booking->>Booking: Generate payment_no
+    Booking->>Booking: paid_at = server time
     API->>Booking: PayOrder(...)
     Booking-->>API: payment / order paid / reservation confirmed
     API-->>Client: payment response

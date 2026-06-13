@@ -5,6 +5,7 @@ import EventDetailView from '../views/EventDetailView.vue'
 import EventInfoView from '../views/EventInfoView.vue'
 import EventsView from '../views/EventsView.vue'
 import LoginView from '../views/LoginView.vue'
+import MyOrdersView from '../views/MyOrdersView.vue'
 import OrderView from '../views/OrderView.vue'
 import PaymentView from '../views/PaymentView.vue'
 import RegisterView from '../views/RegisterView.vue'
@@ -32,6 +33,12 @@ const router = createRouter({
       path: '/register',
       name: 'register',
       component: RegisterView,
+    },
+    {
+      path: '/orders',
+      name: 'my-orders',
+      component: MyOrdersView,
+      meta: { requiresAuth: true },
     },
     {
       path: '/events/:eventId',

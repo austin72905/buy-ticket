@@ -6,6 +6,7 @@ import Tag from 'primevue/tag'
 
 import StateBanner from '../components/StateBanner.vue'
 import AppShell from '../layouts/AppShell.vue'
+import { canPayOrder, orderStatusLabel, orderStatusSeverity } from '../lib/orderStatus'
 import { useBookingFlowStore } from '../stores/bookingFlow'
 
 const route = useRoute()
@@ -13,7 +14,6 @@ const router = useRouter()
 const flow = useBookingFlowStore()
 
 const eventId = computed(() => Number(route.params.eventId))
-const paymentNo = ref(`PAY-${Date.now()}`)
 const paymentMethod = ref('credit_card')
 
 function formatCurrency(value?: number) {
@@ -25,9 +25,10 @@ function formatCurrency(value?: number) {
 }
 
 async function payOrder() {
+  if (!flow.order || !canPayOrder(flow.order.status)) return
+
   try {
     await flow.payOrderAction({
-      paymentNo: paymentNo.value,
       method: paymentMethod.value,
     })
   } catch {}
@@ -69,6 +70,10 @@ async function payOrder() {
               <strong>{{ formatCurrency(flow.order.total_amount) }}</strong>
             </div>
             <div>
+              <span>Order Status</span>
+              <Tag :value="orderStatusLabel(flow.order.status)" :severity="orderStatusSeverity(flow.order.status)" />
+            </div>
+            <div>
               <span>Payment Status</span>
               <Tag :value="flow.payment ? String(flow.payment.status) : 'Not paid'" severity="success" />
             </div>
@@ -81,17 +86,18 @@ async function payOrder() {
 
         <aside class="action-panel">
           <h2>Payment Method</h2>
-          <label for="paymentNo">Payment No</label>
-          <input id="paymentNo" v-model="paymentNo" class="plain-input" />
           <label for="paymentMethod">Method</label>
           <input id="paymentMethod" v-model="paymentMethod" class="plain-input" />
           <Button
             label="Pay Now"
             severity="danger"
-            :disabled="Boolean(flow.payment)"
+            :disabled="Boolean(flow.payment) || !canPayOrder(flow.order.status)"
             :loading="flow.isPending('payOrder')"
             @click="payOrder"
           />
+          <p v-if="!canPayOrder(flow.order.status)" class="small-muted">
+            Only pending payment orders can be paid.
+          </p>
           <div v-if="flow.payment" class="success-panel">
             <strong>Payment completed</strong>
             <span>The order, reservation, and section sale count are updated by the backend.</span>

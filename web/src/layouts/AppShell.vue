@@ -11,6 +11,7 @@ const flow = useBookingFlowStore()
 const links = [
   { label: 'Events', to: '/events' },
   { label: 'Tickets', to: '/events' },
+  { label: 'My Orders', to: '/orders' },
   { label: 'Highlights', to: '/events' },
   { label: 'FAQ', to: '/events' },
   { label: 'Shop', to: '/events' },

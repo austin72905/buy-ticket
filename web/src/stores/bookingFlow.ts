@@ -13,6 +13,7 @@ import {
   getSections,
   joinQueue,
   listEvents,
+  listMyOrders,
   login,
   logout,
   payOrder,
@@ -42,6 +43,7 @@ type TaskKey =
   | 'cancelReservation'
   | 'createOrder'
   | 'fetchOrder'
+  | 'myOrders'
   | 'payOrder'
 
 function toErrorMessage(error: unknown) {
@@ -80,6 +82,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
   const queueStatus = ref<QueueStatusResponse | null>(null)
   const reservation = ref<ReservationResponse | null>(null)
   const order = ref<OrderResponse | null>(null)
+  const myOrders = ref<OrderResponse[]>([])
   const payment = ref<PaymentResponse | null>(null)
 
   const pending = ref<Record<string, boolean>>({})
@@ -175,6 +178,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
   async function logoutAction() {
     await runTask('auth', logout)
     currentUser.value = null
+    myOrders.value = []
     resetQueueFlow()
     resetCheckout()
   }
@@ -315,6 +319,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
         purchase_token: purchaseToken.value,
       }),
     )
+    resetQueueFlow()
   }
 
   async function cancelReservationAction() {
@@ -342,7 +347,15 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     order.value = await runTask('fetchOrder', () => getOrder(order.value!.id))
   }
 
-  async function payOrderAction(input: { paymentNo: string; method: string }) {
+  async function loadMyOrders() {
+    myOrders.value = await runTask('myOrders', listMyOrders)
+  }
+
+  function selectOrder(nextOrder: OrderResponse) {
+    order.value = nextOrder
+  }
+
+  async function payOrderAction(input: { method: string }) {
     if (!order.value) {
       setError('payOrder', 'Order is required.')
       return
@@ -351,10 +364,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     payment.value = await runTask('payOrder', () =>
       payOrder({
         order_id: order.value!.id,
-        payment_no: input.paymentNo,
         method: input.method,
-        amount: order.value!.total_amount,
-        paid_at: new Date().toISOString(),
       }),
     )
   }
@@ -378,6 +388,8 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     loginAction,
     loginDemoUser,
     logoutAction,
+    loadMyOrders,
+    myOrders,
     order,
     payment,
     purchaseToken,
@@ -394,6 +406,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     saleStatus,
     sections,
     selectEvent,
+    selectOrder,
     selectedEventId,
     selectedSection,
     selectedSectionId,

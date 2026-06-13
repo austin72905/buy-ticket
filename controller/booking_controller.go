@@ -541,11 +541,8 @@ func (c *BookingController) PayOrder(ctx *gin.Context) {
 	}
 
 	payment, err := c.BookingService.PayOrder(ctx.Request.Context(), service.PayOrderInput{
-		OrderID:   request.OrderID,
-		PaymentNo: request.PaymentNo,
-		Method:    request.Method,
-		Amount:    request.Amount,
-		PaidAt:    request.PaidAt,
+		OrderID: request.OrderID,
+		Method:  request.Method,
 	})
 	if err != nil {
 		writeError(ctx, http.StatusBadRequest, err)

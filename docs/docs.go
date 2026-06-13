@@ -1004,20 +1004,11 @@ const docTemplate = `{
         "controller.PayOrderRequest": {
             "type": "object",
             "properties": {
-                "amount": {
-                    "type": "integer"
-                },
                 "method": {
                     "type": "string"
                 },
                 "order_id": {
                     "type": "integer"
-                },
-                "paid_at": {
-                    "type": "string"
-                },
-                "payment_no": {
-                    "type": "string"
                 }
             }
         },

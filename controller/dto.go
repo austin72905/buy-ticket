@@ -42,11 +42,8 @@ type CreateOrderRequest struct {
 }
 
 type PayOrderRequest struct {
-	OrderID   int64     `json:"order_id"`
-	PaymentNo string    `json:"payment_no"`
-	Method    string    `json:"method"`
-	Amount    int64     `json:"amount"`
-	PaidAt    time.Time `json:"paid_at"`
+	OrderID int64  `json:"order_id"`
+	Method  string `json:"method"`
 }
 
 type ECPayCallbackRequest struct {

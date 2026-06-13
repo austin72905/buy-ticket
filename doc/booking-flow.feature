@@ -81,7 +81,11 @@ Feature: Ticket booking flow
     Then the user can enter payment information
     When the user clicks "Pay Now"
     Then the frontend calls POST /payments
-    And the request includes order_id, payment_no, method, amount, and paid_at
+    And the request includes order_id and method
+    And the backend loads the order
+    And the backend sets amount from order.total_amount
+    And the backend generates payment_no
+    And the backend sets paid_at from server time
     And the backend marks the payment as paid
     And the backend marks the order as paid
     And the backend confirms the reservation

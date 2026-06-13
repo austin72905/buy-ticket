@@ -655,6 +655,54 @@ a {
   border: 1px solid #b8e2ca;
 }
 
+.orders-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px;
+  background: #ffffff;
+}
+
+.orders-toolbar h2 {
+  margin: 0 0 4px;
+}
+
+.order-history {
+  display: grid;
+  gap: 12px;
+}
+
+.order-history-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 24px;
+  background: #ffffff;
+}
+
+.order-history-main {
+  display: grid;
+  grid-template-columns: 1.5fr 0.7fr 0.8fr 0.7fr 1fr;
+  gap: 18px;
+}
+
+.order-history-main div {
+  display: grid;
+  gap: 4px;
+}
+
+.order-history-main span {
+  color: #5f6b7a;
+  font-size: 13px;
+}
+
+.order-history-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .auth-page {
   display: grid;
   place-items: start center;
@@ -782,6 +830,8 @@ a {
   .seat-layout,
   .queue-card,
   .flow-layout,
+  .order-history-card,
+  .order-history-main,
   .status-list div {
     grid-template-columns: 1fr;
   }

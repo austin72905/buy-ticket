@@ -183,17 +183,17 @@ Content-Type: application/json
 ```json
 {
   "order_id": 1,
-  "payment_no": "PAY-TEST-001",
-  "method": "credit_card",
-  "amount": 5600,
-  "paid_at": "2026-06-10T18:50:00+08:00"
+  "method": "credit_card"
 }
 ```
 
 Checks:
 
-- `amount` must match `order.total_amount`
-- Example: `2800 * 2 = 5600`
+- The frontend only sends `order_id` and `method`.
+- The backend loads the order and sets `amount = order.total_amount`.
+- The backend generates `payment_no`.
+- The backend sets `paid_at` from server time.
+- The backend marks the payment paid, marks the order paid, and confirms the reservation.
 
 ### Step 10: Check Payment
 

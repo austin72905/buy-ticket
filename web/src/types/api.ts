@@ -127,10 +127,7 @@ export interface OrderResponse {
 
 export interface PayOrderRequest {
   order_id: number
-  payment_no: string
   method: string
-  amount: number
-  paid_at: string
 }
 
 export interface PaymentResponse {

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"buy-ticket/db/sqlc"
@@ -295,11 +296,26 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 			return err
 		}
 
-		if !order.CanPay(input.PaidAt) {
+		paidAt := input.PaidAt
+		if paidAt.IsZero() {
+			paidAt = time.Now()
+		}
+
+		paymentNo := input.PaymentNo
+		if paymentNo == "" {
+			paymentNo = generatePaymentNo(paidAt)
+		}
+
+		amount := input.Amount
+		if amount == 0 {
+			amount = order.TotalAmount
+		}
+
+		if !order.CanPay(paidAt) {
 			return ErrOrderCannotBePaid
 		}
 
-		if input.Amount != order.TotalAmount {
+		if amount != order.TotalAmount {
 			return ErrPaymentAmountMismatch
 		}
 
@@ -308,7 +324,7 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 			return err
 		}
 
-		if !reservation.Confirm(input.PaidAt) {
+		if !reservation.Confirm(paidAt) {
 			return ErrReservationAlreadyUsed
 		}
 
@@ -321,25 +337,25 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 			return ErrSectionNotReservable
 		}
 
-		if !order.MarkPaid(input.PaidAt) {
+		if !order.MarkPaid(paidAt) {
 			return ErrOrderCannotBePaid
 		}
 
 		payment = &domain.Payment{
 			OrderID:   order.ID,
-			PaymentNo: input.PaymentNo,
+			PaymentNo: paymentNo,
 			Method:    input.Method,
-			Amount:    input.Amount,
+			Amount:    amount,
 			Status:    domain.PaymentStatusPending,
-			CreatedAt: input.PaidAt,
-			UpdatedAt: input.PaidAt,
+			CreatedAt: paidAt,
+			UpdatedAt: paidAt,
 		}
 
-		if !payment.MarkPaid(input.PaidAt) {
+		if !payment.MarkPaid(paidAt) {
 			return ErrOrderCannotBePaid
 		}
 
-		section.UpdatedAt = input.PaidAt
+		section.UpdatedAt = paidAt
 		if err := repos.section.Save(ctx, section); err != nil {
 			return err
 		}
@@ -359,6 +375,10 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 	}
 
 	return payment, nil
+}
+
+func generatePaymentNo(paidAt time.Time) string {
+	return fmt.Sprintf("PAY-%s", paidAt.UTC().Format("20060102150405-000000000"))
 }
 
 func (s *BookingService) ExpireOrder(ctx context.Context, input ExpireOrderInput) (*domain.Order, error) {
