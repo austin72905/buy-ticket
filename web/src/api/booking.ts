@@ -100,8 +100,12 @@ export async function createOrder(payload: CreateOrderRequest) {
   return data
 }
 
-export async function payOrder(payload: PayOrderRequest) {
-  const { data } = await http.post<PaymentResponse>('/payments', payload)
+export async function payOrder(payload: PayOrderRequest, idempotencyKey: string) {
+  const { data } = await http.post<PaymentResponse>('/payments', payload, {
+    headers: {
+      'Idempotency-Key': idempotencyKey,
+    },
+  })
   return data
 }
 

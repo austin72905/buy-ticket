@@ -355,7 +355,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     order.value = nextOrder
   }
 
-  async function payOrderAction(input: { method: string }) {
+  async function payOrderAction(input: { method: string; idempotencyKey: string }) {
     if (!order.value) {
       setError('payOrder', 'Order is required.')
       return
@@ -365,7 +365,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
       payOrder({
         order_id: order.value!.id,
         method: input.method,
-      }),
+      }, input.idempotencyKey),
     )
   }
 

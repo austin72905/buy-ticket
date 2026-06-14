@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
@@ -15,6 +15,7 @@ const flow = useBookingFlowStore()
 
 const eventId = computed(() => Number(route.params.eventId))
 const paymentMethod = 'credit_card'
+const paymentIdempotencyKey = ref('')
 
 function formatCurrency(value?: number) {
   return new Intl.NumberFormat('zh-TW', {
@@ -24,15 +25,46 @@ function formatCurrency(value?: number) {
   }).format(value ?? 0)
 }
 
+function createUUID() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = Math.floor(Math.random() * 16)
+    const value = char === 'x' ? random : (random & 0x3) | 0x8
+    return value.toString(16)
+  })
+}
+
+function ensurePaymentIdempotencyKey() {
+  if (!paymentIdempotencyKey.value) {
+    paymentIdempotencyKey.value = createUUID()
+  }
+
+  return paymentIdempotencyKey.value
+}
+
 async function payOrder() {
   if (!flow.order || !canPayOrder(flow.order.status)) return
 
   try {
     await flow.payOrderAction({
       method: paymentMethod,
+      idempotencyKey: ensurePaymentIdempotencyKey(),
     })
+    if (flow.payment) {
+      paymentIdempotencyKey.value = ''
+    }
   } catch {}
 }
+
+watch(
+  () => flow.order?.id,
+  () => {
+    paymentIdempotencyKey.value = ''
+  },
+)
 </script>
 
 <template>
