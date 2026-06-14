@@ -1,6 +1,9 @@
 package controller
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -14,6 +17,12 @@ import (
 type BookingController struct {
 	BookingService *service.BookingService
 }
+
+const (
+	idempotencyKeyHeader     = "Idempotency-Key"
+	paymentIdempotencyRoute  = "POST /payments"
+	paymentIdempotencyMaxLen = 255
+)
 
 func NewBookingController(bookingService *service.BookingService) *BookingController {
 	return &BookingController{
@@ -508,14 +517,16 @@ func (c *BookingController) CreateOrder(ctx *gin.Context) {
 }
 
 // PayOrder godoc
-// @Summary 訂單付款
-// @Description 付款成功後確認 reservation 並轉成售出
+// @Summary Pay order
+// @Description Pay a pending order. If Idempotency-Key is provided, retries with the same request replay the first successful payment response.
 // @Tags payments
 // @Accept json
 // @Produce json
-// @Param request body PayOrderRequest true "付款請求"
+// @Param Idempotency-Key header string false "Idempotency key for safe payment retries"
+// @Param request body PayOrderRequest true "Payment request"
 // @Success 200 {object} PaymentResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Router /payments [post]
 func (c *BookingController) PayOrder(ctx *gin.Context) {
 	var request PayOrderRequest
@@ -540,6 +551,39 @@ func (c *BookingController) PayOrder(ctx *gin.Context) {
 		return
 	}
 
+	idempotencyKey := ctx.GetHeader(idempotencyKeyHeader)
+	if len(idempotencyKey) > paymentIdempotencyMaxLen {
+		writeError(ctx, http.StatusBadRequest, errors.New("idempotency key is too long"))
+		return
+	}
+	requestHash, err := hashPaymentRequest(request)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	if idempotencyKey != "" {
+		record, replay, err := c.BookingService.BeginPaymentIdempotency(ctx.Request.Context(), service.BeginIdempotencyInput{
+			Key:         idempotencyKey,
+			UserID:      user.ID,
+			Endpoint:    paymentIdempotencyRoute,
+			RequestHash: requestHash,
+			Now:         time.Now(),
+		})
+		if err != nil {
+			if errors.Is(err, service.ErrIdempotencyConflict) || errors.Is(err, service.ErrIdempotencyInProgress) {
+				writeError(ctx, http.StatusConflict, err)
+				return
+			}
+			writeError(ctx, http.StatusBadRequest, err)
+			return
+		}
+		if replay {
+			ctx.Data(*record.ResponseStatus, "application/json; charset=utf-8", record.ResponseBody)
+			return
+		}
+	}
+
 	payment, err := c.BookingService.PayOrder(ctx.Request.Context(), service.PayOrderInput{
 		OrderID: request.OrderID,
 		Method:  request.Method,
@@ -549,7 +593,20 @@ func (c *BookingController) PayOrder(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newPaymentResponse(payment))
+	response := newPaymentResponse(payment)
+	if idempotencyKey != "" {
+		responseBody, err := json.Marshal(response)
+		if err != nil {
+			writeError(ctx, http.StatusBadRequest, err)
+			return
+		}
+		if err := c.BookingService.CompletePaymentIdempotency(ctx.Request.Context(), idempotencyKey, paymentIdempotencyRoute, http.StatusOK, responseBody, time.Now()); err != nil {
+			writeError(ctx, http.StatusBadRequest, err)
+			return
+		}
+	}
+
+	ctx.JSON(http.StatusOK, response)
 }
 
 // HandleECPayCallback godoc
@@ -690,6 +747,16 @@ func (c *BookingController) CancelReservation(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, newReservationResponse(reservation))
+}
+
+func hashPaymentRequest(request PayOrderRequest) (string, error) {
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return "", err
+	}
+
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func writeError(ctx *gin.Context, statusCode int, err error) {

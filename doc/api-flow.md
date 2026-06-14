@@ -9,6 +9,7 @@ This document describes the current `buy-ticket` booking flow:
 - order
 - payment
 - background jobs
+- stock reconciliation
 
 ---
 
@@ -22,8 +23,8 @@ This document describes the current `buy-ticket` booking flow:
 6. Ready queue status returns a `purchase_token`.
 7. Create reservation with `POST /reservations` and the `purchase_token`.
 8. Create order with `POST /orders`.
-9. Pay order with `POST /payments`.
-10. Background jobs clean up expired queues, purchase tokens, and unpaid orders.
+9. Pay order with `POST /payments`; frontend should send `Idempotency-Key`.
+10. Background jobs clean up expired queues, purchase tokens, unpaid orders, and Redis stock drift.
 
 Authenticated write APIs read the current user from the session cookie. The frontend must not send `user_id` for queue join or reservation creation.
 
@@ -100,17 +101,22 @@ sequenceDiagram
     Booking-->>API: order
     API-->>Client: order response
 
-    Client->>API: POST /payments
+    Client->>API: POST /payments + Idempotency-Key
+    API->>Booking: BeginPaymentIdempotency(...)
     API->>Booking: Load order
     Booking->>Booking: amount = order.total_amount
     Booking->>Booking: Generate payment_no
     Booking->>Booking: paid_at = server time
     API->>Booking: PayOrder(...)
+    API->>Booking: CompletePaymentIdempotency(...)
     Booking-->>API: payment / order paid / reservation confirmed
     API-->>Client: payment response
 
     Job->>Booking: SweepExpiredOrders(...)
     Booking-->>Job: expired orders count
+
+    Job->>Booking: ReconcileStock(...)
+    Booking-->>Job: checked / fixed section count
 ```
 
 ---
@@ -154,7 +160,27 @@ Configuration:
 
 ---
 
-## 6. Queue Status
+## 6. Stock Reconciliation Job
+
+Redis stock reconciliation is controlled by a background job.
+
+Behavior:
+
+- Runs every 1 minute.
+- Calls `BookingService.ReconcileStock(...)`.
+- Loads section availability from PostgreSQL.
+- Compares Redis stock with DB calculated availability.
+- Fixes Redis stock when a mismatch is found.
+
+Configuration:
+
+- Job name: `stock-reconcile`
+- Cron spec: `0 * * * * *`
+- Details: see `doc/stock-reconciliation.md`
+
+---
+
+## 7. Queue Status
 
 Queue status uses an integer enum:
 
@@ -164,7 +190,7 @@ Queue status uses an integer enum:
 
 ---
 
-## 7. Key APIs
+## 8. Key APIs
 
 Public APIs:
 
@@ -194,10 +220,11 @@ Authenticated APIs:
 
 ---
 
-## 8. Remaining Work
+## 9. Remaining Work
 
 - Queue timeout cleanup
 - Purchase token cleanup
-- Redis and Lua based stock protection
+- Stock consistency hardening: see `doc/stock-reconciliation.md`
+- Payment idempotency: see `doc/payment-idempotency.md`
 - Payment callback / webhook hardening
 - RabbitMQ delay or DLQ timeout flow

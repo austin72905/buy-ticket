@@ -378,7 +378,7 @@ const docTemplate = `{
         },
         "/payments": {
             "post": {
-                "description": "付款成功後確認 reservation 並轉成售出",
+                "description": "Pay a pending order. If Idempotency-Key is provided, retries with the same request replay the first successful payment response.",
                 "consumes": [
                     "application/json"
                 ],
@@ -388,10 +388,16 @@ const docTemplate = `{
                 "tags": [
                     "payments"
                 ],
-                "summary": "訂單付款",
+                "summary": "Pay order",
                 "parameters": [
                     {
-                        "description": "付款請求",
+                        "type": "string",
+                        "description": "Idempotency key for safe payment retries",
+                        "name": "Idempotency-Key",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Payment request",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -409,6 +415,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/controller.ErrorResponse"
                         }

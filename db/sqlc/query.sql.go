@@ -11,6 +11,39 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const completeIdempotencyKey = `-- name: CompleteIdempotencyKey :exec
+UPDATE idempotency_keys
+SET
+    status = $3,
+    response_status = $4,
+    response_body = $5,
+    locked_until = NULL,
+    updated_at = $6
+WHERE key = $1
+  AND endpoint = $2
+`
+
+type CompleteIdempotencyKeyParams struct {
+	Key            string             `json:"key"`
+	Endpoint       string             `json:"endpoint"`
+	Status         int16              `json:"status"`
+	ResponseStatus pgtype.Int4        `json:"response_status"`
+	ResponseBody   []byte             `json:"response_body"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error {
+	_, err := q.db.Exec(ctx, completeIdempotencyKey,
+		arg.Key,
+		arg.Endpoint,
+		arg.Status,
+		arg.ResponseStatus,
+		arg.ResponseBody,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const createEvent = `-- name: CreateEvent :one
 INSERT INTO events (
     name,
@@ -66,6 +99,75 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (Event
 		&i.EndAt,
 		&i.SaleStartAt,
 		&i.SaleEndAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createIdempotencyKey = `-- name: CreateIdempotencyKey :one
+INSERT INTO idempotency_keys (
+    key,
+    user_id,
+    endpoint,
+    request_hash,
+    status,
+    locked_until,
+    expires_at,
+    created_at,
+    updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $8
+)
+RETURNING
+    id,
+    key,
+    user_id,
+    endpoint,
+    request_hash,
+    status,
+    response_status,
+    response_body,
+    locked_until,
+    expires_at,
+    created_at,
+    updated_at
+`
+
+type CreateIdempotencyKeyParams struct {
+	Key         string             `json:"key"`
+	UserID      pgtype.Int8        `json:"user_id"`
+	Endpoint    string             `json:"endpoint"`
+	RequestHash string             `json:"request_hash"`
+	Status      int16              `json:"status"`
+	LockedUntil pgtype.Timestamptz `json:"locked_until"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) CreateIdempotencyKey(ctx context.Context, arg CreateIdempotencyKeyParams) (IdempotencyKey, error) {
+	row := q.db.QueryRow(ctx, createIdempotencyKey,
+		arg.Key,
+		arg.UserID,
+		arg.Endpoint,
+		arg.RequestHash,
+		arg.Status,
+		arg.LockedUntil,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+	)
+	var i IdempotencyKey
+	err := row.Scan(
+		&i.ID,
+		&i.Key,
+		&i.UserID,
+		&i.Endpoint,
+		&i.RequestHash,
+		&i.Status,
+		&i.ResponseStatus,
+		&i.ResponseBody,
+		&i.LockedUntil,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -569,6 +671,51 @@ func (q *Queries) GetEventByID(ctx context.Context, id int64) (Event, error) {
 		&i.EndAt,
 		&i.SaleStartAt,
 		&i.SaleEndAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getIdempotencyKey = `-- name: GetIdempotencyKey :one
+SELECT
+    id,
+    key,
+    user_id,
+    endpoint,
+    request_hash,
+    status,
+    response_status,
+    response_body,
+    locked_until,
+    expires_at,
+    created_at,
+    updated_at
+FROM idempotency_keys
+WHERE key = $1
+  AND endpoint = $2
+LIMIT 1
+`
+
+type GetIdempotencyKeyParams struct {
+	Key      string `json:"key"`
+	Endpoint string `json:"endpoint"`
+}
+
+func (q *Queries) GetIdempotencyKey(ctx context.Context, arg GetIdempotencyKeyParams) (IdempotencyKey, error) {
+	row := q.db.QueryRow(ctx, getIdempotencyKey, arg.Key, arg.Endpoint)
+	var i IdempotencyKey
+	err := row.Scan(
+		&i.ID,
+		&i.Key,
+		&i.UserID,
+		&i.Endpoint,
+		&i.RequestHash,
+		&i.Status,
+		&i.ResponseStatus,
+		&i.ResponseBody,
+		&i.LockedUntil,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

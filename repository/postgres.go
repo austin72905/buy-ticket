@@ -37,6 +37,10 @@ type PostgresPaymentRepository struct {
 	queries *db.Queries
 }
 
+type PostgresIdempotencyRepository struct {
+	queries *db.Queries
+}
+
 func NewPostgresEventRepository(queries *db.Queries) *PostgresEventRepository {
 	return &PostgresEventRepository{queries: queries}
 }
@@ -59,6 +63,10 @@ func NewPostgresOrderRepository(queries *db.Queries) *PostgresOrderRepository {
 
 func NewPostgresPaymentRepository(queries *db.Queries) *PostgresPaymentRepository {
 	return &PostgresPaymentRepository{queries: queries}
+}
+
+func NewPostgresIdempotencyRepository(queries *db.Queries) *PostgresIdempotencyRepository {
+	return &PostgresIdempotencyRepository{queries: queries}
 }
 
 func (r *PostgresEventRepository) FindByID(ctx context.Context, eventID int64) (*domain.Event, error) {
@@ -435,6 +443,51 @@ func (r *PostgresPaymentRepository) ListByUserID(ctx context.Context, userID int
 	return payments, nil
 }
 
+func (r *PostgresIdempotencyRepository) FindByKeyAndEndpoint(ctx context.Context, key, endpoint string) (*domain.IdempotencyKey, error) {
+	record, err := r.queries.GetIdempotencyKey(ctx, db.GetIdempotencyKeyParams{
+		Key:      key,
+		Endpoint: endpoint,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrIdempotencyKeyNotFound
+		}
+		return nil, err
+	}
+
+	return toDomainIdempotencyKey(record), nil
+}
+
+func (r *PostgresIdempotencyRepository) Create(ctx context.Context, record *domain.IdempotencyKey) error {
+	created, err := r.queries.CreateIdempotencyKey(ctx, db.CreateIdempotencyKeyParams{
+		Key:         record.Key,
+		UserID:      nullablePgInt8(record.UserID),
+		Endpoint:    record.Endpoint,
+		RequestHash: record.RequestHash,
+		Status:      int16(record.Status),
+		LockedUntil: nullablePgTimestamp(record.LockedUntil),
+		ExpiresAt:   toPgTimestamp(record.ExpiresAt),
+		CreatedAt:   toPgTimestamp(record.CreatedAt),
+	})
+	if err != nil {
+		return err
+	}
+
+	*record = *toDomainIdempotencyKey(created)
+	return nil
+}
+
+func (r *PostgresIdempotencyRepository) Complete(ctx context.Context, key, endpoint string, status int, responseBody []byte, now time.Time) error {
+	return r.queries.CompleteIdempotencyKey(ctx, db.CompleteIdempotencyKeyParams{
+		Key:            key,
+		Endpoint:       endpoint,
+		Status:         int16(domain.IdempotencyStatusCompleted),
+		ResponseStatus: nullablePgInt4(status),
+		ResponseBody:   responseBody,
+		UpdatedAt:      toPgTimestamp(now),
+	})
+}
+
 func toDomainEvent(record db.Event) *domain.Event {
 	return &domain.Event{
 		ID:          record.ID,
@@ -569,6 +622,35 @@ func toDomainPayment(record db.Payment) *domain.Payment {
 	return payment
 }
 
+func toDomainIdempotencyKey(record db.IdempotencyKey) *domain.IdempotencyKey {
+	idempotencyKey := &domain.IdempotencyKey{
+		ID:           record.ID,
+		Key:          record.Key,
+		Endpoint:     record.Endpoint,
+		RequestHash:  record.RequestHash,
+		Status:       domain.IdempotencyStatus(record.Status),
+		ResponseBody: record.ResponseBody,
+		ExpiresAt:    record.ExpiresAt.Time,
+		CreatedAt:    record.CreatedAt.Time,
+		UpdatedAt:    record.UpdatedAt.Time,
+	}
+
+	if record.UserID.Valid {
+		userID := record.UserID.Int64
+		idempotencyKey.UserID = &userID
+	}
+	if record.ResponseStatus.Valid {
+		responseStatus := int(record.ResponseStatus.Int32)
+		idempotencyKey.ResponseStatus = &responseStatus
+	}
+	if record.LockedUntil.Valid {
+		lockedUntil := record.LockedUntil.Time
+		idempotencyKey.LockedUntil = &lockedUntil
+	}
+
+	return idempotencyKey
+}
+
 func toPgTimestamp(value time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{
 		Time:  value,
@@ -583,6 +665,24 @@ func nullablePgTimestamp(value *time.Time) pgtype.Timestamptz {
 
 	return pgtype.Timestamptz{
 		Time:  *value,
+		Valid: true,
+	}
+}
+
+func nullablePgInt8(value *int64) pgtype.Int8 {
+	if value == nil {
+		return pgtype.Int8{}
+	}
+
+	return pgtype.Int8{
+		Int64: *value,
+		Valid: true,
+	}
+}
+
+func nullablePgInt4(value int) pgtype.Int4 {
+	return pgtype.Int4{
+		Int32: int32(value),
 		Valid: true,
 	}
 }

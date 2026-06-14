@@ -2,10 +2,13 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"buy-ticket/domain"
 )
+
+var ErrIdempotencyKeyNotFound = errors.New("idempotency key not found")
 
 type EventRepository interface {
 	FindByID(ctx context.Context, eventID int64) (*domain.Event, error)
@@ -43,4 +46,10 @@ type PaymentRepository interface {
 	FindByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error)
 	ListByUserID(ctx context.Context, userID int64) ([]domain.Payment, error)
 	Save(ctx context.Context, payment *domain.Payment) error
+}
+
+type IdempotencyRepository interface {
+	FindByKeyAndEndpoint(ctx context.Context, key, endpoint string) (*domain.IdempotencyKey, error)
+	Create(ctx context.Context, record *domain.IdempotencyKey) error
+	Complete(ctx context.Context, key, endpoint string, status int, responseBody []byte, now time.Time) error
 }

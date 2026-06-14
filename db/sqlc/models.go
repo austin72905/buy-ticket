@@ -36,6 +36,21 @@ type EventSection struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
+type IdempotencyKey struct {
+	ID             int64              `json:"id"`
+	Key            string             `json:"key"`
+	UserID         pgtype.Int8        `json:"user_id"`
+	Endpoint       string             `json:"endpoint"`
+	RequestHash    string             `json:"request_hash"`
+	Status         int16              `json:"status"`
+	ResponseStatus pgtype.Int4        `json:"response_status"`
+	ResponseBody   []byte             `json:"response_body"`
+	LockedUntil    pgtype.Timestamptz `json:"locked_until"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Order struct {
 	ID            int64              `json:"id"`
 	OrderNo       string             `json:"order_no"`

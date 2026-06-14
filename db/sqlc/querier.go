@@ -9,7 +9,9 @@ import (
 )
 
 type Querier interface {
+	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
 	CreateEvent(ctx context.Context, arg CreateEventParams) (Event, error)
+	CreateIdempotencyKey(ctx context.Context, arg CreateIdempotencyKeyParams) (IdempotencyKey, error)
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
 	CreateReservation(ctx context.Context, arg CreateReservationParams) (Reservation, error)
@@ -17,6 +19,7 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	GetActiveReservationByUserAndEvent(ctx context.Context, arg GetActiveReservationByUserAndEventParams) (Reservation, error)
 	GetEventByID(ctx context.Context, id int64) (Event, error)
+	GetIdempotencyKey(ctx context.Context, arg GetIdempotencyKeyParams) (IdempotencyKey, error)
 	GetOrderByID(ctx context.Context, id int64) (Order, error)
 	GetOrderByOrderNo(ctx context.Context, orderNo string) (Order, error)
 	GetPaymentByPaymentNo(ctx context.Context, paymentNo string) (Payment, error)

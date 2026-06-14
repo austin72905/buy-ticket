@@ -115,6 +115,9 @@ func (app *BuyTicketApp) Initialize() {
 		paymentRepo,
 	)
 	bookingService.DB = dbPool
+	if dbPool != nil {
+		bookingService.IdempotencyRepo = repository.NewPostgresIdempotencyRepository(db.New(dbPool))
+	}
 	bookingService.QueueStore = buildQueueStore(app.Runtime)
 	bookingService.StockStore = buildStockStore(app.Runtime)
 	bookingService.MockPaymentSignature = service.MockPaymentSignatureConfig{
@@ -222,6 +225,20 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	})
 	if err != nil {
 		log.Fatalf("register queue timeout cleanup failed: %v", err)
+	}
+
+	_, err = scheduler.AddFuncJobWithName("0 * * * * *", "stock-reconcile", func(ctx context.Context) {
+		result, err := bookingService.ReconcileStock(ctx)
+		if err != nil {
+			log.Printf("stock reconcile failed: %v", err)
+			return
+		}
+		if result.Fixed > 0 {
+			log.Printf("stock reconcile fixed %d/%d sections", result.Fixed, result.Checked)
+		}
+	})
+	if err != nil {
+		log.Fatalf("register stock reconcile failed: %v", err)
 	}
 }
 

@@ -530,9 +530,14 @@ paths:
     post:
       consumes:
       - application/json
-      description: 付款成功後確認 reservation 並轉成售出
+      description: Pay a pending order. If Idempotency-Key is provided, retries with
+        the same request replay the first successful payment response.
       parameters:
-      - description: 付款請求
+      - description: Idempotency key for safe payment retries
+        in: header
+        name: Idempotency-Key
+        type: string
+      - description: Payment request
         in: body
         name: request
         required: true
@@ -549,7 +554,11 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
-      summary: 訂單付款
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Pay order
       tags:
       - payments
   /payments/{paymentNo}:

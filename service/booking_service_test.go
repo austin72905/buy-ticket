@@ -1264,6 +1264,59 @@ func TestBookingServiceRebuildStock(t *testing.T) {
 	})
 }
 
+func TestBookingServiceReconcileStock(t *testing.T) {
+	t.Run("reconcile stock should check all event sections", func(t *testing.T) {
+		now := time.Now()
+		stockStore := &fakeStockStore{reconcileResult: StockReconcileResult{Checked: 2, Fixed: 1}}
+		svc := NewBookingService(
+			&fakeEventRepository{
+				events: []domain.Event{
+					{
+						ID:          1,
+						Name:        "Jay Concert",
+						Status:      domain.EventStatusOnSale,
+						SaleStartAt: now.Add(-time.Hour),
+						SaleEndAt:   now.Add(time.Hour),
+					},
+				},
+			},
+			&fakeSectionRepository{
+				sections: []domain.Section{
+					{
+						ID:            2,
+						EventID:       1,
+						Name:          "A Zone",
+						TotalQuantity: 100,
+						Status:        domain.SectionStatusActive,
+					},
+					{
+						ID:            3,
+						EventID:       1,
+						Name:          "B Zone",
+						TotalQuantity: 80,
+						Status:        domain.SectionStatusActive,
+					},
+				},
+			},
+			&fakeReservationRepository{},
+			&fakeOrderRepository{},
+			&fakePaymentRepository{},
+		)
+		svc.StockStore = stockStore
+
+		result, err := svc.ReconcileStock(context.Background())
+		if err != nil {
+			t.Fatalf("reconcile stock should not fail: %v", err)
+		}
+		if result.Checked != 2 || result.Fixed != 1 {
+			t.Fatalf("unexpected reconcile result: %+v", result)
+		}
+		if len(stockStore.reconcileSections) != 2 {
+			t.Fatalf("expected reconcile 2 sections, got %d", len(stockStore.reconcileSections))
+		}
+	})
+}
+
 type fakeEventRepository struct {
 	event  *domain.Event
 	events []domain.Event
@@ -1493,11 +1546,14 @@ func ptrTime(value time.Time) *time.Time {
 }
 
 type fakeStockStore struct {
-	reserveCalls    []stockCall
-	releaseCalls    []stockCall
-	rebuildSections []domain.Section
-	reserveErr      error
-	releaseErr      error
+	reserveCalls      []stockCall
+	releaseCalls      []stockCall
+	rebuildSections   []domain.Section
+	reconcileSections []domain.Section
+	reconcileResult   StockReconcileResult
+	reserveErr        error
+	releaseErr        error
+	reconcileErr      error
 }
 
 type stockCall struct {
@@ -1527,4 +1583,9 @@ func (f *fakeStockStore) Release(ctx context.Context, section domain.Section, qu
 func (f *fakeStockStore) RebuildAll(ctx context.Context, sections []domain.Section) error {
 	f.rebuildSections = append([]domain.Section(nil), sections...)
 	return nil
+}
+
+func (f *fakeStockStore) ReconcileAll(ctx context.Context, sections []domain.Section) (StockReconcileResult, error) {
+	f.reconcileSections = append([]domain.Section(nil), sections...)
+	return f.reconcileResult, f.reconcileErr
 }

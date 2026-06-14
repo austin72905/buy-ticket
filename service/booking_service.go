@@ -39,6 +39,7 @@ type BookingService struct {
 	ReservationRepo      repository.ReservationRepository
 	OrderRepo            repository.OrderRepository
 	PaymentRepo          repository.PaymentRepository
+	IdempotencyRepo      repository.IdempotencyRepository
 	QueueStore           QueueStore
 	StockStore           StockStore
 	MockPaymentSignature MockPaymentSignatureConfig

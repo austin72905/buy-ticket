@@ -95,6 +95,37 @@ func (s *RedisStockStore) RebuildAll(ctx context.Context, sections []domain.Sect
 	return err
 }
 
+func (s *RedisStockStore) ReconcileAll(ctx context.Context, sections []domain.Section) (StockReconcileResult, error) {
+	result := StockReconcileResult{Checked: len(sections)}
+
+	for _, section := range sections {
+		key := redisSectionStockKey(section.EventID, section.ID)
+		expectedAvailable := section.AvailableQuantity()
+
+		currentAvailable, err := s.client.Get(ctx, key).Int()
+		if err == goredis.Nil {
+			if err := s.client.Set(ctx, key, expectedAvailable, 0).Err(); err != nil {
+				return result, err
+			}
+			result.Fixed++
+			continue
+		}
+		if err != nil {
+			return result, err
+		}
+		if currentAvailable == expectedAvailable {
+			continue
+		}
+
+		if err := s.client.Set(ctx, key, expectedAvailable, 0).Err(); err != nil {
+			return result, err
+		}
+		result.Fixed++
+	}
+
+	return result, nil
+}
+
 func redisSectionStockKey(eventID, sectionID int64) string {
 	return "stock:event:" + strconv.FormatInt(eventID, 10) + ":section:" + strconv.FormatInt(sectionID, 10)
 }

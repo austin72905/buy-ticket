@@ -177,6 +177,7 @@ GET /me/orders
 
 ```http
 POST /payments
+Idempotency-Key: pay-test-001
 Content-Type: application/json
 ```
 
@@ -189,6 +190,7 @@ Content-Type: application/json
 
 Checks:
 
+- `Idempotency-Key` is currently optional for demo compatibility, but the frontend should send it before real payment provider integration.
 - The frontend only sends `order_id` and `method`.
 - The backend loads the order and sets `amount = order.total_amount`.
 - The backend generates `payment_no`.
