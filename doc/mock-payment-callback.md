@@ -272,18 +272,17 @@ Idempotency-Key: <uuid>
 
 ---
 
-## 6. 目前保留的過渡 fallback
+## 6. Callback 關聯規則
 
-目前 callback handler 還保留一段相容舊流程的 fallback：
+目前 callback 已不再支援舊的 `MerchantTradeNo -> order_no` fallback。
+
+callback 必須用：
 
 ```text
-如果找不到 payment_attempt，
-就把 MerchantTradeNo 當成 order_no 查 order。
+MerchantTradeNo -> payment_attempts.merchant_trade_no -> payment_attempts.order_id -> orders.id
 ```
 
-這只是過渡用，方便舊 Postman 測試或舊 mock flow 不會立刻壞掉。
-
-當 `/payments/start -> mock pay service -> callback` 已完成端到端驗證後，應移除這段 fallback，讓 callback 必須透過 `payment_attempts` 關聯 order。
+如果找不到 `payment_attempts`，callback 會失敗，不會改 order，也不會建立 payment。
 
 ---
 

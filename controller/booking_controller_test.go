@@ -182,13 +182,28 @@ func TestBookingControllerHandleECPayCallback(t *testing.T) {
 			},
 			&fakePaymentRepositoryForController{},
 		)
+		bookingService.PaymentAttemptRepo = &fakePaymentAttemptRepositoryForController{
+			attempts: map[int64]*domain.PaymentAttempt{
+				30: {
+					ID:              30,
+					OrderID:         20,
+					Provider:        "mock_ecpay",
+					MerchantTradeNo: "MT-CB-HTTP-001",
+					Method:          "credit_card",
+					Amount:          3600,
+					Status:          domain.PaymentAttemptStatusProcessing,
+					CreatedAt:       time.Now(),
+					UpdatedAt:       time.Now(),
+				},
+			},
+		}
 
 		controller := NewBookingController(bookingService)
 		router := gin.New()
 		controller.RegisterRoutes(router)
 
 		form := url.Values{}
-		form.Set("MerchantTradeNo", "ORD-CB-HTTP-001")
+		form.Set("MerchantTradeNo", "MT-CB-HTTP-001")
 		form.Set("RtnCode", "1")
 		form.Set("TradeNo", "TRADE-HTTP-001")
 		form.Set("TradeAmt", "3600")

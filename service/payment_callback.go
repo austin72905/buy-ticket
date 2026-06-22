@@ -79,9 +79,12 @@ func (s *BookingService) HandleECPayCallback(ctx context.Context, input HandleEC
 	if err != nil {
 		return err
 	}
+	if attempt == nil {
+		return repository.ErrPaymentAttemptNotFound
+	}
 
 	if existingPayment, err := s.PaymentRepo.FindByPaymentNo(ctx, input.TradeNo); err == nil && existingPayment != nil {
-		if attempt != nil && attempt.Status != domain.PaymentAttemptStatusSucceeded {
+		if attempt.Status != domain.PaymentAttemptStatusSucceeded {
 			callbackPayload, _ := json.Marshal(input)
 			if attempt.MarkSucceeded(existingPayment.ID, input.TradeNo, callbackPayload, time.Now()) {
 				_ = s.PaymentAttemptRepo.Save(ctx, attempt)
@@ -90,12 +93,7 @@ func (s *BookingService) HandleECPayCallback(ctx context.Context, input HandleEC
 		return nil
 	}
 
-	var order *domain.Order
-	if attempt != nil {
-		order, err = s.OrderRepo.FindByID(ctx, attempt.OrderID)
-	} else {
-		order, err = s.OrderRepo.FindByOrderNo(ctx, input.MerchantTradeNo)
-	}
+	order, err := s.OrderRepo.FindByID(ctx, attempt.OrderID)
 	if err != nil {
 		return err
 	}
@@ -125,11 +123,9 @@ func (s *BookingService) HandleECPayCallback(ctx context.Context, input HandleEC
 		return err
 	}
 
-	if attempt != nil {
-		callbackPayload, _ := json.Marshal(input)
-		if attempt.MarkSucceeded(payment.ID, input.TradeNo, callbackPayload, paidAt) {
-			return s.PaymentAttemptRepo.Save(ctx, attempt)
-		}
+	callbackPayload, _ := json.Marshal(input)
+	if attempt.MarkSucceeded(payment.ID, input.TradeNo, callbackPayload, paidAt) {
+		return s.PaymentAttemptRepo.Save(ctx, attempt)
 	}
 
 	return err

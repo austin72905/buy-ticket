@@ -478,9 +478,22 @@ func TestBookingServiceHandleECPayCallback(t *testing.T) {
 		}
 		paymentRepo := &fakePaymentRepository{}
 		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, orderRepo, paymentRepo)
+		svc.PaymentAttemptRepo = repository.NewMemoryPaymentAttemptRepository([]*domain.PaymentAttempt{
+			{
+				ID:              30,
+				OrderID:         20,
+				Provider:        "mock_ecpay",
+				MerchantTradeNo: "MT-CB-001",
+				Method:          "credit_card",
+				Amount:          3600,
+				Status:          domain.PaymentAttemptStatusProcessing,
+				CreatedAt:       time.Now(),
+				UpdatedAt:       time.Now(),
+			},
+		})
 		callback := VerifyMockPaymentCallbackInput{
 			MerchantID:      "TEST_MERCHANT",
-			MerchantTradeNo: "ORD-CB-001",
+			MerchantTradeNo: "MT-CB-001",
 			RtnCode:         "1",
 			RtnMsg:          "交易成功",
 			TradeNo:         "TRADE-001",
