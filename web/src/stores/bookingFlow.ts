@@ -15,6 +15,7 @@ import {
   listEvents,
   listMyPayments,
   listMyOrders,
+  listMyReservations,
   login,
   logout,
   register,
@@ -47,6 +48,7 @@ type TaskKey =
   | 'createOrder'
   | 'fetchOrder'
   | 'myOrders'
+  | 'myReservations'
   | 'payOrder'
 
 function toErrorMessage(error: unknown) {
@@ -358,6 +360,18 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     myOrders.value = await runTask('myOrders', listMyOrders)
   }
 
+  async function loadActiveReservation() {
+    const reservations = await runTask('myReservations', listMyReservations)
+    const now = Date.now()
+    reservation.value =
+      reservations.find((item) => item.status === 1 && new Date(item.expires_at).getTime() > now) ?? null
+
+    if (reservation.value) {
+      selectedEventId.value = reservation.value.event_id
+      selectedSectionId.value = reservation.value.section_id
+    }
+  }
+
   function selectOrder(nextOrder: OrderResponse) {
     order.value = nextOrder
     payment.value = null
@@ -430,6 +444,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     loadEventBundle,
     loadEvents,
     loadMe,
+    loadActiveReservation,
     loginAction,
     loginDemoUser,
     logoutAction,

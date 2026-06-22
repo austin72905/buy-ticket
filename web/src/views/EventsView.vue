@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 
@@ -10,6 +10,11 @@ import { useBookingFlowStore } from '../stores/bookingFlow'
 import type { EventResponse } from '../types/api'
 
 const flow = useBookingFlowStore()
+const router = useRouter()
+
+const activeReservation = computed(() =>
+  flow.reservation && !flow.order && flow.reservation.status === 1 ? flow.reservation : null,
+)
 
 const displayEvents = computed(() => {
   if (flow.events.length === 0) return []
@@ -38,7 +43,31 @@ function shortTitle(event: EventResponse) {
 
 async function reload() {
   try {
+    if (!flow.currentUser) {
+      await flow.loadMe()
+    }
     await flow.loadEvents()
+    if (flow.currentUser) {
+      await flow.loadActiveReservation()
+    }
+  } catch {}
+}
+
+function continueReservation() {
+  if (!activeReservation.value) return
+
+  router.push(`/events/${activeReservation.value.event_id}/reservation`)
+}
+
+async function chooseAgain() {
+  if (!activeReservation.value) return
+
+  const eventId = activeReservation.value.event_id
+
+  try {
+    await flow.cancelReservationAction()
+    await flow.loadEventBundle(eventId)
+    router.push(`/events/${eventId}/info`)
   } catch {}
 }
 
@@ -54,12 +83,41 @@ onMounted(reload)
     </section>
 
     <StateBanner
-      :loading="flow.isPending('events')"
-      :error="flow.getError('events')"
+      :loading="
+        flow.isPending('auth') ||
+        flow.isPending('events') ||
+        flow.isPending('myReservations') ||
+        flow.isPending('cancelReservation') ||
+        flow.isPending('eventBundle')
+      "
+      :error="
+        flow.getError('events') ||
+        flow.getError('myReservations') ||
+        flow.getError('cancelReservation') ||
+        flow.getError('eventBundle')
+      "
       loading-text="Loading events..."
       :retryable="true"
       @retry="reload"
     />
+
+    <section v-if="activeReservation" class="current-hold-panel">
+      <div>
+        <strong>Current ticket hold</strong>
+        <p>
+          You already have a held ticket for this event. Continue checkout or cancel it and restart queue.
+        </p>
+      </div>
+      <div class="current-hold-actions">
+        <Button label="Continue Review" severity="danger" @click="continueReservation" />
+        <Button
+          label="Cancel And Reselect"
+          severity="secondary"
+          :loading="flow.isPending('cancelReservation')"
+          @click="chooseAgain"
+        />
+      </div>
+    </section>
 
     <section class="event-grid">
       <RouterLink
