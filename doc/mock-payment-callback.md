@@ -1,28 +1,44 @@
-# Mock Payment Callback 測試流程
+# Mock Payment Callback 流程
 
-這份文件說明如何用 `ec-payment-service` 模擬第三方支付，回呼到 `buy-ticket`。
+這份文件記錄 `buy-ticket` 如何接 `ec-payment-service` mock payment provider。
+
+目前正式方向是：
+
+```text
+frontend
+  -> POST /payments/start
+  -> buy-ticket 建立 payment_attempt
+  -> buy-ticket 呼叫 ec-payment-service
+  -> ec-payment-service callback buy-ticket
+  -> buy-ticket 建立 payment、更新 order paid、更新 reservation confirmed
+```
+
+舊的直接付款 API `POST /payments` 仍保留作為 demo direct-pay，但前端付款頁已改用 `POST /payments/start`。
 
 ---
 
-## 1. 前置設定
+## 1. 啟動條件
 
-### `buy-ticket`
+### buy-ticket
 
-確認 `D:\SourceCode\Go\buy-ticket\config\local\app.properties` 至少有這三個設定：
+建議用 `dev` 環境，因為 `dev` 會使用 Postgres 與 Redis：
+
+```powershell
+make run-dev
+```
+
+`config/dev/app.properties` 需要有：
 
 ```properties
 payment.mock.merchant_id=TEST_MERCHANT
 payment.mock.hash_key=TEST_SECRET
 payment.mock.hash_iv=TEST_HASH_IV
+payment.mock.base_url=http://localhost:8081
+payment.mock.callback_url=http://localhost:8080/payments/provider/ecpay/callback
+payment.mock.timeout_seconds=3
 ```
 
-啟動：
-
-```bash
-make run-local
-```
-
-預設 API：
+buy-ticket API：
 
 ```text
 http://localhost:8080
@@ -31,24 +47,33 @@ http://localhost:8080
 callback endpoint：
 
 ```text
-POST /payments/provider/ecpay/callback
+POST http://localhost:8080/payments/provider/ecpay/callback
 ```
 
-完整 callback URL：
+### ec-payment-service
+
+mock pay service 預期啟動在：
 
 ```text
-http://localhost:8080/payments/provider/ecpay/callback
+http://localhost:8081
 ```
 
-### `ec-payment-service`
+健康檢查：
 
-它要把 callback 打到 `buy-ticket`，所以 callback URL 要設成：
-
-```text
-http://localhost:8080/payments/provider/ecpay/callback
+```powershell
+curl http://localhost:8081/health
 ```
 
-如果 `ec-payment-service` 有自己的 merchant / hash 設定，必須和 `buy-ticket` 一致：
+正常回應範例：
+
+```json
+{
+  "status": "ok",
+  "service": "payment-service"
+}
+```
+
+`ec-payment-service` 的 merchant / hash 設定需要與 `buy-ticket` 一致：
 
 ```text
 MerchantID = TEST_MERCHANT
@@ -58,96 +83,95 @@ HashIV     = TEST_HASH_IV
 
 ---
 
-## 2. 建立一筆可付款訂單
+## 2. 正式付款流程
 
-先在 `buy-ticket` 內建立完整購票資料。
+### Step 1：完成購票前置流程
 
-### Step 1: 查活動
+前端或 Postman 先完成：
+
+1. `POST /auth/login`
+2. `POST /queue/join`
+3. `GET /queue/status/{queueToken}` 取得 `purchase_token`
+4. `POST /reservations`
+5. `POST /orders`
+
+完成後會得到一筆 `pending_payment` order。
+
+### Step 2：前端啟動付款
+
+前端呼叫：
 
 ```http
-GET /events
-```
-
-### Step 2: 加入 queue
-
-```http
-POST /queue/join
+POST /payments/start
+Idempotency-Key: 018f0f58-8f62-7f5e-9f28-0c2a1b9c4e77
 Content-Type: application/json
 ```
 
+Request：
+
 ```json
 {
-  "event_id": 1,
-  "user_id": 1,
-  "client_id": "postman-device-001",
-  "request_id": "req-mock-pay-001",
-  "channel": "web"
+  "order_id": 1,
+  "method": "credit_card",
+  "provider": "mock_ecpay"
 }
 ```
 
-記下：
+後端會做：
 
-- `purchase_token`
+1. 查詢 order。
+2. 確認 order 狀態是 `pending_payment`。
+3. 用 `order.total_amount` 決定付款金額。
+4. 建立 `payment_attempts`。
+5. 產生 `merchant_trade_no`。
+6. 呼叫 mock pay service。
 
-### Step 3: 建 reservation
+Response：
 
 ```http
-POST /reservations
-Content-Type: application/json
+202 Accepted
 ```
 
 ```json
 {
-  "user_id": 1,
-  "event_id": 1,
-  "section_id": 1,
-  "quantity": 2,
-  "hold_until": "2026-06-11T20:00:00+08:00",
-  "purchase_token": "pt_xxx"
+  "id": 1,
+  "order_id": 1,
+  "idempotency_key": "018f0f58-8f62-7f5e-9f28-0c2a1b9c4e77",
+  "provider": "mock_ecpay",
+  "merchant_trade_no": "MT-1-20260622120000",
+  "method": "credit_card",
+  "amount": 2800,
+  "status": 1,
+  "created_at": "2026-06-22T12:00:00Z",
+  "updated_at": "2026-06-22T12:00:00Z"
 }
 ```
 
-記下：
+狀態說明：
 
-- `reservation.id`
-- `total_amount`
+```text
+1 = processing
+2 = succeeded
+3 = failed
+4 = timeout
+5 = cancelled
+```
 
-### Step 4: 建 order
+### Step 3：buy-ticket 呼叫 mock pay service
+
+`buy-ticket` 會自動呼叫：
 
 ```http
-POST /orders
+POST http://localhost:8081/api/payment/process
 Content-Type: application/json
 ```
 
-```json
-{
-  "reservation_id": 1,
-  "order_no": "ORD-MOCK-001",
-  "expires_at": "2026-06-11T20:10:00+08:00"
-}
-```
-
-記下：
-
-- `order.id`
-- `order_no`
-- `total_amount`
-
----
-
-## 3. 呼叫 mock payment service
-
-對 `ec-payment-service` 發送付款請求：
-
-```http
-POST /api/payment/process
-Content-Type: application/json
-```
+Request payload：
 
 ```json
 {
-  "recordNo": "ORD-MOCK-001",
-  "amount": "5600",
+  "recordNo": "MT-1-20260622120000",
+  "amount": "2800",
   "payType": "ECPAY",
   "callbackUrl": "http://localhost:8080/payments/provider/ecpay/callback"
 }
@@ -155,91 +179,162 @@ Content-Type: application/json
 
 欄位對應：
 
-- `recordNo` = `buy-ticket` 的 `order_no`
-- `amount` = `order.total_amount`
-- `callbackUrl` = `buy-ticket` callback endpoint
+- `recordNo` = `payment_attempts.merchant_trade_no`
+- `amount` = `orders.total_amount`
+- `payType` = 目前固定送 `ECPAY`
+- `callbackUrl` = `payment.mock.callback_url`
+
+重點：`recordNo` 不是 `order_no`。它是這一次付款 attempt 的交易編號。
 
 ---
 
-## 4. 預期結果
+## 3. Callback 處理
 
-如果 callback 成功，`buy-ticket` 會：
-
-- 驗 `CheckMacValue`
-- 用 `MerchantTradeNo` 找到 order
-- 確認 `RtnCode == 1`
-- 呼叫 `PayOrder(...)`
-
-之後你可以查：
+mock pay service 成功處理後，會 callback：
 
 ```http
-GET /orders/order-no/ORD-MOCK-001
-GET /users/1/payments
+POST /payments/provider/ecpay/callback
+Content-Type: application/x-www-form-urlencoded
 ```
 
-預期：
+主要欄位：
 
-- `order.status = paid`
-- `reservation.status = confirmed`
-- 新增一筆 payment
-- `payment.payment_no = callback.TradeNo`
+```text
+MerchantID
+MerchantTradeNo
+RtnCode
+RtnMsg
+TradeNo
+TradeAmt
+PaymentDate
+PaymentType
+CheckMacValue
+```
+
+callback handler 會做：
+
+1. 驗證 `CheckMacValue`。
+2. 檢查 `RtnCode`。
+3. 用 `MerchantTradeNo` 查 `payment_attempts.merchant_trade_no`。
+4. 用 `payment_attempts.order_id` 查 order。
+5. 檢查 `TradeAmt` 是否等於 `order.total_amount`。
+6. 建立 `payments`。
+7. 更新 order 為 `paid`。
+8. 更新 reservation 為 `confirmed`。
+9. 更新 payment attempt 為 `succeeded`。
+
+成功後可查：
+
+```http
+GET /orders/{orderId}
+GET /me/payments
+```
+
+預期結果：
+
+- `orders.status = 2`，代表 paid。
+- `reservations.status = 2`，代表 confirmed。
+- 新增一筆 `payments`。
+- `payments.payment_no = callback.TradeNo`。
+- `payment_attempts.status = 2`。
+- `payment_attempts.provider_trade_no = callback.TradeNo`。
+- `payment_attempts.payment_id` 指向新增的 payment。
 
 ---
 
-## 5. 失敗排查
+## 4. Timeout 與 provider 未啟動
 
-### 簽章錯誤
+如果 `ec-payment-service` 沒有啟動，或 `POST /api/payment/process` 超時：
 
-如果看到類似：
+- `/payments/start` 仍會建立 `payment_attempts`。
+- attempt 會被標記為 `timeout`。
+- order 不會變 paid。
+- reservation 不會變 confirmed。
 
-```json
-{
-  "error": "invalid payment signature"
-}
+這是刻意設計，避免 payment provider 不穩定時讓主購票流程直接崩潰。
+
+---
+
+## 5. Idempotency 行為
+
+前端呼叫 `POST /payments/start` 時應送：
+
+```http
+Idempotency-Key: <uuid>
 ```
 
-先檢查：
+用途：
+
+- 避免使用者重按付款按鈕建立多筆 provider payment attempt。
+- 避免前端 timeout 後 retry 造成重複付款。
+- 同一個 key、同一個 request 會回同一筆 attempt。
+- 同一個 key、不同 request 會回 idempotency conflict。
+
+---
+
+## 6. 目前保留的過渡 fallback
+
+目前 callback handler 還保留一段相容舊流程的 fallback：
+
+```text
+如果找不到 payment_attempt，
+就把 MerchantTradeNo 當成 order_no 查 order。
+```
+
+這只是過渡用，方便舊 Postman 測試或舊 mock flow 不會立刻壞掉。
+
+當 `/payments/start -> mock pay service -> callback` 已完成端到端驗證後，應移除這段 fallback，讓 callback 必須透過 `payment_attempts` 關聯 order。
+
+---
+
+## 7. 常見問題
+
+### invalid payment signature
+
+代表 `CheckMacValue` 驗證失敗。
+
+檢查：
 
 - `payment.mock.merchant_id`
 - `payment.mock.hash_key`
 - `payment.mock.hash_iv`
 - `ec-payment-service` 的 MerchantID / HashKey / HashIV
 
-這兩邊必須完全一致。
+兩邊必須一致。
 
-### 金額不一致
+### payment amount mismatch
 
-如果看到：
+代表 callback 的 `TradeAmt` 與 `order.total_amount` 不一致。
 
-```json
-{
-  "error": "payment amount mismatch"
-}
+檢查：
+
+- `payment_attempts.amount`
+- `orders.total_amount`
+- mock pay service callback 回來的 `TradeAmt`
+
+### callback 後 order 沒變 paid
+
+檢查：
+
+1. `payment_attempts.merchant_trade_no` 是否等於 callback 的 `MerchantTradeNo`。
+2. `payment_attempts.status` 是否仍是 `processing` 或 `timeout`。
+3. callback 的 `RtnCode` 是否為 `1`。
+4. callback 的 `CheckMacValue` 是否正確。
+5. `TradeAmt` 是否等於 `orders.total_amount`。
+
+### /payments/start 回 timeout
+
+代表 `buy-ticket` 有建立 attempt，但呼叫 mock pay service 失敗。
+
+檢查：
+
+```powershell
+curl http://localhost:8081/health
 ```
 
-表示：
+以及：
 
-- `ec-payment-service` 的 `amount`
-- `buy-ticket` 的 `order.total_amount`
-
-不一致。
-
-### 找不到訂單
-
-如果看到 order not found 類錯誤，檢查：
-
-- `recordNo`
-- `order_no`
-
-是否完全一致。
-
----
-
-## 6. 最小驗證清單
-
-每次串接 mock payment，至少驗這四件：
-
-- `recordNo == order_no`
-- `amount == order.total_amount`
-- `callbackUrl` 指到 `buy-ticket`
-- Merchant / HashKey / HashIV 兩邊一致
+```properties
+payment.mock.base_url=http://localhost:8081
+payment.mock.callback_url=http://localhost:8080/payments/provider/ecpay/callback
+```
