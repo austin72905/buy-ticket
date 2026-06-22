@@ -6,6 +6,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
@@ -14,6 +16,7 @@ type Querier interface {
 	CreateIdempotencyKey(ctx context.Context, arg CreateIdempotencyKeyParams) (IdempotencyKey, error)
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
+	CreatePaymentAttempt(ctx context.Context, arg CreatePaymentAttemptParams) (PaymentAttempt, error)
 	CreateReservation(ctx context.Context, arg CreateReservationParams) (Reservation, error)
 	CreateSection(ctx context.Context, arg CreateSectionParams) (EventSection, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
@@ -22,6 +25,8 @@ type Querier interface {
 	GetIdempotencyKey(ctx context.Context, arg GetIdempotencyKeyParams) (IdempotencyKey, error)
 	GetOrderByID(ctx context.Context, id int64) (Order, error)
 	GetOrderByOrderNo(ctx context.Context, orderNo string) (Order, error)
+	GetPaymentAttemptByIdempotencyKey(ctx context.Context, idempotencyKey pgtype.Text) (PaymentAttempt, error)
+	GetPaymentAttemptByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (PaymentAttempt, error)
 	GetPaymentByPaymentNo(ctx context.Context, paymentNo string) (Payment, error)
 	GetReservationByID(ctx context.Context, id int64) (Reservation, error)
 	GetReservationByReservationNo(ctx context.Context, reservationNo string) (Reservation, error)
@@ -32,10 +37,12 @@ type Querier interface {
 	ListExpiredHoldingReservations(ctx context.Context, arg ListExpiredHoldingReservationsParams) ([]Reservation, error)
 	ListExpiredPendingOrders(ctx context.Context, arg ListExpiredPendingOrdersParams) ([]Order, error)
 	ListOrdersByUserID(ctx context.Context, userID int64) ([]Order, error)
+	ListPaymentAttemptsByOrderID(ctx context.Context, orderID int64) ([]PaymentAttempt, error)
 	ListPaymentsByUserID(ctx context.Context, userID int64) ([]Payment, error)
 	ListReservationsByUserID(ctx context.Context, userID int64) ([]Reservation, error)
 	ListSectionsByEventID(ctx context.Context, eventID int64) ([]EventSection, error)
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) error
+	UpdatePaymentAttemptStatus(ctx context.Context, arg UpdatePaymentAttemptStatusParams) error
 	UpdatePaymentStatus(ctx context.Context, arg UpdatePaymentStatusParams) error
 	UpdateReservationStatus(ctx context.Context, arg UpdateReservationStatusParams) error
 	UpdateSectionInventory(ctx context.Context, arg UpdateSectionInventoryParams) error

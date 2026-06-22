@@ -33,16 +33,19 @@ var (
 )
 
 type BookingService struct {
-	DB                   *pgxpool.Pool
-	EventRepo            repository.EventRepository
-	SectionRepo          repository.SectionRepository
-	ReservationRepo      repository.ReservationRepository
-	OrderRepo            repository.OrderRepository
-	PaymentRepo          repository.PaymentRepository
-	IdempotencyRepo      repository.IdempotencyRepository
-	QueueStore           QueueStore
-	StockStore           StockStore
-	MockPaymentSignature MockPaymentSignatureConfig
+	DB                     *pgxpool.Pool
+	EventRepo              repository.EventRepository
+	SectionRepo            repository.SectionRepository
+	ReservationRepo        repository.ReservationRepository
+	OrderRepo              repository.OrderRepository
+	PaymentRepo            repository.PaymentRepository
+	PaymentAttemptRepo     repository.PaymentAttemptRepository
+	IdempotencyRepo        repository.IdempotencyRepository
+	MockPaymentClient      MockPaymentClient
+	MockPaymentCallbackURL string
+	QueueStore             QueueStore
+	StockStore             StockStore
+	MockPaymentSignature   MockPaymentSignatureConfig
 }
 
 type ReserveTicketInput struct {
@@ -148,12 +151,13 @@ func NewBookingService(
 	paymentRepo repository.PaymentRepository,
 ) *BookingService {
 	return &BookingService{
-		EventRepo:       eventRepo,
-		SectionRepo:     sectionRepo,
-		ReservationRepo: reservationRepo,
-		OrderRepo:       orderRepo,
-		PaymentRepo:     paymentRepo,
-		QueueStore:      NewMemoryQueueStore(1),
+		EventRepo:          eventRepo,
+		SectionRepo:        sectionRepo,
+		ReservationRepo:    reservationRepo,
+		OrderRepo:          orderRepo,
+		PaymentRepo:        paymentRepo,
+		PaymentAttemptRepo: repository.NewMemoryPaymentAttemptRepository(nil),
+		QueueStore:         NewMemoryQueueStore(1),
 	}
 }
 
@@ -694,21 +698,23 @@ func (s *BookingService) SaveQueueStatus(snapshot QueueStatusSnapshot) {
 }
 
 type bookingRepos struct {
-	event       repository.EventRepository
-	section     repository.SectionRepository
-	reservation repository.ReservationRepository
-	order       repository.OrderRepository
-	payment     repository.PaymentRepository
+	event          repository.EventRepository
+	section        repository.SectionRepository
+	reservation    repository.ReservationRepository
+	order          repository.OrderRepository
+	payment        repository.PaymentRepository
+	paymentAttempt repository.PaymentAttemptRepository
 }
 
 func (s *BookingService) withTx(ctx context.Context, fn func(repos bookingRepos) error) error {
 	if s.DB == nil {
 		return fn(bookingRepos{
-			event:       s.EventRepo,
-			section:     s.SectionRepo,
-			reservation: s.ReservationRepo,
-			order:       s.OrderRepo,
-			payment:     s.PaymentRepo,
+			event:          s.EventRepo,
+			section:        s.SectionRepo,
+			reservation:    s.ReservationRepo,
+			order:          s.OrderRepo,
+			payment:        s.PaymentRepo,
+			paymentAttempt: s.PaymentAttemptRepo,
 		})
 	}
 
@@ -720,11 +726,12 @@ func (s *BookingService) withTx(ctx context.Context, fn func(repos bookingRepos)
 
 	queries := db.New(tx)
 	repos := bookingRepos{
-		event:       repository.NewPostgresEventRepository(queries),
-		section:     repository.NewPostgresSectionRepository(queries),
-		reservation: repository.NewPostgresReservationRepository(queries),
-		order:       repository.NewPostgresOrderRepository(queries),
-		payment:     repository.NewPostgresPaymentRepository(queries),
+		event:          repository.NewPostgresEventRepository(queries),
+		section:        repository.NewPostgresSectionRepository(queries),
+		reservation:    repository.NewPostgresReservationRepository(queries),
+		order:          repository.NewPostgresOrderRepository(queries),
+		payment:        repository.NewPostgresPaymentRepository(queries),
+		paymentAttempt: repository.NewPostgresPaymentAttemptRepository(queries),
 	}
 
 	if err := fn(repos); err != nil {

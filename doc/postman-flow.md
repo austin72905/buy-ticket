@@ -175,6 +175,8 @@ GET /me/orders
 
 ### Step 9: Pay Order
 
+Demo direct-pay endpoint:
+
 ```http
 POST /payments
 Idempotency-Key: pay-test-001
@@ -196,6 +198,32 @@ Checks:
 - The backend generates `payment_no`.
 - The backend sets `paid_at` from server time.
 - The backend marks the payment paid, marks the order paid, and confirms the reservation.
+
+Provider-flow start endpoint:
+
+```http
+POST /payments/start
+Idempotency-Key: pay-start-test-001
+Content-Type: application/json
+```
+
+```json
+{
+  "order_id": 1,
+  "method": "credit_card",
+  "provider": "mock_ecpay"
+}
+```
+
+Checks:
+
+- Returns `202 Accepted`.
+- Creates a `payment_attempt`.
+- Calls mock pay service at `payment.mock.base_url`, default `http://localhost:8081`.
+- If mock pay service is not running, the attempt is marked `timeout`.
+- Does not mark the order paid yet.
+- Does not confirm the reservation yet.
+- Mock pay service callback will complete the payment.
 
 ### Step 10: Check Payment
 

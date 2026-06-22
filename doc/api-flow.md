@@ -23,7 +23,7 @@ This document describes the current `buy-ticket` booking flow:
 6. Ready queue status returns a `purchase_token`.
 7. Create reservation with `POST /reservations` and the `purchase_token`.
 8. Create order with `POST /orders`.
-9. Pay order with `POST /payments`; frontend should send `Idempotency-Key`.
+9. Start provider payment with `POST /payments/start`; frontend should send `Idempotency-Key`.
 10. Background jobs clean up expired queues, purchase tokens, unpaid orders, and Redis stock drift.
 
 Authenticated write APIs read the current user from the session cookie. The frontend must not send `user_id` for queue join or reservation creation.
@@ -50,10 +50,12 @@ flowchart TD
     K -- "Yes" --> L["Create reservation"]
     L --> M["POST /orders"]
     M --> N["Create pending_payment order"]
-    N --> O["POST /payments"]
-    O --> P{"Payment successful?"}
-    P -- "No" --> Q["Wait for expiration job"]
-    P -- "Yes" --> R["order = paid"]
+    N --> O["POST /payments/start"]
+    O --> P["Create payment_attempt"]
+    P --> Q["Call mock payment service"]
+    Q --> T{"Provider callback successful?"}
+    T -- "No" --> U["Wait for retry or expiration job"]
+    T -- "Yes" --> R["order = paid"]
     R --> S["reservation = confirmed"]
 ```
 
@@ -101,16 +103,20 @@ sequenceDiagram
     Booking-->>API: order
     API-->>Client: order response
 
-    Client->>API: POST /payments + Idempotency-Key
-    API->>Booking: BeginPaymentIdempotency(...)
-    API->>Booking: Load order
+    Client->>API: POST /payments/start + Idempotency-Key
+    API->>Booking: Create payment_attempt
     Booking->>Booking: amount = order.total_amount
-    Booking->>Booking: Generate payment_no
-    Booking->>Booking: paid_at = server time
+    Booking->>Booking: Generate merchant_trade_no
+    Booking->>Payment: POST /api/payment/process
+    Payment-->>Booking: processing response
+    Booking-->>API: payment_attempt
+    API-->>Client: 202 Accepted
+
+    Payment->>API: POST /payments/provider/ecpay/callback
+    API->>Booking: Find payment_attempt by MerchantTradeNo
     API->>Booking: PayOrder(...)
-    API->>Booking: CompletePaymentIdempotency(...)
     Booking-->>API: payment / order paid / reservation confirmed
-    API-->>Client: payment response
+    API-->>Payment: callback accepted
 
     Job->>Booking: SweepExpiredOrders(...)
     Booking-->>Job: expired orders count
@@ -215,6 +221,7 @@ Authenticated APIs:
 - `POST /reservations`
 - `POST /orders`
 - `POST /payments`
+- `POST /payments/start`
 - `POST /reservations/expire`
 - `POST /reservations/cancel`
 
@@ -226,5 +233,17 @@ Authenticated APIs:
 - Purchase token cleanup
 - Stock consistency hardening: see `doc/stock-reconciliation.md`
 - Payment idempotency: see `doc/payment-idempotency.md`
+- Payment attempts and provider start flow: see `doc/payment-attempts.md`
 - Payment callback / webhook hardening
 - RabbitMQ delay or DLQ timeout flow
+
+---
+
+## 10. Payment API Modes
+
+The project currently keeps two payment entry points:
+
+- `POST /payments`: demo direct-pay flow. It directly creates a paid payment, marks the order paid, and confirms the reservation.
+- `POST /payments/start`: provider-style flow. It creates a `payment_attempt` and returns `202 Accepted`; it does not mark the order paid.
+
+This keeps the current demo flow working while adding the provider payment foundation.

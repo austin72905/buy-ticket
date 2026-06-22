@@ -118,7 +118,7 @@ Idempotency 的目的，是讓同一個會產生副作用的請求被重送時�
 
 - `Idempotency-Key` 目前是過渡期 optional，尚未對前端強制。
 - `POST /orders` 雖然有 DB unique 保護，但 retry 時不一定能拿回第一次建立的 order response。
-- 尚未建立正式 `payment_attempts`。
+- `payment_attempts` 基礎表與 repository 已建立，見 `doc/payment-attempts.md`。
 - 尚未接 payment provider start flow。
 - 尚未處理 provider timeout 後 fallback 的完整 attempt 狀態。
 - `POST /queue/join` 有 `request_id`，但目前不是完整 idempotency layer。

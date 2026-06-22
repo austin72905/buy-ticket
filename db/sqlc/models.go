@@ -91,6 +91,28 @@ type Payment struct {
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
+type PaymentAttempt struct {
+	ID              int64              `json:"id"`
+	OrderID         int64              `json:"order_id"`
+	PaymentID       pgtype.Int8        `json:"payment_id"`
+	IdempotencyKey  pgtype.Text        `json:"idempotency_key"`
+	Provider        string             `json:"provider"`
+	MerchantTradeNo string             `json:"merchant_trade_no"`
+	ProviderTradeNo pgtype.Text        `json:"provider_trade_no"`
+	Method          string             `json:"method"`
+	Amount          int64              `json:"amount"`
+	Status          int16              `json:"status"`
+	RequestPayload  []byte             `json:"request_payload"`
+	ResponsePayload []byte             `json:"response_payload"`
+	CallbackPayload []byte             `json:"callback_payload"`
+	FailureReason   pgtype.Text        `json:"failure_reason"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	SucceededAt     pgtype.Timestamptz `json:"succeeded_at"`
+	FailedAt        pgtype.Timestamptz `json:"failed_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Reservation struct {
 	ID            int64              `json:"id"`
 	ReservationNo string             `json:"reservation_no"`

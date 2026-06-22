@@ -116,7 +116,15 @@ func (app *BuyTicketApp) Initialize() {
 	)
 	bookingService.DB = dbPool
 	if dbPool != nil {
+		bookingService.PaymentAttemptRepo = repository.NewPostgresPaymentAttemptRepository(db.New(dbPool))
 		bookingService.IdempotencyRepo = repository.NewPostgresIdempotencyRepository(db.New(dbPool))
+	}
+	bookingService.MockPaymentCallbackURL = app.Runtime.Property.Property("payment.mock.callback_url")
+	if mockPaymentBaseURL := app.Runtime.Property.Property("payment.mock.base_url"); mockPaymentBaseURL != "" {
+		bookingService.MockPaymentClient = service.NewHTTPMockPaymentClient(
+			mockPaymentBaseURL,
+			mockPaymentTimeout(app.Runtime),
+		)
 	}
 	bookingService.QueueStore = buildQueueStore(app.Runtime)
 	bookingService.StockStore = buildStockStore(app.Runtime)
@@ -268,6 +276,20 @@ func orderExpireBatchSize(runtime *infraapp.Runtime) int {
 	}
 
 	return size
+}
+
+func mockPaymentTimeout(runtime *infraapp.Runtime) time.Duration {
+	value := runtime.Property.Property("payment.mock.timeout_seconds")
+	if value == "" {
+		return 3 * time.Second
+	}
+
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return 3 * time.Second
+	}
+
+	return time.Duration(seconds) * time.Second
 }
 
 func buildRepositories(runtime *infraapp.Runtime) (

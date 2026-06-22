@@ -127,6 +127,37 @@ definitions:
       order_id:
         type: integer
     type: object
+  controller.PaymentAttemptResponse:
+    properties:
+      amount:
+        type: integer
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      failed_at:
+        type: string
+      id:
+        type: integer
+      idempotency_key:
+        type: string
+      merchant_trade_no:
+        type: string
+      method:
+        type: string
+      order_id:
+        type: integer
+      provider:
+        type: string
+      provider_trade_no:
+        type: string
+      status:
+        type: integer
+      succeeded_at:
+        type: string
+      updated_at:
+        type: string
+    type: object
   controller.PaymentResponse:
     properties:
       amount:
@@ -281,6 +312,15 @@ definitions:
       total_quantity:
         type: integer
       updated_at:
+        type: string
+    type: object
+  controller.StartPaymentRequest:
+    properties:
+      method:
+        type: string
+      order_id:
+        type: integer
+      provider:
         type: string
     type: object
 info:
@@ -637,6 +677,41 @@ paths:
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
       summary: Handle ECPay callback
+      tags:
+      - payments
+  /payments/start:
+    post:
+      consumes:
+      - application/json
+      description: Create a payment attempt for a pending order. This does not mark
+        the order as paid.
+      parameters:
+      - description: Idempotency key for safe payment start retries
+        in: header
+        name: Idempotency-Key
+        type: string
+      - description: Start payment request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.StartPaymentRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/controller.PaymentAttemptResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Start provider payment
       tags:
       - payments
   /queue/join:

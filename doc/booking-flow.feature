@@ -78,14 +78,25 @@ Feature: Ticket booking flow
   Scenario: User pays after the order is created
     Given the backend has created an order with status pending_payment
     When the frontend shows the payment page
-    Then the user can enter payment information
+    Then the user can review the payment amount and method
     When the user clicks "Pay Now"
-    Then the frontend calls POST /payments
-    And the request includes order_id and method
+    Then the frontend calls POST /payments/start
+    And the request includes order_id, method, and provider
+    And the request includes an Idempotency-Key header
     And the backend loads the order
     And the backend sets amount from order.total_amount
+    And the backend creates a payment_attempt
+    And the backend sends the attempt to the mock payment service
+    And the backend waits for provider callback before marking the order as paid
+
+  Scenario: Mock payment callback completes payment
+    Given the frontend has started a payment attempt
+    And the mock payment service has accepted the attempt
+    When the mock payment service calls POST /payments/provider/ecpay/callback
+    Then the backend finds the payment_attempt by MerchantTradeNo
     And the backend generates payment_no
     And the backend sets paid_at from server time
+    And the backend marks the payment_attempt as succeeded
     And the backend marks the payment as paid
     And the backend marks the order as paid
     And the backend confirms the reservation
@@ -112,7 +123,7 @@ Feature: Ticket booking flow
   Scenario: Payment is not created automatically after order creation
     Given the backend has created an order with status pending_payment
     When the user has not clicked "Pay Now"
-    Then the frontend must not call POST /payments
+    Then the frontend must not call POST /payments/start
     And the backend must not mark the order as paid automatically
 
   Scenario: Expired purchase tokens are swept by a background job

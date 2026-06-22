@@ -418,6 +418,92 @@ func (r *MemoryPaymentRepository) Save(ctx context.Context, payment *domain.Paym
 	return nil
 }
 
+type MemoryPaymentAttemptRepository struct {
+	mu       sync.RWMutex
+	attempts map[int64]*domain.PaymentAttempt
+	nextID   int64
+}
+
+func NewMemoryPaymentAttemptRepository(attempts []*domain.PaymentAttempt) *MemoryPaymentAttemptRepository {
+	repo := &MemoryPaymentAttemptRepository{
+		attempts: map[int64]*domain.PaymentAttempt{},
+		nextID:   1,
+	}
+
+	var maxID int64
+	for _, attempt := range attempts {
+		cloned := *attempt
+		repo.attempts[cloned.ID] = &cloned
+		if cloned.ID > maxID {
+			maxID = cloned.ID
+		}
+	}
+	repo.nextID = maxID + 1
+
+	return repo
+}
+
+func (r *MemoryPaymentAttemptRepository) FindByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (*domain.PaymentAttempt, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, attempt := range r.attempts {
+		if attempt.MerchantTradeNo != merchantTradeNo {
+			continue
+		}
+
+		cloned := *attempt
+		return &cloned, nil
+	}
+
+	return nil, ErrPaymentAttemptNotFound
+}
+
+func (r *MemoryPaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentAttempt, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, attempt := range r.attempts {
+		if attempt.IdempotencyKey == nil || *attempt.IdempotencyKey != idempotencyKey {
+			continue
+		}
+
+		cloned := *attempt
+		return &cloned, nil
+	}
+
+	return nil, ErrPaymentAttemptNotFound
+}
+
+func (r *MemoryPaymentAttemptRepository) ListByOrderID(ctx context.Context, orderID int64) ([]domain.PaymentAttempt, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	attempts := make([]domain.PaymentAttempt, 0)
+	for _, attempt := range r.attempts {
+		if attempt.OrderID == orderID {
+			attempts = append(attempts, *attempt)
+		}
+	}
+
+	return attempts, nil
+}
+
+func (r *MemoryPaymentAttemptRepository) Save(ctx context.Context, attempt *domain.PaymentAttempt) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cloned := *attempt
+	if cloned.ID == 0 {
+		cloned.ID = r.nextID
+		r.nextID++
+		attempt.ID = cloned.ID
+	}
+
+	r.attempts[cloned.ID] = &cloned
+	return nil
+}
+
 func SeedSampleData() ([]*domain.User, []*domain.Event, []*domain.Section) {
 	now := time.Now()
 

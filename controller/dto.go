@@ -46,6 +46,12 @@ type PayOrderRequest struct {
 	Method  string `json:"method"`
 }
 
+type StartPaymentRequest struct {
+	OrderID  int64  `json:"order_id"`
+	Method   string `json:"method"`
+	Provider string `json:"provider,omitempty"`
+}
+
 type ECPayCallbackRequest struct {
 	MerchantID           string `form:"MerchantID" json:"MerchantID"`
 	MerchantTradeNo      string `form:"MerchantTradeNo" json:"MerchantTradeNo"`
@@ -243,6 +249,23 @@ type PaymentResponse struct {
 	UpdatedAt string  `json:"updated_at"`
 }
 
+type PaymentAttemptResponse struct {
+	ID              int64   `json:"id"`
+	OrderID         int64   `json:"order_id"`
+	IdempotencyKey  *string `json:"idempotency_key,omitempty"`
+	Provider        string  `json:"provider"`
+	MerchantTradeNo string  `json:"merchant_trade_no"`
+	ProviderTradeNo *string `json:"provider_trade_no,omitempty"`
+	Method          string  `json:"method"`
+	Amount          int64   `json:"amount"`
+	Status          int8    `json:"status"`
+	ExpiresAt       *string `json:"expires_at,omitempty"`
+	SucceededAt     *string `json:"succeeded_at,omitempty"`
+	FailedAt        *string `json:"failed_at,omitempty"`
+	CreatedAt       string  `json:"created_at"`
+	UpdatedAt       string  `json:"updated_at"`
+}
+
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
@@ -380,6 +403,37 @@ func newPaymentResponse(payment *domain.Payment) PaymentResponse {
 
 	if payment.FailedAt != nil {
 		failedAt := payment.FailedAt.Format(time.RFC3339)
+		response.FailedAt = &failedAt
+	}
+
+	return response
+}
+
+func newPaymentAttemptResponse(attempt *domain.PaymentAttempt) PaymentAttemptResponse {
+	response := PaymentAttemptResponse{
+		ID:              attempt.ID,
+		OrderID:         attempt.OrderID,
+		IdempotencyKey:  attempt.IdempotencyKey,
+		Provider:        attempt.Provider,
+		MerchantTradeNo: attempt.MerchantTradeNo,
+		ProviderTradeNo: attempt.ProviderTradeNo,
+		Method:          attempt.Method,
+		Amount:          attempt.Amount,
+		Status:          int8(attempt.Status),
+		CreatedAt:       attempt.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:       attempt.UpdatedAt.Format(time.RFC3339),
+	}
+
+	if attempt.ExpiresAt != nil {
+		expiresAt := attempt.ExpiresAt.Format(time.RFC3339)
+		response.ExpiresAt = &expiresAt
+	}
+	if attempt.SucceededAt != nil {
+		succeededAt := attempt.SucceededAt.Format(time.RFC3339)
+		response.SucceededAt = &succeededAt
+	}
+	if attempt.FailedAt != nil {
+		failedAt := attempt.FailedAt.Format(time.RFC3339)
 		response.FailedAt = &failedAt
 	}
 

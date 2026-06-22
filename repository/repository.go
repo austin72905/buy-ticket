@@ -9,6 +9,7 @@ import (
 )
 
 var ErrIdempotencyKeyNotFound = errors.New("idempotency key not found")
+var ErrPaymentAttemptNotFound = errors.New("payment attempt not found")
 
 type EventRepository interface {
 	FindByID(ctx context.Context, eventID int64) (*domain.Event, error)
@@ -46,6 +47,13 @@ type PaymentRepository interface {
 	FindByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error)
 	ListByUserID(ctx context.Context, userID int64) ([]domain.Payment, error)
 	Save(ctx context.Context, payment *domain.Payment) error
+}
+
+type PaymentAttemptRepository interface {
+	FindByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (*domain.PaymentAttempt, error)
+	FindByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentAttempt, error)
+	ListByOrderID(ctx context.Context, orderID int64) ([]domain.PaymentAttempt, error)
+	Save(ctx context.Context, attempt *domain.PaymentAttempt) error
 }
 
 type IdempotencyRepository interface {

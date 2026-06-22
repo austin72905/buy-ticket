@@ -130,6 +130,12 @@ export interface PayOrderRequest {
   method: string
 }
 
+export interface StartPaymentRequest {
+  order_id: number
+  method: string
+  provider?: string
+}
+
 export interface PaymentResponse {
   id: number
   order_id: number
@@ -138,6 +144,24 @@ export interface PaymentResponse {
   amount: number
   status: number
   paid_at?: string
+  failed_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PaymentAttemptResponse {
+  id: number
+  order_id: number
+  payment_id?: number
+  idempotency_key?: string
+  provider: string
+  merchant_trade_no: string
+  provider_trade_no?: string
+  method: string
+  amount: number
+  status: number
+  failure_reason?: string
+  succeeded_at?: string
   failed_at?: string
   created_at: string
   updated_at: string

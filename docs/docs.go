@@ -509,6 +509,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/payments/start": {
+            "post": {
+                "description": "Create a payment attempt for a pending order. This does not mark the order as paid.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "payments"
+                ],
+                "summary": "Start provider payment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Idempotency key for safe payment start retries",
+                        "name": "Idempotency-Key",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Start payment request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.StartPaymentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/controller.PaymentAttemptResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/payments/{paymentNo}": {
             "get": {
                 "description": "依照 payment_no 取得付款資料",
@@ -1024,6 +1076,53 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.PaymentAttemptResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "failed_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "merchant_trade_no": {
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "provider_trade_no": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "succeeded_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "controller.PaymentResponse": {
             "type": "object",
             "properties": {
@@ -1255,6 +1354,20 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.StartPaymentRequest": {
+            "type": "object",
+            "properties": {
+                "method": {
+                    "type": "string"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "provider": {
                     "type": "string"
                 }
             }

@@ -52,6 +52,7 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 	authenticated.POST("/reservations", c.ReserveTicket)
 	authenticated.POST("/orders", c.CreateOrder)
 	authenticated.POST("/payments", c.PayOrder)
+	authenticated.POST("/payments/start", c.StartPayment)
 	authenticated.POST("/reservations/expire", c.ExpireReservation)
 	authenticated.POST("/reservations/cancel", c.CancelReservation)
 }
@@ -607,6 +608,71 @@ func (c *BookingController) PayOrder(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, response)
+}
+
+// StartPayment godoc
+// @Summary Start provider payment
+// @Description Create a payment attempt for a pending order. This does not mark the order as paid.
+// @Tags payments
+// @Accept json
+// @Produce json
+// @Param Idempotency-Key header string false "Idempotency key for safe payment start retries"
+// @Param request body StartPaymentRequest true "Start payment request"
+// @Success 202 {object} PaymentAttemptResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Router /payments/start [post]
+func (c *BookingController) StartPayment(ctx *gin.Context) {
+	var request StartPaymentRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	user, ok := CurrentUser(ctx)
+	if !ok {
+		writeError(ctx, http.StatusUnauthorized, service.ErrUnauthorized)
+		return
+	}
+
+	order, err := c.BookingService.GetOrder(ctx.Request.Context(), request.OrderID)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+	if order.UserID != user.ID {
+		writeError(ctx, http.StatusForbidden, service.ErrUnauthorized)
+		return
+	}
+
+	idempotencyKey := ctx.GetHeader(idempotencyKeyHeader)
+	if len(idempotencyKey) > paymentIdempotencyMaxLen {
+		writeError(ctx, http.StatusBadRequest, errors.New("idempotency key is too long"))
+		return
+	}
+	requestPayload, err := json.Marshal(request)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	attempt, err := c.BookingService.StartMockPaymentAttempt(ctx.Request.Context(), service.CreatePaymentAttemptInput{
+		OrderID:        request.OrderID,
+		IdempotencyKey: idempotencyKey,
+		Provider:       request.Provider,
+		Method:         request.Method,
+		RequestPayload: requestPayload,
+	})
+	if err != nil {
+		if errors.Is(err, service.ErrPaymentAttemptIdempotencyConflict) {
+			writeError(ctx, http.StatusConflict, err)
+			return
+		}
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	ctx.JSON(http.StatusAccepted, newPaymentAttemptResponse(attempt))
 }
 
 // HandleECPayCallback godoc

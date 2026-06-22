@@ -7,6 +7,7 @@ import type {
   JoinQueueRequest,
   LoginRequest,
   OrderResponse,
+  PaymentAttemptResponse,
   PaymentResponse,
   PayOrderRequest,
   QueueStatusResponse,
@@ -16,6 +17,7 @@ import type {
   SaleStatusResponse,
   SectionAvailabilityResponse,
   SectionResponse,
+  StartPaymentRequest,
   UserResponse,
 } from '../types/api'
 
@@ -102,6 +104,15 @@ export async function createOrder(payload: CreateOrderRequest) {
 
 export async function payOrder(payload: PayOrderRequest, idempotencyKey: string) {
   const { data } = await http.post<PaymentResponse>('/payments', payload, {
+    headers: {
+      'Idempotency-Key': idempotencyKey,
+    },
+  })
+  return data
+}
+
+export async function startPayment(payload: StartPaymentRequest, idempotencyKey: string) {
+  const { data } = await http.post<PaymentAttemptResponse>('/payments/start', payload, {
     headers: {
       'Idempotency-Key': idempotencyKey,
     },

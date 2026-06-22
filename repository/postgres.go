@@ -37,6 +37,10 @@ type PostgresPaymentRepository struct {
 	queries *db.Queries
 }
 
+type PostgresPaymentAttemptRepository struct {
+	queries *db.Queries
+}
+
 type PostgresIdempotencyRepository struct {
 	queries *db.Queries
 }
@@ -63,6 +67,10 @@ func NewPostgresOrderRepository(queries *db.Queries) *PostgresOrderRepository {
 
 func NewPostgresPaymentRepository(queries *db.Queries) *PostgresPaymentRepository {
 	return &PostgresPaymentRepository{queries: queries}
+}
+
+func NewPostgresPaymentAttemptRepository(queries *db.Queries) *PostgresPaymentAttemptRepository {
+	return &PostgresPaymentAttemptRepository{queries: queries}
 }
 
 func NewPostgresIdempotencyRepository(queries *db.Queries) *PostgresIdempotencyRepository {
@@ -443,6 +451,90 @@ func (r *PostgresPaymentRepository) ListByUserID(ctx context.Context, userID int
 	return payments, nil
 }
 
+func (r *PostgresPaymentAttemptRepository) FindByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (*domain.PaymentAttempt, error) {
+	record, err := r.queries.GetPaymentAttemptByMerchantTradeNo(ctx, merchantTradeNo)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrPaymentAttemptNotFound
+		}
+		return nil, err
+	}
+
+	return toDomainPaymentAttempt(record), nil
+}
+
+func (r *PostgresPaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentAttempt, error) {
+	record, err := r.queries.GetPaymentAttemptByIdempotencyKey(ctx, pgtype.Text{
+		String: idempotencyKey,
+		Valid:  true,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrPaymentAttemptNotFound
+		}
+		return nil, err
+	}
+
+	return toDomainPaymentAttempt(record), nil
+}
+
+func (r *PostgresPaymentAttemptRepository) ListByOrderID(ctx context.Context, orderID int64) ([]domain.PaymentAttempt, error) {
+	records, err := r.queries.ListPaymentAttemptsByOrderID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	attempts := make([]domain.PaymentAttempt, 0, len(records))
+	for _, record := range records {
+		attempts = append(attempts, *toDomainPaymentAttempt(record))
+	}
+
+	return attempts, nil
+}
+
+func (r *PostgresPaymentAttemptRepository) Save(ctx context.Context, attempt *domain.PaymentAttempt) error {
+	if attempt.ID == 0 {
+		record, err := r.queries.CreatePaymentAttempt(ctx, db.CreatePaymentAttemptParams{
+			OrderID:         attempt.OrderID,
+			PaymentID:       nullablePgInt8(attempt.PaymentID),
+			IdempotencyKey:  nullablePgText(attempt.IdempotencyKey),
+			Provider:        attempt.Provider,
+			MerchantTradeNo: attempt.MerchantTradeNo,
+			ProviderTradeNo: nullablePgText(attempt.ProviderTradeNo),
+			Method:          attempt.Method,
+			Amount:          attempt.Amount,
+			Status:          int16(attempt.Status),
+			RequestPayload:  attempt.RequestPayload,
+			ResponsePayload: attempt.ResponsePayload,
+			CallbackPayload: attempt.CallbackPayload,
+			FailureReason:   nullablePgText(attempt.FailureReason),
+			ExpiresAt:       nullablePgTimestamp(attempt.ExpiresAt),
+			SucceededAt:     nullablePgTimestamp(attempt.SucceededAt),
+			FailedAt:        nullablePgTimestamp(attempt.FailedAt),
+			CreatedAt:       toPgTimestamp(attempt.CreatedAt),
+		})
+		if err != nil {
+			return err
+		}
+
+		*attempt = *toDomainPaymentAttempt(record)
+		return nil
+	}
+
+	return r.queries.UpdatePaymentAttemptStatus(ctx, db.UpdatePaymentAttemptStatusParams{
+		ID:              attempt.ID,
+		PaymentID:       nullablePgInt8(attempt.PaymentID),
+		ProviderTradeNo: nullablePgText(attempt.ProviderTradeNo),
+		Status:          int16(attempt.Status),
+		ResponsePayload: attempt.ResponsePayload,
+		CallbackPayload: attempt.CallbackPayload,
+		FailureReason:   nullablePgText(attempt.FailureReason),
+		SucceededAt:     nullablePgTimestamp(attempt.SucceededAt),
+		FailedAt:        nullablePgTimestamp(attempt.FailedAt),
+		UpdatedAt:       toPgTimestamp(attempt.UpdatedAt),
+	})
+}
+
 func (r *PostgresIdempotencyRepository) FindByKeyAndEndpoint(ctx context.Context, key, endpoint string) (*domain.IdempotencyKey, error) {
 	record, err := r.queries.GetIdempotencyKey(ctx, db.GetIdempotencyKeyParams{
 		Key:      key,
@@ -622,6 +714,54 @@ func toDomainPayment(record db.Payment) *domain.Payment {
 	return payment
 }
 
+func toDomainPaymentAttempt(record db.PaymentAttempt) *domain.PaymentAttempt {
+	attempt := &domain.PaymentAttempt{
+		ID:              record.ID,
+		OrderID:         record.OrderID,
+		Provider:        record.Provider,
+		MerchantTradeNo: record.MerchantTradeNo,
+		Method:          record.Method,
+		Amount:          record.Amount,
+		Status:          domain.PaymentAttemptStatus(record.Status),
+		RequestPayload:  record.RequestPayload,
+		ResponsePayload: record.ResponsePayload,
+		CallbackPayload: record.CallbackPayload,
+		CreatedAt:       record.CreatedAt.Time,
+		UpdatedAt:       record.UpdatedAt.Time,
+	}
+
+	if record.PaymentID.Valid {
+		paymentID := record.PaymentID.Int64
+		attempt.PaymentID = &paymentID
+	}
+	if record.IdempotencyKey.Valid {
+		idempotencyKey := record.IdempotencyKey.String
+		attempt.IdempotencyKey = &idempotencyKey
+	}
+	if record.ProviderTradeNo.Valid {
+		providerTradeNo := record.ProviderTradeNo.String
+		attempt.ProviderTradeNo = &providerTradeNo
+	}
+	if record.FailureReason.Valid {
+		failureReason := record.FailureReason.String
+		attempt.FailureReason = &failureReason
+	}
+	if record.ExpiresAt.Valid {
+		expiresAt := record.ExpiresAt.Time
+		attempt.ExpiresAt = &expiresAt
+	}
+	if record.SucceededAt.Valid {
+		succeededAt := record.SucceededAt.Time
+		attempt.SucceededAt = &succeededAt
+	}
+	if record.FailedAt.Valid {
+		failedAt := record.FailedAt.Time
+		attempt.FailedAt = &failedAt
+	}
+
+	return attempt
+}
+
 func toDomainIdempotencyKey(record db.IdempotencyKey) *domain.IdempotencyKey {
 	idempotencyKey := &domain.IdempotencyKey{
 		ID:           record.ID,
@@ -684,6 +824,17 @@ func nullablePgInt4(value int) pgtype.Int4 {
 	return pgtype.Int4{
 		Int32: int32(value),
 		Valid: true,
+	}
+}
+
+func nullablePgText(value *string) pgtype.Text {
+	if value == nil {
+		return pgtype.Text{}
+	}
+
+	return pgtype.Text{
+		String: *value,
+		Valid:  true,
 	}
 }
 

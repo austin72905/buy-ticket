@@ -16,6 +16,32 @@ const flow = useBookingFlowStore()
 const eventId = computed(() => Number(route.params.eventId))
 const paymentMethod = 'credit_card'
 const paymentIdempotencyKey = ref('')
+const canStartMockPayment = computed(() =>
+  Boolean(
+    flow.order &&
+      canPayOrder(flow.order.status) &&
+      !flow.payment &&
+      !flow.paymentAttempt &&
+      !flow.isPending('payOrder'),
+  ),
+)
+
+const paymentAttemptLabel = computed(() => {
+  if (!flow.paymentAttempt) return 'Not started'
+  if (flow.paymentAttempt.status === 1) return 'Processing'
+  if (flow.paymentAttempt.status === 2) return 'Succeeded'
+  if (flow.paymentAttempt.status === 3) return 'Failed'
+  if (flow.paymentAttempt.status === 4) return 'Timeout'
+  if (flow.paymentAttempt.status === 5) return 'Cancelled'
+  return `Unknown (${flow.paymentAttempt.status})`
+})
+
+const paymentAttemptSeverity = computed(() => {
+  if (!flow.paymentAttempt) return 'secondary'
+  if (flow.paymentAttempt.status === 2) return 'success'
+  if (flow.paymentAttempt.status === 3 || flow.paymentAttempt.status === 4 || flow.paymentAttempt.status === 5) return 'danger'
+  return 'warning'
+})
 
 function formatCurrency(value?: number) {
   return new Intl.NumberFormat('zh-TW', {
@@ -46,14 +72,14 @@ function ensurePaymentIdempotencyKey() {
 }
 
 async function payOrder() {
-  if (!flow.order || !canPayOrder(flow.order.status)) return
+  if (!canStartMockPayment.value) return
 
   try {
     await flow.payOrderAction({
       method: paymentMethod,
       idempotencyKey: ensurePaymentIdempotencyKey(),
     })
-    if (flow.payment) {
+    if (flow.payment || (flow.paymentAttempt && flow.paymentAttempt.status !== 1)) {
       paymentIdempotencyKey.value = ''
     }
   } catch {}
@@ -109,6 +135,14 @@ watch(
               <span>Payment Status</span>
               <Tag :value="flow.payment ? String(flow.payment.status) : 'Not paid'" severity="success" />
             </div>
+            <div v-if="flow.paymentAttempt">
+              <span>Provider Attempt</span>
+              <Tag :value="paymentAttemptLabel" :severity="paymentAttemptSeverity" />
+            </div>
+            <div v-if="flow.paymentAttempt">
+              <span>Merchant Trade No</span>
+              <strong class="mono">{{ flow.paymentAttempt.merchant_trade_no }}</strong>
+            </div>
             <div v-if="flow.payment">
               <span>Payment No</span>
               <strong class="mono">{{ flow.payment.payment_no }}</strong>
@@ -123,9 +157,9 @@ watch(
             <strong>{{ paymentMethod }}</strong>
           </div>
           <Button
-            label="Pay Now"
+            v-if="canStartMockPayment"
+            label="Start Mock Payment"
             severity="danger"
-            :disabled="Boolean(flow.payment) || !canPayOrder(flow.order.status)"
             :loading="flow.isPending('payOrder')"
             @click="payOrder"
           />
@@ -135,6 +169,10 @@ watch(
           <div v-if="flow.payment" class="success-panel">
             <strong>Payment completed</strong>
             <span>The order, reservation, and section sale count are updated by the backend.</span>
+          </div>
+          <div v-else-if="flow.paymentAttempt" class="success-panel">
+            <strong>Payment attempt submitted</strong>
+            <span>The backend has called the mock payment service. Callback will update the order to paid.</span>
           </div>
         </aside>
       </div>

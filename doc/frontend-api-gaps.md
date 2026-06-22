@@ -11,7 +11,7 @@ The current frontend now connects all backend APIs that already exist:
 - `GET /queue/status/:queueToken`
 - `POST /reservations`
 - `POST /orders`
-- `POST /payments`
+- `POST /payments/start`
 
 The simplified ticketing UI can run with these endpoints, but several pieces are still rendered with local placeholder data because the backend does not expose them yet.
 
@@ -141,7 +141,7 @@ The current frontend calls:
 
 1. `POST /reservations`
 2. `POST /orders`
-3. `POST /payments`
+3. `POST /payments/start`
 
 This is good for learning and debugging, but a real UI usually wants a clearer checkout boundary.
 
@@ -176,17 +176,18 @@ Current frontend behavior:
 
 - `Seat / Quantity` page calls `POST /reservations`
 - `Cart` page calls `POST /orders`
-- `Checkout` page calls `POST /payments`
+- `Checkout` page calls `POST /payments/start`
 - The calls are intentionally split into separate screens to match the ticketing flow.
 
 ## 6. Payment Provider Start
 
-The backend has mock payment callback handling, but the frontend still uses direct `POST /payments` for demo payment.
+The frontend now uses `POST /payments/start` to create a `payment_attempt`.
+The backend calls the mock payment service, then waits for provider callback to mark the order paid.
 
-Suggested endpoint:
+Provider-flow endpoint:
 
 ```http
-POST /payments/provider/mock/start
+POST /payments/start
 ```
 
 Suggested request:
@@ -194,7 +195,8 @@ Suggested request:
 ```json
 {
   "order_id": 1,
-  "callback_url": "http://localhost:8080/payments/provider/ecpay/callback"
+  "method": "credit_card",
+  "provider": "mock_ecpay"
 }
 ```
 
@@ -202,13 +204,19 @@ Suggested response:
 
 ```json
 {
-  "provider_payment_id": "pay_123",
-  "provider_record_no": "ORD-001",
-  "status": "processing"
+  "id": 1,
+  "order_id": 1,
+  "provider": "mock_ecpay",
+  "merchant_trade_no": "MT-1-20260622120000",
+  "method": "credit_card",
+  "amount": 2800,
+  "status": 1
 }
 ```
 
-Current workaround:
+Current frontend behavior:
 
-- Frontend uses direct payment API.
+- Frontend starts the mock provider payment with `POST /payments/start`.
+- Frontend sends `Idempotency-Key` so retry does not create duplicate attempts.
+- Frontend polls the order and payment list briefly after starting the attempt.
 - Manual mock provider flow is documented in `doc/mock-payment-callback.md`.

@@ -209,6 +209,70 @@ func TestBookingControllerHandleECPayCallback(t *testing.T) {
 	})
 }
 
+func TestBookingControllerStartPayment(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("creates payment attempt for pending order", func(t *testing.T) {
+		bookingService := service.NewBookingService(
+			&fakeEventRepositoryForController{},
+			&fakeSectionRepositoryForController{},
+			&fakeReservationRepositoryForController{},
+			&fakeOrderRepositoryForController{
+				orders: map[int64]*domain.Order{
+					20: {
+						ID:          20,
+						UserID:      3,
+						TotalAmount: 3600,
+						Status:      domain.OrderStatusPendingPayment,
+					},
+				},
+			},
+			&fakePaymentRepositoryForController{},
+		)
+		bookingService.PaymentAttemptRepo = &fakePaymentAttemptRepositoryForController{}
+
+		controller := NewBookingController(bookingService)
+		router := gin.New()
+		userRepo := repository.NewMemoryUserRepository([]*domain.User{
+			{
+				ID:    3,
+				Name:  "Test User",
+				Email: "test@example.com",
+			},
+		})
+		router.Use(AttachCurrentUser(service.NewAuthService(userRepo)))
+		controller.RegisterRoutes(router)
+
+		req := httptest.NewRequest(http.MethodPost, "/payments/start", bytes.NewBufferString(`{"order_id":20,"method":"credit_card","provider":"mock_ecpay"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", "pay-key-controller-001")
+		req.AddCookie(&http.Cookie{
+			Name:  sessionCookieName,
+			Value: "3",
+		})
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusAccepted {
+			t.Fatalf("expected status 202, got %d", resp.Code)
+		}
+
+		var response PaymentAttemptResponse
+		if err := json.Unmarshal(resp.Body.Bytes(), &response); err != nil {
+			t.Fatalf("expected JSON response: %v", err)
+		}
+		if response.OrderID != 20 {
+			t.Fatalf("expected order_id=20, got %d", response.OrderID)
+		}
+		if response.Status != int8(domain.PaymentAttemptStatusTimeout) {
+			t.Fatalf("expected timeout status without mock client, got %d", response.Status)
+		}
+		if response.MerchantTradeNo == "" {
+			t.Fatal("expected merchant_trade_no")
+		}
+	})
+}
+
 type fakeEventRepositoryForController struct {
 	eventID     int64
 	saleStartAt time.Time
@@ -338,5 +402,50 @@ func (f *fakePaymentRepositoryForController) Save(ctx context.Context, payment *
 		payment.ID = f.nextID
 	}
 	f.payments[payment.ID] = payment
+	return nil
+}
+
+type fakePaymentAttemptRepositoryForController struct {
+	attempts map[int64]*domain.PaymentAttempt
+	nextID   int64
+}
+
+func (f *fakePaymentAttemptRepositoryForController) FindByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (*domain.PaymentAttempt, error) {
+	for _, attempt := range f.attempts {
+		if attempt.MerchantTradeNo == merchantTradeNo {
+			return attempt, nil
+		}
+	}
+	return nil, repository.ErrPaymentAttemptNotFound
+}
+
+func (f *fakePaymentAttemptRepositoryForController) FindByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentAttempt, error) {
+	for _, attempt := range f.attempts {
+		if attempt.IdempotencyKey != nil && *attempt.IdempotencyKey == idempotencyKey {
+			return attempt, nil
+		}
+	}
+	return nil, repository.ErrPaymentAttemptNotFound
+}
+
+func (f *fakePaymentAttemptRepositoryForController) ListByOrderID(ctx context.Context, orderID int64) ([]domain.PaymentAttempt, error) {
+	attempts := make([]domain.PaymentAttempt, 0)
+	for _, attempt := range f.attempts {
+		if attempt.OrderID == orderID {
+			attempts = append(attempts, *attempt)
+		}
+	}
+	return attempts, nil
+}
+
+func (f *fakePaymentAttemptRepositoryForController) Save(ctx context.Context, attempt *domain.PaymentAttempt) error {
+	if f.attempts == nil {
+		f.attempts = map[int64]*domain.PaymentAttempt{}
+	}
+	if attempt.ID == 0 {
+		f.nextID++
+		attempt.ID = f.nextID
+	}
+	f.attempts[attempt.ID] = attempt
 	return nil
 }

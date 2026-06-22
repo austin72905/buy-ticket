@@ -13,16 +13,18 @@ import {
   getSections,
   joinQueue,
   listEvents,
+  listMyPayments,
   listMyOrders,
   login,
   logout,
-  payOrder,
   register,
   reserveTicket,
+  startPayment,
 } from '../api/booking'
 import type {
   EventResponse,
   OrderResponse,
+  PaymentAttemptResponse,
   PaymentResponse,
   QueueStatusResponse,
   ReservationResponse,
@@ -31,6 +33,7 @@ import type {
   SectionResponse,
   UserResponse,
 } from '../types/api'
+import { OrderStatus } from '../lib/orderStatus'
 
 type TaskKey =
   | 'auth'
@@ -84,6 +87,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
   const order = ref<OrderResponse | null>(null)
   const myOrders = ref<OrderResponse[]>([])
   const payment = ref<PaymentResponse | null>(null)
+  const paymentAttempt = ref<PaymentAttemptResponse | null>(null)
 
   const pending = ref<Record<string, boolean>>({})
   const errors = ref<Record<string, string>>({})
@@ -146,6 +150,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     reservation.value = null
     order.value = null
     payment.value = null
+    paymentAttempt.value = null
   }
 
   function resetForEventChange() {
@@ -297,6 +302,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     )
     order.value = null
     payment.value = null
+    paymentAttempt.value = null
   }
 
   async function createOrderAction(input: { orderNo: string; holdMinutes: number }) {
@@ -336,6 +342,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     )
     order.value = null
     payment.value = null
+    paymentAttempt.value = null
   }
 
   async function fetchOrderAction() {
@@ -353,6 +360,30 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
 
   function selectOrder(nextOrder: OrderResponse) {
     order.value = nextOrder
+    payment.value = null
+    paymentAttempt.value = null
+  }
+
+  function wait(milliseconds: number) {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, milliseconds)
+    })
+  }
+
+  async function refreshPaymentResult(orderId: number) {
+    const [nextOrder, payments] = await Promise.all([getOrder(orderId), listMyPayments()])
+    order.value = nextOrder
+    payment.value = payments.find((item) => item.order_id === orderId) ?? payment.value
+    return nextOrder.status === OrderStatus.Paid || Boolean(payment.value)
+  }
+
+  async function pollPaymentResult(orderId: number) {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await wait(attempt === 0 ? 500 : 1000)
+      if (await refreshPaymentResult(orderId)) {
+        return
+      }
+    }
   }
 
   async function payOrderAction(input: { method: string; idempotencyKey: string }) {
@@ -360,13 +391,27 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
       setError('payOrder', 'Order is required.')
       return
     }
+    if (payment.value || paymentAttempt.value) {
+      setError('payOrder', 'Payment has already been submitted.')
+      return
+    }
+    if (order.value.status !== OrderStatus.PendingPayment) {
+      setError('payOrder', 'Only pending payment orders can be paid.')
+      return
+    }
 
-    payment.value = await runTask('payOrder', () =>
-      payOrder({
+    const orderId = order.value.id
+
+    paymentAttempt.value = await runTask('payOrder', async () => {
+      const attempt = await startPayment({
         order_id: order.value!.id,
         method: input.method,
-      }, input.idempotencyKey),
-    )
+        provider: 'mock_ecpay',
+      }, input.idempotencyKey)
+
+      await pollPaymentResult(orderId)
+      return attempt
+    })
   }
 
   return {
@@ -392,6 +437,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     myOrders,
     order,
     payment,
+    paymentAttempt,
     purchaseToken,
     queueStatus,
     queueToken,
