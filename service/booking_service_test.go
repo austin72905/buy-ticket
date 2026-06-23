@@ -1032,6 +1032,28 @@ func TestMemoryQueueStorePromoteReady(t *testing.T) {
 	})
 }
 
+func TestQueueTokenGeneration(t *testing.T) {
+	t.Run("tokens generated at the same timestamp should be unique", func(t *testing.T) {
+		now := time.Date(2026, 6, 24, 12, 0, 0, 123456789, time.UTC)
+		queueTokens := map[string]struct{}{}
+		purchaseTokens := map[string]struct{}{}
+
+		for index := 0; index < 1000; index++ {
+			queueToken := generateQueueToken(now)
+			if _, exists := queueTokens[queueToken]; exists {
+				t.Fatalf("duplicate queue token generated: %s", queueToken)
+			}
+			queueTokens[queueToken] = struct{}{}
+
+			purchaseToken := generatePurchaseToken(now)
+			if _, exists := purchaseTokens[purchaseToken]; exists {
+				t.Fatalf("duplicate purchase token generated: %s", purchaseToken)
+			}
+			purchaseTokens[purchaseToken] = struct{}{}
+		}
+	})
+}
+
 func TestMemoryQueueStoreCleanupExpiredPurchaseTokens(t *testing.T) {
 	t.Run("應清掉過期 purchase token 並將 queue 狀態改成 expired", func(t *testing.T) {
 		now := time.Now()

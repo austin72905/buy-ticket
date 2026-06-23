@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"strconv"
 	"sync"
 	"time"
@@ -312,11 +314,24 @@ func isQueueStatusActive(snapshot QueueStatusSnapshot, now time.Time) bool {
 }
 
 func generateQueueToken(now time.Time) string {
-	return "qt_" + now.Format("20060102150405.000000000")
+	return generateToken("qt", now)
 }
 
 func generatePurchaseToken(now time.Time) string {
-	return "pt_" + now.Format("20060102150405.000000000")
+	return generateToken("pt", now)
+}
+
+func generateToken(prefix string, now time.Time) string {
+	return prefix + "_" + now.Format("20060102150405.000000000") + "_" + randomTokenSuffix(now)
+}
+
+func randomTokenSuffix(now time.Time) string {
+	randomBytes := make([]byte, 8)
+	if _, err := rand.Read(randomBytes); err == nil {
+		return hex.EncodeToString(randomBytes)
+	}
+
+	return strconv.FormatInt(now.UnixNano(), 36)
 }
 
 func indexOfToken(tokens []string, target string) int {
