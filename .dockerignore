@@ -1,0 +1,15 @@
+.git
+.idea
+.vscode
+
+web/node_modules
+web/dist
+
+tmp
+coverage.out
+cover.out
+*.test
+*.out
+*.log
+
+tests/k6/sessions.json

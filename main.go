@@ -101,6 +101,7 @@ func (app *BuyTicketApp) Initialize() {
 	); err != nil {
 		log.Fatalf("load %s app.properties failed: %v", env, err)
 	}
+	applyEnvOverrides(app.Runtime)
 
 	userRepo, eventRepo, sectionRepo, reservationRepo, orderRepo, paymentRepo, dbPool := buildRepositories(app.Runtime)
 
@@ -156,6 +157,40 @@ func (app *BuyTicketApp) Initialize() {
 	addr := app.Runtime.Property.RequiredProperty("server.addr")
 	app.Runtime.Web.Listen(addr)
 	log.Printf("server configured at %s", addr)
+}
+
+func applyEnvOverrides(runtime *infraapp.Runtime) {
+	envOverrides := map[string]string{
+		"SERVER_ADDR":                    "server.addr",
+		"APP_STORE":                      "app.store",
+		"QUEUE_STORE":                    "queue.store",
+		"QUEUE_RELEASE_LIMIT":            "queue.release.limit",
+		"QUEUE_JOIN_MAX_IN_FLIGHT":       "queue.join.max_in_flight",
+		"QUEUE_JOIN_RETRY_AFTER_SECONDS": "queue.join.retry_after_seconds",
+		"ORDER_EXPIRE_BATCH_SIZE":        "order.expire.batch.size",
+		"ORDER_PAYMENT_TTL_MINUTES":      "order.payment.ttl_minutes",
+		"POSTGRES_DSN":                   "postgres.dsn",
+		"POSTGRES_POOL_MAX_IDLE_CONNS":   "postgres.pool.maxIdleConns",
+		"POSTGRES_POOL_MAX_OPEN_CONNS":   "postgres.pool.maxOpenConns",
+		"POSTGRES_CONN_MAX_IDLE_TIME":    "postgres.connMaxIdleTime",
+		"POSTGRES_CONN_MAX_LIFETIME":     "postgres.connMaxLifetime",
+		"REDIS_ADDR":                     "redis.addr",
+		"REDIS_DB":                       "redis.db",
+		"REDIS_PASSWORD":                 "redis.password",
+		"PAYMENT_MOCK_MERCHANT_ID":       "payment.mock.merchant_id",
+		"PAYMENT_MOCK_HASH_KEY":          "payment.mock.hash_key",
+		"PAYMENT_MOCK_HASH_IV":           "payment.mock.hash_iv",
+		"PAYMENT_MOCK_BASE_URL":          "payment.mock.base_url",
+		"PAYMENT_MOCK_CALLBACK_URL":      "payment.mock.callback_url",
+		"PAYMENT_MOCK_TIMEOUT_SECONDS":   "payment.mock.timeout_seconds",
+	}
+
+	for envName, propertyKey := range envOverrides {
+		value, ok := os.LookupEnv(envName)
+		if ok {
+			runtime.Property.Store.Set(propertyKey, value)
+		}
+	}
 }
 
 func buildQueueStore(runtime *infraapp.Runtime) service.QueueStore {
