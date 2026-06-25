@@ -19,6 +19,9 @@ cover.out
 # Logs
 *.log
 
+# k6 generated session files
+tests/k6/sessions.json
+
 # IDE files
 .idea/
 .vscode/

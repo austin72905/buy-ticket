@@ -1,0 +1,7 @@
+{
+  "emailPrefix": "k6-user",
+  "emailDomain": "load.local",
+  "namePrefix": "K6 Buyer",
+  "password": "password123",
+  "count": 1000
+}

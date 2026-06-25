@@ -140,6 +140,8 @@ func (app *BuyTicketApp) Initialize() {
 	registerBackgroundJobs(app.Runtime, bookingService)
 
 	bookingController := controller.NewBookingController(bookingService)
+	bookingController.QueueJoinMaxInFlight = queueJoinMaxInFlight(app.Runtime)
+	bookingController.QueueJoinRetryAfter = queueJoinRetryAfter(app.Runtime)
 
 	router := app.Runtime.Web.Router()
 	router.Use(controller.AttachCurrentUser(authService))
@@ -263,6 +265,34 @@ func queueReleaseLimit(runtime *infraapp.Runtime) int {
 	}
 
 	return limit
+}
+
+func queueJoinMaxInFlight(runtime *infraapp.Runtime) int {
+	value := runtime.Property.Property("queue.join.max_in_flight")
+	if value == "" {
+		return 0
+	}
+
+	limit, err := strconv.Atoi(value)
+	if err != nil || limit < 0 {
+		return 0
+	}
+
+	return limit
+}
+
+func queueJoinRetryAfter(runtime *infraapp.Runtime) time.Duration {
+	value := runtime.Property.Property("queue.join.retry_after_seconds")
+	if value == "" {
+		return time.Second
+	}
+
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return time.Second
+	}
+
+	return time.Duration(seconds) * time.Second
 }
 
 func orderExpireBatchSize(runtime *infraapp.Runtime) int {

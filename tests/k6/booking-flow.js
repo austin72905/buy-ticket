@@ -1,16 +1,21 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
+import { validateUserCapacity } from './user-config.js';
 
 const BASE_URL = (__ENV.BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
 const EVENT_ID = Number(__ENV.EVENT_ID || '1');
 const SECTION_ID = Number(__ENV.SECTION_ID || '0');
+const SECTION_IDS = parseSectionIDs(__ENV.SECTION_IDS || '');
 const QUANTITY = Number(__ENV.QUANTITY || '1');
 const VUS = Number(__ENV.VUS || '20');
 const MAX_QUEUE_POLLS = Number(__ENV.MAX_QUEUE_POLLS || '30');
 const QUEUE_POLL_SECONDS = Number(__ENV.QUEUE_POLL_SECONDS || '1');
+const QUEUE_JOIN_RETRIES = Number(__ENV.QUEUE_JOIN_RETRIES || '5');
+const QUEUE_JOIN_RETRY_SECONDS = Number(__ENV.QUEUE_JOIN_RETRY_SECONDS || '1');
 const HOLD_MINUTES = Number(__ENV.HOLD_MINUTES || '10');
 const RUN_ID = __ENV.RUN_ID || `${Date.now()}`;
+const sessionFile = JSON.parse(open(__ENV.SESSION_FILE || './sessions.json'));
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -42,31 +47,46 @@ const queuePollsTrend = new Trend('queue_polls');
 const activeReservationErrors = new Counter('active_reservation_errors');
 const purchaseTokenErrors = new Counter('purchase_token_errors');
 const sectionStockErrors = new Counter('section_stock_errors');
+const queueJoinRetries = new Counter('queue_join_retries');
 
 export function setup() {
-  const health = http.get(`${BASE_URL}/healthz`);
+  validateUserCapacity(VUS);
+  validateSessionCapacity(VUS);
+
+  const health = http.get(`${BASE_URL}/healthz`, requestOptions('healthz'));
   check(health, {
     'healthz is 200': (res) => res.status === 200,
   });
 
-  const availability = http.get(`${BASE_URL}/events/${EVENT_ID}/availability`);
+  const availability = http.get(`${BASE_URL}/events/${EVENT_ID}/availability`, requestOptions('availability'));
   check(availability, {
     'availability is 200': (res) => res.status === 200,
   });
 
-  let selectedSectionId = SECTION_ID;
-  if (!selectedSectionId) {
-    const sections = availability.json() || [];
-    const availableSection = sections.find((section) => Number(section.available_quantity) >= QUANTITY);
-    selectedSectionId = Number((availableSection && availableSection.section_id) || 0);
+  const saleStatus = getSaleStatus();
+  if (!saleStatus) {
+    throw new Error('Event is not ready for queue. Check sale status and event sale window.');
   }
 
-  if (!selectedSectionId) {
+  const sections = safeJson(availability) || [];
+  let selectedSectionIds = [];
+  if (SECTION_ID) {
+    selectedSectionIds = [SECTION_ID];
+  } else if (SECTION_IDS.length > 0) {
+    selectedSectionIds = SECTION_IDS.filter((sectionId) => sectionIsAvailable(sections, sectionId));
+  } else {
+    selectedSectionIds = sections
+      .filter((section) => Number(section.available_quantity) >= QUANTITY)
+      .map((section) => Number(section.section_id))
+      .filter((sectionId) => sectionId > 0);
+  }
+
+  if (selectedSectionIds.length === 0) {
     throw new Error('No available section. Set SECTION_ID or check event availability.');
   }
 
   return {
-    sectionId: selectedSectionId,
+    sectionIds: selectedSectionIds,
   };
 }
 
@@ -74,27 +94,17 @@ export default function (data) {
   const vuID = __VU;
   const iterationID = __ITER;
   const buyerKey = `${RUN_ID}-${vuID}-${iterationID}`;
-  const email = `k6-${buyerKey}@load.local`;
-  const password = 'password123';
-  const sectionId = data.sectionId;
+  const session = sessionFile.sessions[vuID - 1];
+  const sectionId = selectSectionId(data.sectionIds, vuID, iterationID);
 
-  const user = registerOrLogin(email, password, buyerKey);
-  if (!user) {
+  if (!session || !session.cookieHeader) {
     reservationSuccessRate.add(false);
     orderSuccessRate.add(false);
     bookingFlowSuccessRate.add(false);
     return;
   }
 
-  const saleStatus = getSaleStatus();
-  if (!saleStatus) {
-    reservationSuccessRate.add(false);
-    orderSuccessRate.add(false);
-    bookingFlowSuccessRate.add(false);
-    return;
-  }
-
-  const queueStatus = joinQueue(buyerKey);
+  const queueStatus = joinQueue(buyerKey, session.cookieHeader);
   if (!queueStatus || !queueStatus.queue_token) {
     reservationSuccessRate.add(false);
     orderSuccessRate.add(false);
@@ -111,7 +121,7 @@ export default function (data) {
     return;
   }
 
-  const reservation = reserveTicket(sectionId, readyStatus.purchase_token);
+  const reservation = reserveTicket(sectionId, readyStatus.purchase_token, session.cookieHeader);
   reservationSuccessRate.add(Boolean(reservation && reservation.id));
   if (!reservation || !reservation.id) {
     orderSuccessRate.add(false);
@@ -119,84 +129,61 @@ export default function (data) {
     return;
   }
 
-  const order = createOrder(reservation.id, readyStatus.purchase_token, buyerKey);
+  const order = createOrder(reservation.id, readyStatus.purchase_token, buyerKey, session.cookieHeader);
   orderSuccessRate.add(Boolean(order && order.id));
   bookingFlowSuccessRate.add(Boolean(order && order.id));
 
   sleep(0.1);
 }
 
-function registerOrLogin(email, password, buyerKey) {
-  const registerPayload = {
-    name: `K6 Buyer ${buyerKey}`,
-    email,
-    password,
-  };
-
-  const registerRes = http.post(`${BASE_URL}/auth/register`, JSON.stringify(registerPayload), {
-    headers: jsonHeaders,
-  });
-
-  if (registerRes.status === 201 || registerRes.status === 200) {
-    check(registerRes, {
-      'register returns user': (res) => Boolean(res.json('id')),
-    });
-    return registerRes.json();
-  }
-
-  const loginRes = http.post(`${BASE_URL}/auth/login`, JSON.stringify({ email, password }), {
-    headers: jsonHeaders,
-  });
-
-  check(loginRes, {
-    'login is 200': (res) => res.status === 200,
-  });
-
-  if (loginRes.status !== 200) {
-    return null;
-  }
-
-  return loginRes.json();
-}
-
 function getSaleStatus() {
-  const res = http.get(`${BASE_URL}/sale/status?event_id=${EVENT_ID}`);
+  const res = http.get(`${BASE_URL}/sale/status?event_id=${EVENT_ID}`, requestOptions('sale_status'));
 
   check(res, {
     'sale status is 200': (response) => response.status === 200,
-    'event can join queue': (response) => response.json('can_join_queue') === true,
+    'event can join queue': (response) => safeJsonField(response, 'can_join_queue') === true,
   });
 
-  if (res.status !== 200 || res.json('can_join_queue') !== true) {
+  if (res.status !== 200 || safeJsonField(res, 'can_join_queue') !== true) {
     return null;
   }
 
-  return res.json();
+  return safeJson(res);
 }
 
-function joinQueue(buyerKey) {
-  const payload = {
-    event_id: EVENT_ID,
-    client_id: `k6-client-${buyerKey}`,
-    request_id: `k6-request-${buyerKey}`,
-    channel: 'k6',
-  };
+function joinQueue(buyerKey, cookieHeader) {
+	const payload = {
+		event_id: EVENT_ID,
+		client_id: `k6-client-${buyerKey}`,
+		request_id: `k6-request-${buyerKey}`,
+		channel: 'k6',
+	};
 
-  const res = http.post(`${BASE_URL}/queue/join`, JSON.stringify(payload), {
-    headers: jsonHeaders,
-  });
+	for (let attempt = 0; attempt <= QUEUE_JOIN_RETRIES; attempt += 1) {
+		const res = http.post(`${BASE_URL}/queue/join`, JSON.stringify(payload), {
+			...requestOptions('queue_join'),
+			headers: authenticatedHeaders(cookieHeader),
+		});
 
-  check(res, {
-    'queue join is 201': (response) => response.status === 201,
-    'queue token exists': (response) => Boolean(response.json('queue_token')),
-  });
+		check(res, {
+			'queue join is 201': (response) => response.status === 201,
+			'queue token exists': (response) => Boolean(safeJsonField(response, 'queue_token')),
+		});
 
-  if (res.status !== 201) {
-    classifyError(res);
-    return null;
-  }
+		if (res.status === 201) {
+			return safeJson(res);
+		}
 
-  return res.json();
+		classifyError(res);
+		if (!shouldRetryQueueJoin(res) || attempt === QUEUE_JOIN_RETRIES) {
+			return null;
+		}
+
+		queueJoinRetries.add(1);
+		sleep(queueJoinRetrySeconds(res));
+	}
+
+	return null;
 }
 
 function waitForPurchaseToken(initialStatus) {
@@ -213,7 +200,7 @@ function waitForPurchaseToken(initialStatus) {
     }
 
     sleep(QUEUE_POLL_SECONDS);
-    const res = http.get(`${BASE_URL}/queue/status/${status.queue_token}`);
+    const res = http.get(`${BASE_URL}/queue/status/${status.queue_token}`, requestOptions('queue_status'));
 
     check(res, {
       'queue status is 200': (response) => response.status === 200,
@@ -224,14 +211,14 @@ function waitForPurchaseToken(initialStatus) {
       return null;
     }
 
-    status = res.json();
+    status = safeJson(res);
   }
 
   queuePollsTrend.add(MAX_QUEUE_POLLS);
   return null;
 }
 
-function reserveTicket(sectionId, purchaseToken) {
+function reserveTicket(sectionId, purchaseToken, cookieHeader) {
   const holdUntil = new Date(Date.now() + HOLD_MINUTES * 60 * 1000).toISOString();
   const payload = {
     event_id: EVENT_ID,
@@ -242,12 +229,13 @@ function reserveTicket(sectionId, purchaseToken) {
   };
 
   const res = http.post(`${BASE_URL}/reservations`, JSON.stringify(payload), {
-    headers: jsonHeaders,
+    ...requestOptions('reserve'),
+    headers: authenticatedHeaders(cookieHeader),
   });
 
   check(res, {
     'reservation is 201': (response) => response.status === 201,
-    'reservation id exists': (response) => Boolean(response.json('id')),
+    'reservation id exists': (response) => Boolean(safeJsonField(response, 'id')),
   });
 
   if (res.status !== 201) {
@@ -255,10 +243,10 @@ function reserveTicket(sectionId, purchaseToken) {
     return null;
   }
 
-  return res.json();
+  return safeJson(res);
 }
 
-function createOrder(reservationId, purchaseToken, buyerKey) {
+function createOrder(reservationId, purchaseToken, buyerKey, cookieHeader) {
   const payload = {
     reservation_id: reservationId,
     order_no: `K6-${buyerKey}`.slice(0, 40),
@@ -266,12 +254,13 @@ function createOrder(reservationId, purchaseToken, buyerKey) {
   };
 
   const res = http.post(`${BASE_URL}/orders`, JSON.stringify(payload), {
-    headers: jsonHeaders,
+    ...requestOptions('create_order'),
+    headers: authenticatedHeaders(cookieHeader),
   });
 
   check(res, {
     'order is 201': (response) => response.status === 201,
-    'order id exists': (response) => Boolean(response.json('id')),
+    'order id exists': (response) => Boolean(safeJsonField(response, 'id')),
   });
 
   if (res.status !== 201) {
@@ -279,11 +268,11 @@ function createOrder(reservationId, purchaseToken, buyerKey) {
     return null;
   }
 
-  return res.json();
+  return safeJson(res);
 }
 
 function classifyError(res) {
-  const message = String(jsonField(res, 'error') || '');
+  const message = String(safeJsonField(res, 'error') || '');
 
   if (message.includes('active reservation already exists')) {
     activeReservationErrors.add(1);
@@ -296,10 +285,68 @@ function classifyError(res) {
   }
 }
 
-function jsonField(res, fieldName) {
+function safeJsonField(res, fieldName) {
   try {
     return res.json(fieldName);
   } catch {
     return '';
+  }
+}
+
+function safeJson(res) {
+	try {
+		return res.json();
+	} catch {
+		return null;
+	}
+}
+
+function shouldRetryQueueJoin(res) {
+	return res.status === 0 || res.status === 429 || res.status >= 500;
+}
+
+function queueJoinRetrySeconds(res) {
+	const retryAfter = Number((res.headers && res.headers['Retry-After']) || '0');
+	if (retryAfter > 0) {
+		return retryAfter;
+	}
+	return QUEUE_JOIN_RETRY_SECONDS;
+}
+
+function parseSectionIDs(value) {
+  return value
+    .split(',')
+    .map((sectionId) => Number(sectionId.trim()))
+    .filter((sectionId) => sectionId > 0);
+}
+
+function sectionIsAvailable(sections, sectionId) {
+  return sections.some((section) => (
+    Number(section.section_id) === sectionId
+    && Number(section.available_quantity) >= QUANTITY
+  ));
+}
+
+function selectSectionId(sectionIds, vuID, iterationID) {
+  return sectionIds[(vuID + iterationID - 1) % sectionIds.length];
+}
+
+function authenticatedHeaders(cookieHeader) {
+  return {
+    ...jsonHeaders,
+    Cookie: cookieHeader,
+  };
+}
+
+function requestOptions(name) {
+  return {
+    tags: { name },
+  };
+}
+
+function validateSessionCapacity(requiredSessions) {
+  if (!sessionFile.sessions || sessionFile.sessions.length < requiredSessions) {
+    const actualSessions = sessionFile.sessions ? sessionFile.sessions.length : 0;
+    throw new Error(`Need ${requiredSessions} sessions, but sessions.json only has ${actualSessions}. Run tests/k6/login-users.mjs first.`);
   }
 }

@@ -1,0 +1,28 @@
+{
+  "baseURL": "http://localhost:8080",
+  "generatedAt": "2026-06-25T00:00:00.000Z",
+  "userOffset": 0,
+  "userCount": 20,
+  "sessions": [
+    { "userNumber": 1, "email": "k6-user-1@load.local", "cookieHeader": "buy_ticket_session=1" },
+    { "userNumber": 2, "email": "k6-user-2@load.local", "cookieHeader": "buy_ticket_session=2" },
+    { "userNumber": 3, "email": "k6-user-3@load.local", "cookieHeader": "buy_ticket_session=3" },
+    { "userNumber": 4, "email": "k6-user-4@load.local", "cookieHeader": "buy_ticket_session=4" },
+    { "userNumber": 5, "email": "k6-user-5@load.local", "cookieHeader": "buy_ticket_session=5" },
+    { "userNumber": 6, "email": "k6-user-6@load.local", "cookieHeader": "buy_ticket_session=6" },
+    { "userNumber": 7, "email": "k6-user-7@load.local", "cookieHeader": "buy_ticket_session=7" },
+    { "userNumber": 8, "email": "k6-user-8@load.local", "cookieHeader": "buy_ticket_session=8" },
+    { "userNumber": 9, "email": "k6-user-9@load.local", "cookieHeader": "buy_ticket_session=9" },
+    { "userNumber": 10, "email": "k6-user-10@load.local", "cookieHeader": "buy_ticket_session=10" },
+    { "userNumber": 11, "email": "k6-user-11@load.local", "cookieHeader": "buy_ticket_session=11" },
+    { "userNumber": 12, "email": "k6-user-12@load.local", "cookieHeader": "buy_ticket_session=12" },
+    { "userNumber": 13, "email": "k6-user-13@load.local", "cookieHeader": "buy_ticket_session=13" },
+    { "userNumber": 14, "email": "k6-user-14@load.local", "cookieHeader": "buy_ticket_session=14" },
+    { "userNumber": 15, "email": "k6-user-15@load.local", "cookieHeader": "buy_ticket_session=15" },
+    { "userNumber": 16, "email": "k6-user-16@load.local", "cookieHeader": "buy_ticket_session=16" },
+    { "userNumber": 17, "email": "k6-user-17@load.local", "cookieHeader": "buy_ticket_session=17" },
+    { "userNumber": 18, "email": "k6-user-18@load.local", "cookieHeader": "buy_ticket_session=18" },
+    { "userNumber": 19, "email": "k6-user-19@load.local", "cookieHeader": "buy_ticket_session=19" },
+    { "userNumber": 20, "email": "k6-user-20@load.local", "cookieHeader": "buy_ticket_session=20" }
+  ]
+}
