@@ -15,7 +15,9 @@ import (
 )
 
 type BookingController struct {
-	BookingService *service.BookingService
+	BookingService       *service.BookingService
+	QueueJoinMaxInFlight int
+	QueueJoinRetryAfter  time.Duration
 }
 
 const (
@@ -48,7 +50,13 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 	authenticated.GET("/me/reservations", c.ListUserReservations)
 	authenticated.GET("/me/orders", c.ListUserOrders)
 	authenticated.GET("/me/payments", c.ListUserPayments)
-	authenticated.POST("/queue/join", c.JoinQueue)
+	queueJoinHandlers := []gin.HandlerFunc{c.JoinQueue}
+	if c.QueueJoinMaxInFlight > 0 {
+		queueJoinHandlers = append([]gin.HandlerFunc{
+			QueueJoinBackpressure(c.QueueJoinMaxInFlight, c.QueueJoinRetryAfter),
+		}, queueJoinHandlers...)
+	}
+	authenticated.POST("/queue/join", queueJoinHandlers...)
 	authenticated.POST("/reservations", c.ReserveTicket)
 	authenticated.POST("/orders", c.CreateOrder)
 	authenticated.POST("/payments", c.PayOrder)

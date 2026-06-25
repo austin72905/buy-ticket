@@ -44,6 +44,67 @@ func (q *Queries) CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempo
 	return err
 }
 
+const confirmSectionSale = `-- name: ConfirmSectionSale :one
+UPDATE event_sections
+SET
+    reserved_quantity = reserved_quantity - $1::integer,
+    sold_quantity = sold_quantity + $1::integer,
+    status = CASE
+        WHEN total_quantity - (reserved_quantity - $1::integer) - (sold_quantity + $1::integer) = 0 THEN 3
+        ELSE status
+    END,
+    updated_at = $2
+WHERE event_id = $3
+  AND id = $4
+  AND $1::integer > 0
+  AND reserved_quantity >= $1::integer
+RETURNING
+    id,
+    event_id,
+    event_name,
+    section_name,
+    price,
+    total_quantity,
+    reserved_quantity,
+    sold_quantity,
+    purchase_limit,
+    status,
+    created_at,
+    updated_at
+`
+
+type ConfirmSectionSaleParams struct {
+	Quantity  int32              `json:"quantity"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	EventID   int64              `json:"event_id"`
+	ID        int64              `json:"id"`
+}
+
+func (q *Queries) ConfirmSectionSale(ctx context.Context, arg ConfirmSectionSaleParams) (EventSection, error) {
+	row := q.db.QueryRow(ctx, confirmSectionSale,
+		arg.Quantity,
+		arg.UpdatedAt,
+		arg.EventID,
+		arg.ID,
+	)
+	var i EventSection
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.EventName,
+		&i.SectionName,
+		&i.Price,
+		&i.TotalQuantity,
+		&i.ReservedQuantity,
+		&i.SoldQuantity,
+		&i.PurchaseLimit,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createEvent = `-- name: CreateEvent :one
 INSERT INTO events (
     name,
@@ -1775,6 +1836,124 @@ func (q *Queries) ListSectionsByEventID(ctx context.Context, eventID int64) ([]E
 		return nil, err
 	}
 	return items, nil
+}
+
+const releaseSectionInventory = `-- name: ReleaseSectionInventory :one
+UPDATE event_sections
+SET
+    reserved_quantity = reserved_quantity - $1::integer,
+    status = CASE
+        WHEN status = 3 AND total_quantity - (reserved_quantity - $1::integer) - sold_quantity > 0 THEN 1
+        ELSE status
+    END,
+    updated_at = $2
+WHERE event_id = $3
+  AND id = $4
+  AND $1::integer > 0
+  AND reserved_quantity >= $1::integer
+RETURNING
+    id,
+    event_id,
+    event_name,
+    section_name,
+    price,
+    total_quantity,
+    reserved_quantity,
+    sold_quantity,
+    purchase_limit,
+    status,
+    created_at,
+    updated_at
+`
+
+type ReleaseSectionInventoryParams struct {
+	Quantity  int32              `json:"quantity"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	EventID   int64              `json:"event_id"`
+	ID        int64              `json:"id"`
+}
+
+func (q *Queries) ReleaseSectionInventory(ctx context.Context, arg ReleaseSectionInventoryParams) (EventSection, error) {
+	row := q.db.QueryRow(ctx, releaseSectionInventory,
+		arg.Quantity,
+		arg.UpdatedAt,
+		arg.EventID,
+		arg.ID,
+	)
+	var i EventSection
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.EventName,
+		&i.SectionName,
+		&i.Price,
+		&i.TotalQuantity,
+		&i.ReservedQuantity,
+		&i.SoldQuantity,
+		&i.PurchaseLimit,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const reserveSectionInventory = `-- name: ReserveSectionInventory :one
+UPDATE event_sections
+SET
+    reserved_quantity = reserved_quantity + $1::integer,
+    updated_at = $2
+WHERE event_id = $3
+  AND id = $4
+  AND status = 1
+  AND $1::integer > 0
+  AND (purchase_limit = 0 OR $1::integer <= purchase_limit)
+  AND reserved_quantity + sold_quantity + $1::integer <= total_quantity
+RETURNING
+    id,
+    event_id,
+    event_name,
+    section_name,
+    price,
+    total_quantity,
+    reserved_quantity,
+    sold_quantity,
+    purchase_limit,
+    status,
+    created_at,
+    updated_at
+`
+
+type ReserveSectionInventoryParams struct {
+	Quantity  int32              `json:"quantity"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	EventID   int64              `json:"event_id"`
+	ID        int64              `json:"id"`
+}
+
+func (q *Queries) ReserveSectionInventory(ctx context.Context, arg ReserveSectionInventoryParams) (EventSection, error) {
+	row := q.db.QueryRow(ctx, reserveSectionInventory,
+		arg.Quantity,
+		arg.UpdatedAt,
+		arg.EventID,
+		arg.ID,
+	)
+	var i EventSection
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.EventName,
+		&i.SectionName,
+		&i.Price,
+		&i.TotalQuantity,
+		&i.ReservedQuantity,
+		&i.SoldQuantity,
+		&i.PurchaseLimit,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateOrderStatus = `-- name: UpdateOrderStatus :exec

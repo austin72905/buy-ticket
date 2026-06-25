@@ -171,6 +171,13 @@ Configuration:
 
 Redis stock reconciliation is controlled by a background job.
 
+Inventory writes now use two layers:
+
+- Redis Lua scripts act as the fast admission gate for reservation traffic.
+- PostgreSQL section inventory updates use conditional atomic SQL updates for reserve, release, and confirm-sale transitions.
+
+The DB update is the durable consistency boundary. If Redis succeeds but the DB transaction fails, the service compensates Redis and reconciliation can repair remaining Redis drift.
+
 Behavior:
 
 - Runs every 1 minute.

@@ -171,6 +171,7 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 	var reservation *domain.Reservation
 	var reservedSection *domain.Section
 	stockReserved := false
+	sectionInventoryReserved := false
 
 	if _, err := s.QueueStore.ValidatePurchaseToken(ctx, input.PurchaseToken, input.EventID, input.UserID, now); err != nil {
 		return nil, err
@@ -210,18 +211,18 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 			stockReserved = true
 		}
 
-		if !section.Reserve(input.Quantity) {
+		section, err = repos.section.ReserveInventory(ctx, input.EventID, input.SectionID, input.Quantity, now)
+		if err != nil {
 			if stockReserved {
-				_ = s.StockStore.Release(ctx, *section, input.Quantity)
+				_ = s.StockStore.Release(ctx, *reservedSection, input.Quantity)
 				stockReserved = false
 			}
-			return ErrSectionNotReservable
-		}
-
-		section.UpdatedAt = now
-		if err := repos.section.Save(ctx, section); err != nil {
+			if errors.Is(err, repository.ErrSectionNotFound) {
+				return ErrSectionNotReservable
+			}
 			return err
 		}
+		sectionInventoryReserved = true
 
 		reservation = &domain.Reservation{
 			EventID:     input.EventID,
@@ -239,8 +240,10 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 		return repos.reservation.Save(ctx, reservation)
 	})
 	if err != nil {
+		if sectionInventoryReserved && s.DB == nil {
+			_, _ = s.SectionRepo.ReleaseInventory(ctx, input.EventID, input.SectionID, input.Quantity, now)
+		}
 		if stockReserved && reservedSection != nil {
-			_ = reservedSection.Release(input.Quantity)
 			_ = s.StockStore.Release(ctx, *reservedSection, input.Quantity)
 		}
 		return nil, err
@@ -347,10 +350,6 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 			return err
 		}
 
-		if !section.ConfirmSale(reservation.Quantity) {
-			return ErrSectionNotReservable
-		}
-
 		if !order.MarkPaid(paidAt) {
 			return ErrOrderCannotBePaid
 		}
@@ -369,8 +368,10 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 			return ErrOrderCannotBePaid
 		}
 
-		section.UpdatedAt = paidAt
-		if err := repos.section.Save(ctx, section); err != nil {
+		if _, err := repos.section.ConfirmSale(ctx, section.EventID, section.ID, reservation.Quantity, paidAt); err != nil {
+			if errors.Is(err, repository.ErrSectionNotFound) {
+				return ErrSectionNotReservable
+			}
 			return err
 		}
 
@@ -426,10 +427,6 @@ func (s *BookingService) ExpireOrder(ctx context.Context, input ExpireOrderInput
 			return err
 		}
 
-		if !section.Release(reservation.Quantity) {
-			return ErrReservationCannotClose
-		}
-
 		releasedSection = section
 		releaseQuantity = reservation.Quantity
 		if s.StockStore != nil {
@@ -439,8 +436,10 @@ func (s *BookingService) ExpireOrder(ctx context.Context, input ExpireOrderInput
 			stockReleased = true
 		}
 
-		section.UpdatedAt = input.ExpiredAt
-		if err := repos.section.Save(ctx, section); err != nil {
+		if _, err := repos.section.ReleaseInventory(ctx, section.EventID, section.ID, reservation.Quantity, input.ExpiredAt); err != nil {
+			if errors.Is(err, repository.ErrSectionNotFound) {
+				return ErrReservationCannotClose
+			}
 			return err
 		}
 
@@ -510,10 +509,6 @@ func (s *BookingService) ExpireReservation(ctx context.Context, input ExpireRese
 			return err
 		}
 
-		if !section.Release(reservation.Quantity) {
-			return ErrReservationCannotClose
-		}
-
 		releasedSection = section
 		releaseQuantity = reservation.Quantity
 		if s.StockStore != nil {
@@ -523,8 +518,10 @@ func (s *BookingService) ExpireReservation(ctx context.Context, input ExpireRese
 			stockReleased = true
 		}
 
-		section.UpdatedAt = input.ExpiredAt
-		if err := repos.section.Save(ctx, section); err != nil {
+		if _, err := repos.section.ReleaseInventory(ctx, section.EventID, section.ID, reservation.Quantity, input.ExpiredAt); err != nil {
+			if errors.Is(err, repository.ErrSectionNotFound) {
+				return ErrReservationCannotClose
+			}
 			return err
 		}
 
@@ -563,10 +560,6 @@ func (s *BookingService) CancelReservation(ctx context.Context, input CancelRese
 			return err
 		}
 
-		if !section.Release(reservation.Quantity) {
-			return ErrReservationCannotClose
-		}
-
 		releasedSection = section
 		releaseQuantity = reservation.Quantity
 		if s.StockStore != nil {
@@ -576,8 +569,10 @@ func (s *BookingService) CancelReservation(ctx context.Context, input CancelRese
 			stockReleased = true
 		}
 
-		section.UpdatedAt = input.CancelledAt
-		if err := repos.section.Save(ctx, section); err != nil {
+		if _, err := repos.section.ReleaseInventory(ctx, section.EventID, section.ID, reservation.Quantity, input.CancelledAt); err != nil {
+			if errors.Is(err, repository.ErrSectionNotFound) {
+				return ErrReservationCannotClose
+			}
 			return err
 		}
 

@@ -25,6 +25,9 @@ type UserRepository interface {
 type SectionRepository interface {
 	FindByEventAndID(ctx context.Context, eventID, sectionID int64) (*domain.Section, error)
 	ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error)
+	ReserveInventory(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error)
+	ReleaseInventory(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error)
+	ConfirmSale(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error)
 	Save(ctx context.Context, section *domain.Section) error
 }
 

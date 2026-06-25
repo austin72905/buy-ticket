@@ -174,6 +174,86 @@ SET
     updated_at = $5
 WHERE id = $1;
 
+-- name: ReserveSectionInventory :one
+UPDATE event_sections
+SET
+    reserved_quantity = reserved_quantity + sqlc.arg(quantity)::integer,
+    updated_at = sqlc.arg(updated_at)
+WHERE event_id = sqlc.arg(event_id)
+  AND id = sqlc.arg(id)
+  AND status = 1
+  AND sqlc.arg(quantity)::integer > 0
+  AND (purchase_limit = 0 OR sqlc.arg(quantity)::integer <= purchase_limit)
+  AND reserved_quantity + sold_quantity + sqlc.arg(quantity)::integer <= total_quantity
+RETURNING
+    id,
+    event_id,
+    event_name,
+    section_name,
+    price,
+    total_quantity,
+    reserved_quantity,
+    sold_quantity,
+    purchase_limit,
+    status,
+    created_at,
+    updated_at;
+
+-- name: ReleaseSectionInventory :one
+UPDATE event_sections
+SET
+    reserved_quantity = reserved_quantity - sqlc.arg(quantity)::integer,
+    status = CASE
+        WHEN status = 3 AND total_quantity - (reserved_quantity - sqlc.arg(quantity)::integer) - sold_quantity > 0 THEN 1
+        ELSE status
+    END,
+    updated_at = sqlc.arg(updated_at)
+WHERE event_id = sqlc.arg(event_id)
+  AND id = sqlc.arg(id)
+  AND sqlc.arg(quantity)::integer > 0
+  AND reserved_quantity >= sqlc.arg(quantity)::integer
+RETURNING
+    id,
+    event_id,
+    event_name,
+    section_name,
+    price,
+    total_quantity,
+    reserved_quantity,
+    sold_quantity,
+    purchase_limit,
+    status,
+    created_at,
+    updated_at;
+
+-- name: ConfirmSectionSale :one
+UPDATE event_sections
+SET
+    reserved_quantity = reserved_quantity - sqlc.arg(quantity)::integer,
+    sold_quantity = sold_quantity + sqlc.arg(quantity)::integer,
+    status = CASE
+        WHEN total_quantity - (reserved_quantity - sqlc.arg(quantity)::integer) - (sold_quantity + sqlc.arg(quantity)::integer) = 0 THEN 3
+        ELSE status
+    END,
+    updated_at = sqlc.arg(updated_at)
+WHERE event_id = sqlc.arg(event_id)
+  AND id = sqlc.arg(id)
+  AND sqlc.arg(quantity)::integer > 0
+  AND reserved_quantity >= sqlc.arg(quantity)::integer
+RETURNING
+    id,
+    event_id,
+    event_name,
+    section_name,
+    price,
+    total_quantity,
+    reserved_quantity,
+    sold_quantity,
+    purchase_limit,
+    status,
+    created_at,
+    updated_at;
+
 -- name: GetReservationByID :one
 SELECT
     id,

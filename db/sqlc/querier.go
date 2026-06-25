@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
+	ConfirmSectionSale(ctx context.Context, arg ConfirmSectionSaleParams) (EventSection, error)
 	CreateEvent(ctx context.Context, arg CreateEventParams) (Event, error)
 	CreateIdempotencyKey(ctx context.Context, arg CreateIdempotencyKeyParams) (IdempotencyKey, error)
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
@@ -41,6 +42,8 @@ type Querier interface {
 	ListPaymentsByUserID(ctx context.Context, userID int64) ([]Payment, error)
 	ListReservationsByUserID(ctx context.Context, userID int64) ([]Reservation, error)
 	ListSectionsByEventID(ctx context.Context, eventID int64) ([]EventSection, error)
+	ReleaseSectionInventory(ctx context.Context, arg ReleaseSectionInventoryParams) (EventSection, error)
+	ReserveSectionInventory(ctx context.Context, arg ReserveSectionInventoryParams) (EventSection, error)
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) error
 	UpdatePaymentAttemptStatus(ctx context.Context, arg UpdatePaymentAttemptStatusParams) error
 	UpdatePaymentStatus(ctx context.Context, arg UpdatePaymentStatusParams) error

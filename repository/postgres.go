@@ -172,6 +172,57 @@ func (r *PostgresSectionRepository) ListByEventID(ctx context.Context, eventID i
 	return sections, nil
 }
 
+func (r *PostgresSectionRepository) ReserveInventory(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error) {
+	record, err := r.queries.ReserveSectionInventory(ctx, db.ReserveSectionInventoryParams{
+		EventID:   eventID,
+		ID:        sectionID,
+		Quantity:  int32(quantity),
+		UpdatedAt: toPgTimestamp(now),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSectionNotFound
+		}
+		return nil, err
+	}
+
+	return toDomainSection(record), nil
+}
+
+func (r *PostgresSectionRepository) ReleaseInventory(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error) {
+	record, err := r.queries.ReleaseSectionInventory(ctx, db.ReleaseSectionInventoryParams{
+		EventID:   eventID,
+		ID:        sectionID,
+		Quantity:  int32(quantity),
+		UpdatedAt: toPgTimestamp(now),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSectionNotFound
+		}
+		return nil, err
+	}
+
+	return toDomainSection(record), nil
+}
+
+func (r *PostgresSectionRepository) ConfirmSale(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error) {
+	record, err := r.queries.ConfirmSectionSale(ctx, db.ConfirmSectionSaleParams{
+		EventID:   eventID,
+		ID:        sectionID,
+		Quantity:  int32(quantity),
+		UpdatedAt: toPgTimestamp(now),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSectionNotFound
+		}
+		return nil, err
+	}
+
+	return toDomainSection(record), nil
+}
+
 func (r *PostgresSectionRepository) Save(ctx context.Context, section *domain.Section) error {
 	if section.ID == 0 {
 		event, err := r.queries.GetEventByID(ctx, section.EventID)

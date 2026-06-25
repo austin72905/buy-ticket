@@ -326,6 +326,42 @@ func (f *fakeSectionRepositoryForController) ListByEventID(ctx context.Context, 
 	return []domain.Section{}, nil
 }
 
+func (f *fakeSectionRepositoryForController) ReserveInventory(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error) {
+	section, err := f.FindByEventAndID(ctx, eventID, sectionID)
+	if err != nil {
+		return nil, err
+	}
+	if !section.Reserve(quantity) {
+		return nil, errors.New("section cannot reserve requested quantity")
+	}
+	section.UpdatedAt = now
+	return section, nil
+}
+
+func (f *fakeSectionRepositoryForController) ReleaseInventory(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error) {
+	section, err := f.FindByEventAndID(ctx, eventID, sectionID)
+	if err != nil {
+		return nil, err
+	}
+	if !section.Release(quantity) {
+		return nil, errors.New("section cannot release requested quantity")
+	}
+	section.UpdatedAt = now
+	return section, nil
+}
+
+func (f *fakeSectionRepositoryForController) ConfirmSale(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error) {
+	section, err := f.FindByEventAndID(ctx, eventID, sectionID)
+	if err != nil {
+		return nil, err
+	}
+	if !section.ConfirmSale(quantity) {
+		return nil, errors.New("section cannot confirm requested quantity")
+	}
+	section.UpdatedAt = now
+	return section, nil
+}
+
 func (f *fakeSectionRepositoryForController) Save(ctx context.Context, section *domain.Section) error {
 	f.section = section
 	return nil

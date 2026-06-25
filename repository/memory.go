@@ -189,6 +189,57 @@ func (r *MemorySectionRepository) ListByEventID(ctx context.Context, eventID int
 	return sections, nil
 }
 
+func (r *MemorySectionRepository) ReserveInventory(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	section, ok := r.sections[sectionID]
+	if !ok || section.EventID != eventID {
+		return nil, ErrSectionNotFound
+	}
+	if !section.Reserve(quantity) {
+		return nil, ErrSectionNotFound
+	}
+
+	section.UpdatedAt = now
+	cloned := *section
+	return &cloned, nil
+}
+
+func (r *MemorySectionRepository) ReleaseInventory(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	section, ok := r.sections[sectionID]
+	if !ok || section.EventID != eventID {
+		return nil, ErrSectionNotFound
+	}
+	if !section.Release(quantity) {
+		return nil, ErrSectionNotFound
+	}
+
+	section.UpdatedAt = now
+	cloned := *section
+	return &cloned, nil
+}
+
+func (r *MemorySectionRepository) ConfirmSale(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	section, ok := r.sections[sectionID]
+	if !ok || section.EventID != eventID {
+		return nil, ErrSectionNotFound
+	}
+	if !section.ConfirmSale(quantity) {
+		return nil, ErrSectionNotFound
+	}
+
+	section.UpdatedAt = now
+	cloned := *section
+	return &cloned, nil
+}
+
 func (r *MemorySectionRepository) Save(ctx context.Context, section *domain.Section) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
