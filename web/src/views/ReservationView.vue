@@ -13,7 +13,6 @@ const router = useRouter()
 const flow = useBookingFlowStore()
 
 const eventId = computed(() => Number(route.params.eventId))
-const holdMinutes = ref(10)
 const orderNo = ref(`ORD-${Date.now()}`)
 const selectedSection = computed(
   () => flow.sections.find((section) => section.id === flow.reservation?.section_id) ?? null,
@@ -42,7 +41,6 @@ async function createOrder() {
   try {
     await flow.createOrderAction({
       orderNo: orderNo.value,
-      holdMinutes: holdMinutes.value,
     })
     if (flow.order) {
       router.push(`/events/${eventId.value}/order`)

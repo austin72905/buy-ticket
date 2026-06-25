@@ -156,7 +156,7 @@ Content-Type: application/json
 {
   "reservation_id": 1,
   "order_no": "ORD-TEST-001",
-  "expires_at": "2026-06-10T19:10:00+08:00"
+  "purchase_token": "pt_xxx"
 }
 ```
 

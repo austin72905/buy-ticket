@@ -229,7 +229,6 @@ func TestBookingServiceCreateOrder(t *testing.T) {
 		order, err := svc.CreateOrder(context.Background(), CreateOrderInput{
 			ReservationID: 10,
 			OrderNo:       "ORD-001",
-			ExpiresAt:     now.Add(10 * time.Minute),
 			PurchaseToken: purchaseToken,
 		})
 
@@ -954,6 +953,52 @@ func TestBookingServiceGetQueueStatus(t *testing.T) {
 			t.Fatalf("預期錯誤為 ErrQueueTokenNotFound，實際為 %v", err)
 		}
 	})
+}
+
+func TestBookingServiceCreateOrderUsesServerSideTTL(t *testing.T) {
+	now := time.Now()
+	purchaseToken := "pt_order_ttl"
+	reservationRepo := &fakeReservationRepository{
+		reservations: map[int64]*domain.Reservation{
+			10: {
+				ID:          10,
+				EventID:     1,
+				SectionID:   1,
+				UserID:      3,
+				Quantity:    1,
+				UnitPrice:   1000,
+				TotalAmount: 1000,
+				Status:      domain.ReservationStatusHolding,
+				ExpiresAt:   now.Add(5 * time.Minute),
+			},
+		},
+	}
+	orderRepo := &fakeOrderRepository{}
+	svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, reservationRepo, orderRepo, &fakePaymentRepository{})
+	svc.OrderPaymentTTL = 3 * time.Minute
+	_ = svc.QueueStore.SaveSnapshot(context.Background(), QueueStatusSnapshot{
+		QueueToken:             "qt_order_ttl",
+		Status:                 QueueStatusReady,
+		EventID:                1,
+		UserID:                 3,
+		PurchaseToken:          &purchaseToken,
+		PurchaseTokenExpiresAt: ptrTime(now.Add(5 * time.Minute)),
+		JoinedAt:               now,
+		ExpiredAt:              now.Add(30 * time.Minute),
+		UpdatedAt:              now,
+	})
+
+	order, err := svc.CreateOrder(context.Background(), CreateOrderInput{
+		ReservationID: 10,
+		OrderNo:       "ORD-TTL-001",
+		PurchaseToken: purchaseToken,
+	})
+	if err != nil {
+		t.Fatalf("expected create order success: %v", err)
+	}
+	if order.ExpiresAt.Sub(order.CreatedAt) != 3*time.Minute {
+		t.Fatalf("expected server-side payment ttl 3m, got %s", order.ExpiresAt.Sub(order.CreatedAt))
+	}
 }
 
 func TestMemoryQueueStorePromoteReady(t *testing.T) {

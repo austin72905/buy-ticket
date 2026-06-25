@@ -35,10 +35,9 @@ type LoginRequest struct {
 }
 
 type CreateOrderRequest struct {
-	ReservationID int64     `json:"reservation_id"`
-	OrderNo       string    `json:"order_no"`
-	ExpiresAt     time.Time `json:"expires_at"`
-	PurchaseToken string    `json:"purchase_token"`
+	ReservationID int64  `json:"reservation_id"`
+	OrderNo       string `json:"order_no"`
+	PurchaseToken string `json:"purchase_token"`
 }
 
 type PayOrderRequest struct {

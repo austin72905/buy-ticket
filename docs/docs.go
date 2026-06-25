@@ -895,9 +895,6 @@ const docTemplate = `{
         "controller.CreateOrderRequest": {
             "type": "object",
             "properties": {
-                "expires_at": {
-                    "type": "string"
-                },
                 "order_no": {
                     "type": "string"
                 },

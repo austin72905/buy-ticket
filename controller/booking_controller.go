@@ -506,7 +506,6 @@ func (c *BookingController) CreateOrder(ctx *gin.Context) {
 	order, err := c.BookingService.CreateOrder(ctx.Request.Context(), service.CreateOrderInput{
 		ReservationID: request.ReservationID,
 		OrderNo:       request.OrderNo,
-		ExpiresAt:     request.ExpiresAt,
 		PurchaseToken: request.PurchaseToken,
 	})
 	if err != nil {

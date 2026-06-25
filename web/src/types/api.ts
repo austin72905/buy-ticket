@@ -105,7 +105,6 @@ export interface ReservationResponse {
 export interface CreateOrderRequest {
   reservation_id: number
   order_no: string
-  expires_at: string
   purchase_token: string
 }
 

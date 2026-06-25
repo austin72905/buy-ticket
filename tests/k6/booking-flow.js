@@ -10,7 +10,6 @@ const VUS = Number(__ENV.VUS || '20');
 const MAX_QUEUE_POLLS = Number(__ENV.MAX_QUEUE_POLLS || '30');
 const QUEUE_POLL_SECONDS = Number(__ENV.QUEUE_POLL_SECONDS || '1');
 const HOLD_MINUTES = Number(__ENV.HOLD_MINUTES || '10');
-const ORDER_EXPIRE_MINUTES = Number(__ENV.ORDER_EXPIRE_MINUTES || '10');
 const RUN_ID = __ENV.RUN_ID || `${Date.now()}`;
 
 const jsonHeaders = {
@@ -260,11 +259,9 @@ function reserveTicket(sectionId, purchaseToken) {
 }
 
 function createOrder(reservationId, purchaseToken, buyerKey) {
-  const expiresAt = new Date(Date.now() + ORDER_EXPIRE_MINUTES * 60 * 1000).toISOString();
   const payload = {
     reservation_id: reservationId,
     order_no: `K6-${buyerKey}`.slice(0, 40),
-    expires_at: expiresAt,
     purchase_token: purchaseToken,
   };
 

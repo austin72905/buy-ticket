@@ -48,7 +48,7 @@ k6 run `
 
 - 每個 VU 只跑一次，避免同一個 user 對同一個 event 重複建立 active reservation。
 - 每次執行會用新的 `RUN_ID` 產生測試帳號與訂單編號。
-- 腳本會建立 pending payment orders；如果不付款，庫存會先被 reservation/order hold 住，等 order expire job 回收。
+- 腳本會建立 pending payment orders；如果不付款，庫存會先被 reservation/order hold 住，等後端 `order.payment.ttl_minutes` 到期後由 order expire job 回收。
 - 如果要重跑大量測試，建議先準備足夠票數，或清理測試資料。
 
 ## 建議觀察

@@ -163,6 +163,7 @@ Configuration:
 - Job name: `order-expire-sweep`
 - Cron spec: `*/5 * * * * *`
 - `order.expire.batch.size`: loaded from properties
+- `order.payment.ttl_minutes`: server-side pending payment TTL used when creating orders
 
 ---
 

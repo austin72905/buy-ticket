@@ -46,6 +46,7 @@ type BookingService struct {
 	QueueStore             QueueStore
 	StockStore             StockStore
 	MockPaymentSignature   MockPaymentSignatureConfig
+	OrderPaymentTTL        time.Duration
 }
 
 type ReserveTicketInput struct {
@@ -60,7 +61,6 @@ type ReserveTicketInput struct {
 type CreateOrderInput struct {
 	ReservationID int64
 	OrderNo       string
-	ExpiresAt     time.Time
 	PurchaseToken string
 }
 
@@ -158,6 +158,7 @@ func NewBookingService(
 		PaymentRepo:        paymentRepo,
 		PaymentAttemptRepo: repository.NewMemoryPaymentAttemptRepository(nil),
 		QueueStore:         NewMemoryQueueStore(1),
+		OrderPaymentTTL:    10 * time.Minute,
 	}
 }
 
@@ -279,7 +280,7 @@ func (s *BookingService) CreateOrder(ctx context.Context, input CreateOrderInput
 		UnitPrice:     reservation.UnitPrice,
 		TotalAmount:   reservation.TotalAmount,
 		Status:        domain.OrderStatusPendingPayment,
-		ExpiresAt:     input.ExpiresAt,
+		ExpiresAt:     now.Add(s.orderPaymentTTL()),
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
@@ -290,6 +291,14 @@ func (s *BookingService) CreateOrder(ctx context.Context, input CreateOrderInput
 	}
 
 	return order, nil
+}
+
+func (s *BookingService) orderPaymentTTL() time.Duration {
+	if s.OrderPaymentTTL <= 0 {
+		return 10 * time.Minute
+	}
+
+	return s.OrderPaymentTTL
 }
 
 func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*domain.Payment, error) {

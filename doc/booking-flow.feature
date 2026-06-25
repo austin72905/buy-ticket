@@ -70,8 +70,9 @@ Feature: Ticket booking flow
     Then the user can review event, section, quantity, amount, and reservation expiry
     When the user clicks "Submit Order"
     Then the frontend calls POST /orders
-    And the request includes reservation_id, order_no, expires_at, and purchase_token
+    And the request includes reservation_id, order_no, and purchase_token
     And the backend validates and consumes the purchase_token
+    And the backend sets order expires_at from server-side payment TTL
     And the backend creates an order with status pending_payment
     And the user can no longer use the same purchase_token to create another reservation
 

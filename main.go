@@ -115,6 +115,7 @@ func (app *BuyTicketApp) Initialize() {
 		paymentRepo,
 	)
 	bookingService.DB = dbPool
+	bookingService.OrderPaymentTTL = orderPaymentTTL(app.Runtime)
 	if dbPool != nil {
 		bookingService.PaymentAttemptRepo = repository.NewPostgresPaymentAttemptRepository(db.New(dbPool))
 		bookingService.IdempotencyRepo = repository.NewPostgresIdempotencyRepository(db.New(dbPool))
@@ -276,6 +277,20 @@ func orderExpireBatchSize(runtime *infraapp.Runtime) int {
 	}
 
 	return size
+}
+
+func orderPaymentTTL(runtime *infraapp.Runtime) time.Duration {
+	value := runtime.Property.Property("order.payment.ttl_minutes")
+	if value == "" {
+		return 10 * time.Minute
+	}
+
+	minutes, err := strconv.Atoi(value)
+	if err != nil || minutes <= 0 {
+		return 10 * time.Minute
+	}
+
+	return time.Duration(minutes) * time.Minute
 }
 
 func mockPaymentTimeout(runtime *infraapp.Runtime) time.Duration {

@@ -307,7 +307,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     paymentAttempt.value = null
   }
 
-  async function createOrderAction(input: { orderNo: string; holdMinutes: number }) {
+  async function createOrderAction(input: { orderNo: string }) {
     if (!reservation.value) {
       setError('createOrder', 'Reservation is required.')
       return
@@ -317,13 +317,10 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
       return
     }
 
-    const expiresAt = new Date(Date.now() + input.holdMinutes * 60 * 1000).toISOString()
-
     order.value = await runTask('createOrder', () =>
       createOrder({
         reservation_id: reservation.value!.id,
         order_no: input.orderNo,
-        expires_at: expiresAt,
         purchase_token: purchaseToken.value,
       }),
     )

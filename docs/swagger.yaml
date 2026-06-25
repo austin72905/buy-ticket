@@ -9,8 +9,6 @@ definitions:
     type: object
   controller.CreateOrderRequest:
     properties:
-      expires_at:
-        type: string
       order_no:
         type: string
       purchase_token:
