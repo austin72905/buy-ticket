@@ -1,0 +1,24 @@
+replicaCount: 1
+
+image:
+  repository: buy-ticket
+  tag: local
+  pullPolicy: IfNotPresent
+
+service:
+  type: NodePort
+  port: 8080
+
+ingress:
+  enabled: false
+
+postgres:
+  dsn: "postgres://postgres:postgres@host.k3d.internal:5432/buy_ticket?sslmode=disable"
+
+redis:
+  addr: "host.k3d.internal:6379"
+
+payment:
+  mock:
+    baseURL: "http://host.k3d.internal:8081"
+    callbackURL: "http://host.k3d.internal:8080/payments/provider/ecpay/callback"

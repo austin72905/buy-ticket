@@ -1,0 +1,80 @@
+replicaCount: 1
+
+image:
+  repository: buy-ticket
+  tag: local
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: buy-ticket.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+app:
+  env: dev
+  serverAddr: ":8080"
+  store: postgres
+
+queue:
+  store: redis
+  releaseLimit: 100
+  join:
+    maxInFlight: 500
+    retryAfterSeconds: 1
+
+order:
+  expireBatchSize: 100
+  paymentTTLMinutes: 10
+
+postgres:
+  dsn: "postgres://postgres:postgres@host.k3d.internal:5432/buy_ticket?sslmode=disable"
+  pool:
+    maxIdleConns: 5
+    maxOpenConns: 20
+    connMaxIdleTime: 30m
+    connMaxLifetime: 2h
+
+redis:
+  addr: "host.k3d.internal:6379"
+  db: 0
+  password: ""
+
+payment:
+  mock:
+    merchantID: TEST_MERCHANT
+    hashKey: TEST_SECRET
+    hashIV: TEST_HASH_IV
+    baseURL: "http://host.k3d.internal:8081"
+    callbackURL: "http://buy-ticket.local/payments/provider/ecpay/callback"
+    timeoutSeconds: 3
+
+podAnnotations: {}
+podLabels: {}
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+probes:
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 20
