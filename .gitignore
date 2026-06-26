@@ -21,6 +21,8 @@ cover.out
 
 # k6 generated session files
 tests/k6/sessions.json
+tests/k6/result.json
+tests/k6/summary.json
 
 # IDE files
 .idea/
