@@ -1,16 +1,13 @@
 # syntax=docker/dockerfile:1.7
 #
-# Build with the sibling go-infra repository as a named context:
-#   docker build --build-context go-infra=../go-infra -t buy-ticket:local .
+# Build from this repository:
+#   docker build -t buy-ticket:local .
 
 FROM golang:1.25-bookworm AS builder
 
 WORKDIR /src
 
-COPY --from=go-infra . /src/go-infra
 COPY go.mod go.sum ./
-
-RUN go mod edit -replace=github.com/austin72905/go-infra=/src/go-infra
 RUN go mod download
 
 COPY . ./

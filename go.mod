@@ -3,7 +3,7 @@ module buy-ticket
 go 1.25.4
 
 require (
-	github.com/austin72905/go-infra v0.0.0
+	github.com/austin72905/go-infra v0.1.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/swaggo/files v1.0.1
@@ -61,5 +61,3 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/austin72905/go-infra => D:\SourceCode\Go\go-infra
