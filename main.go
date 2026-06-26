@@ -64,7 +64,20 @@ type BuyTicketApp struct {
 	infraapp.App
 }
 
+type appRole string
+
+const (
+	appRoleAll       appRole = "all"
+	appRoleAPI       appRole = "api"
+	appRoleScheduler appRole = "scheduler"
+)
+
 func (app *BuyTicketApp) Initialize() {
+	role := parseAppRole()
+	if role == appRoleScheduler {
+		app.Runtime.Lifecycle.Startup.Serve = nil
+	}
+
 	env := os.Getenv("APP_ENV")
 	if env == "" {
 		env = "local"
@@ -105,9 +118,6 @@ func (app *BuyTicketApp) Initialize() {
 
 	userRepo, eventRepo, sectionRepo, reservationRepo, orderRepo, paymentRepo, dbPool := buildRepositories(app.Runtime)
 
-	authService := service.NewAuthService(userRepo)
-	authController := controller.NewAuthController(authService)
-
 	bookingService := service.NewBookingService(
 		eventRepo,
 		sectionRepo,
@@ -135,16 +145,50 @@ func (app *BuyTicketApp) Initialize() {
 		HashKey:    app.Runtime.Property.Property("payment.mock.hash_key"),
 		HashIV:     app.Runtime.Property.Property("payment.mock.hash_iv"),
 	}
-	if err := bookingService.RebuildStock(context.Background()); err != nil {
-		log.Fatalf("rebuild stock failed: %v", err)
+
+	if role == appRoleAll || role == appRoleScheduler {
+		if err := bookingService.RebuildStock(context.Background()); err != nil {
+			log.Fatalf("rebuild stock failed: %v", err)
+		}
+		registerBackgroundJobs(app.Runtime, bookingService)
+		log.Printf("scheduler configured")
 	}
-	registerBackgroundJobs(app.Runtime, bookingService)
 
+	if role == appRoleAll || role == appRoleAPI {
+		registerHTTPServer(app.Runtime, userRepo, bookingService)
+	}
+
+	log.Printf("app role configured: %s", role)
+}
+
+func parseAppRole() appRole {
+	value := os.Getenv("APP_ROLE")
+	if value == "" {
+		return appRoleAll
+	}
+
+	role := appRole(value)
+	switch role {
+	case appRoleAll, appRoleAPI, appRoleScheduler:
+		return role
+	default:
+		log.Fatalf("unsupported APP_ROLE %q", value)
+		return ""
+	}
+}
+
+func registerHTTPServer(
+	runtime *infraapp.Runtime,
+	userRepo repository.UserRepository,
+	bookingService *service.BookingService,
+) {
+	authService := service.NewAuthService(userRepo)
+	authController := controller.NewAuthController(authService)
 	bookingController := controller.NewBookingController(bookingService)
-	bookingController.QueueJoinMaxInFlight = queueJoinMaxInFlight(app.Runtime)
-	bookingController.QueueJoinRetryAfter = queueJoinRetryAfter(app.Runtime)
+	bookingController.QueueJoinMaxInFlight = queueJoinMaxInFlight(runtime)
+	bookingController.QueueJoinRetryAfter = queueJoinRetryAfter(runtime)
 
-	router := app.Runtime.Web.Router()
+	router := runtime.Web.Router()
 	router.Use(controller.AttachCurrentUser(authService))
 	docs.SwaggerInfo.BasePath = "/"
 	router.GET("/healthz", func(ctx *gin.Context) {
@@ -154,8 +198,8 @@ func (app *BuyTicketApp) Initialize() {
 	authController.RegisterRoutes(router)
 	bookingController.RegisterRoutes(router)
 
-	addr := app.Runtime.Property.RequiredProperty("server.addr")
-	app.Runtime.Web.Listen(addr)
+	addr := runtime.Property.RequiredProperty("server.addr")
+	runtime.Web.Listen(addr)
 	log.Printf("server configured at %s", addr)
 }
 

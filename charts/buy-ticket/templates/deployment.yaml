@@ -1,14 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "buy-ticket.fullname" . }}
+  name: {{ include "buy-ticket.fullname" . }}-api
   labels:
     {{- include "buy-ticket.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ .Values.api.replicaCount }}
   selector:
     matchLabels:
       {{- include "buy-ticket.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -17,6 +19,7 @@ spec:
       {{- end }}
       labels:
         {{- include "buy-ticket.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -34,6 +37,8 @@ spec:
               containerPort: 8080
               protocol: TCP
           env:
+            - name: APP_ROLE
+              value: api
             - name: APP_ENV
               valueFrom:
                 configMapKeyRef:
@@ -70,3 +75,67 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+{{- if .Values.scheduler.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "buy-ticket.fullname" . }}-scheduler
+  labels:
+    {{- include "buy-ticket.labels" . | nindent 4 }}
+    app.kubernetes.io/component: scheduler
+spec:
+  replicas: {{ .Values.scheduler.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "buy-ticket.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: scheduler
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "buy-ticket.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: scheduler
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ include "buy-ticket.name" . }}-scheduler
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: APP_ROLE
+              value: scheduler
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "buy-ticket.fullname" . }}-config
+                  key: APP_ENV
+          envFrom:
+            - configMapRef:
+                name: {{ include "buy-ticket.fullname" . }}-config
+            - secretRef:
+                name: {{ include "buy-ticket.fullname" . }}-secret
+          resources:
+            {{- toYaml .Values.scheduler.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
