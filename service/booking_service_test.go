@@ -221,6 +221,13 @@ func TestBookingServiceCreateOrder(t *testing.T) {
 		if err != nil {
 			t.Fatalf("建立 queue token 失敗: %v", err)
 		}
+		if err := svc.QueueStore.PromoteReady(context.Background(), now.Add(time.Second)); err != nil {
+			t.Fatalf("promote ready 失敗: %v", err)
+		}
+		queueStatus, err = svc.QueueStore.Get(context.Background(), queueStatus.QueueToken, now.Add(time.Second))
+		if err != nil {
+			t.Fatalf("查詢 queue status 失敗: %v", err)
+		}
 		if queueStatus.PurchaseToken == nil {
 			t.Fatal("預期 queue 直接取得 purchase token")
 		}
@@ -275,14 +282,14 @@ func TestBookingServiceJoinQueue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("預期加入排隊成功，但得到錯誤: %v", err)
 		}
-		if snapshot.Status != QueueStatusReady {
-			t.Fatalf("預期 status=ready(2)，實際為 %d", snapshot.Status)
+		if snapshot.Status != QueueStatusWaiting {
+			t.Fatalf("預期 status=waiting(1)，實際為 %d", snapshot.Status)
 		}
 		if snapshot.QueueToken == "" {
 			t.Fatal("預期產生 queue token")
 		}
-		if snapshot.PurchaseToken == nil || *snapshot.PurchaseToken == "" {
-			t.Fatal("預期產生 purchase token")
+		if snapshot.PurchaseToken != nil {
+			t.Fatal("預期 join queue 不直接產生 purchase token")
 		}
 	})
 
@@ -1024,8 +1031,21 @@ func TestMemoryQueueStorePromoteReady(t *testing.T) {
 			t.Fatalf("預期第二位初始為 waiting，實際為 %d", second.Status)
 		}
 
+		if first.Status != QueueStatusWaiting {
+			t.Fatalf("預期第一位初始為 waiting，實際為 %d", first.Status)
+		}
+		if first.PurchaseToken != nil {
+			t.Fatal("預期第一位 join 後不直接取得 purchase token")
+		}
+		if err := store.PromoteReady(context.Background(), now.Add(time.Second)); err != nil {
+			t.Fatalf("promote ready 失敗: %v", err)
+		}
+		first, err = store.Get(context.Background(), first.QueueToken, now.Add(time.Second))
+		if err != nil {
+			t.Fatalf("查詢第一位 queue status 失敗: %v", err)
+		}
 		if first.PurchaseToken == nil {
-			t.Fatal("預期第一位有 purchase token")
+			t.Fatal("預期第一位 promote 後取得 purchase token")
 		}
 		_, err = store.ConsumePurchaseToken(context.Background(), *first.PurchaseToken, first.EventID, first.UserID, now.Add(time.Second))
 		if err != nil {
@@ -1065,14 +1085,38 @@ func TestMemoryQueueStorePromoteReady(t *testing.T) {
 			t.Fatalf("第三位加入失敗: %v", err)
 		}
 
-		if first.Status != QueueStatusReady {
-			t.Fatalf("預期第一位為 ready，實際為 %d", first.Status)
+		if first.Status != QueueStatusWaiting {
+			t.Fatalf("預期第一位初始為 waiting，實際為 %d", first.Status)
 		}
-		if second.Status != QueueStatusReady {
-			t.Fatalf("預期第二位為 ready，實際為 %d", second.Status)
+		if second.Status != QueueStatusWaiting {
+			t.Fatalf("預期第二位初始為 waiting，實際為 %d", second.Status)
 		}
 		if third.Status != QueueStatusWaiting {
 			t.Fatalf("預期第三位為 waiting，實際為 %d", third.Status)
+		}
+		if err := store.PromoteReady(context.Background(), now.Add(time.Second)); err != nil {
+			t.Fatalf("promote ready 失敗: %v", err)
+		}
+		first, err = store.Get(context.Background(), first.QueueToken, now.Add(time.Second))
+		if err != nil {
+			t.Fatalf("查詢第一位 queue status 失敗: %v", err)
+		}
+		second, err = store.Get(context.Background(), second.QueueToken, now.Add(time.Second))
+		if err != nil {
+			t.Fatalf("查詢第二位 queue status 失敗: %v", err)
+		}
+		third, err = store.Get(context.Background(), third.QueueToken, now.Add(time.Second))
+		if err != nil {
+			t.Fatalf("查詢第三位 queue status 失敗: %v", err)
+		}
+		if first.Status != QueueStatusReady {
+			t.Fatalf("預期第一位 promote 後為 ready，實際為 %d", first.Status)
+		}
+		if second.Status != QueueStatusReady {
+			t.Fatalf("預期第二位 promote 後為 ready，實際為 %d", second.Status)
+		}
+		if third.Status != QueueStatusWaiting {
+			t.Fatalf("預期第三位 promote 後仍為 waiting，實際為 %d", third.Status)
 		}
 	})
 }
@@ -1109,6 +1153,13 @@ func TestMemoryQueueStoreCleanupExpiredPurchaseTokens(t *testing.T) {
 		}, now)
 		if err != nil {
 			t.Fatalf("join queue 不應失敗: %v", err)
+		}
+		if err := store.PromoteReady(context.Background(), now.Add(time.Second)); err != nil {
+			t.Fatalf("promote ready 失敗: %v", err)
+		}
+		snapshot, err = store.Get(context.Background(), snapshot.QueueToken, now.Add(time.Second))
+		if err != nil {
+			t.Fatalf("查詢 queue status 失敗: %v", err)
 		}
 		if snapshot.PurchaseToken == nil {
 			t.Fatal("預期第一位直接取得 purchase token")

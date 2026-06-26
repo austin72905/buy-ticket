@@ -61,15 +61,6 @@ func (s *MemoryQueueStore) Join(ctx context.Context, input JoinQueueInput, now t
 		UpdatedAt:            now,
 	}
 
-	if s.readyCountLocked(input.EventID, now) < s.releaseLimit {
-		purchaseToken := generatePurchaseToken(now)
-		expiresAt := now.Add(5 * time.Minute)
-		snapshot.Status = QueueStatusReady
-		snapshot.PurchaseToken = &purchaseToken
-		snapshot.PurchaseTokenExpiresAt = &expiresAt
-		s.purchaseTokens[purchaseToken] = queueToken
-	}
-
 	s.queueStatuses[queueToken] = snapshot
 	s.queueUserEvent[key] = queueToken
 

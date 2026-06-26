@@ -70,21 +70,6 @@ func (s *RedisQueueStore) Join(ctx context.Context, input JoinQueueInput, now ti
 		UpdatedAt:            now,
 	}
 
-	readyCount, err := s.readyCount(ctx, input.EventID, now)
-	if err != nil {
-		return nil, err
-	}
-	if readyCount < s.releaseLimit {
-		purchaseToken := generatePurchaseToken(now)
-		expiresAt := now.Add(5 * time.Minute)
-		snapshot.Status = QueueStatusReady
-		snapshot.PurchaseToken = &purchaseToken
-		snapshot.PurchaseTokenExpiresAt = &expiresAt
-		if err := s.client.Set(ctx, redisPurchaseTokenKey(purchaseToken), queueToken, time.Until(expiresAt)).Err(); err != nil {
-			return nil, err
-		}
-	}
-
 	if err := s.saveSnapshot(ctx, snapshot); err != nil {
 		return nil, err
 	}

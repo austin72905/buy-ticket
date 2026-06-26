@@ -124,8 +124,8 @@ func TestBookingControllerJoinQueue(t *testing.T) {
 		if err := json.Unmarshal(resp.Body.Bytes(), &response); err != nil {
 			t.Fatalf("預期回傳合法 JSON，但解析失敗: %v", err)
 		}
-		if response.Status != int8(service.QueueStatusReady) {
-			t.Fatalf("預期 status=%d，實際為 %d", service.QueueStatusReady, response.Status)
+		if response.Status != int8(service.QueueStatusWaiting) {
+			t.Fatalf("預期 status=%d，實際為 %d", service.QueueStatusWaiting, response.Status)
 		}
 		if response.QueueToken == "" {
 			t.Fatal("預期回傳 queue token")

@@ -15,11 +15,35 @@ const flow = useBookingFlowStore()
 const eventId = computed(() => Number(route.params.eventId))
 let pollingTimer: number | undefined
 
-const ready = computed(() => Boolean(flow.purchaseToken))
+const QueueStatus = {
+  Waiting: 1,
+  Ready: 2,
+  Expired: 3,
+} as const
+
+const waiting = computed(() => flow.queueStatus?.status === QueueStatus.Waiting)
+const ready = computed(() => flow.queueStatus?.status === QueueStatus.Ready && Boolean(flow.purchaseToken))
+const expired = computed(() => flow.queueStatus?.status === QueueStatus.Expired)
+const canStartQueue = computed(() => !flow.queueStatus || expired.value)
+const queueStatusLabel = computed(() => {
+  if (!flow.queueStatus) return 'Not Joined'
+  if (waiting.value) return 'Waiting'
+  if (flow.queueStatus.status === QueueStatus.Ready) return ready.value ? 'Ready' : 'Ready - Missing Token'
+  if (expired.value) return 'Expired'
+  return `Unknown (${flow.queueStatus.status})`
+})
+const queueStatusSeverity = computed(() => {
+  if (ready.value) return 'success'
+  if (expired.value) return 'danger'
+  return 'warning'
+})
 
 async function load() {
   try {
     await flow.selectEvent(eventId.value)
+    if (waiting.value) {
+      startPolling()
+    }
   } catch {}
 }
 
@@ -33,7 +57,7 @@ function stopPolling() {
 function startPolling() {
   stopPolling()
   pollingTimer = window.setInterval(async () => {
-    if (!flow.queueToken || flow.purchaseToken) {
+    if (!flow.queueToken || ready.value || expired.value) {
       stopPolling()
       return
     }
@@ -50,7 +74,7 @@ async function enterQueue() {
       requestId: `req-${Date.now()}`,
       channel: 'web',
     })
-    if (!flow.purchaseToken) startPolling()
+    if (waiting.value) startPolling()
   } catch {}
 }
 
@@ -59,11 +83,16 @@ function goTickets() {
 }
 
 watch(
-  () => flow.purchaseToken,
-  (token) => {
-    if (token) {
+  () => [flow.queueStatus?.status, flow.purchaseToken],
+  () => {
+    if (ready.value) {
       stopPolling()
       goTickets()
+      return
+    }
+
+    if (expired.value) {
+      stopPolling()
     }
   },
 )
@@ -92,8 +121,10 @@ onBeforeUnmount(stopPolling)
       <div class="notice-box">
         <ul>
           <li>Complete member login before purchasing. This demo uses user id {{ flow.userId }}.</li>
-          <li>After entering the queue, the backend returns a queue token and may return a purchase token.</li>
-          <li>When purchase token is ready, the page moves to seat and quantity selection.</li>
+          <li>After entering the queue, the backend returns a queue token with waiting status.</li>
+          <li>The page polls queue status until the scheduler releases a purchase token.</li>
+          <li>When status is ready and purchase token exists, the page moves to seat and quantity selection.</li>
+          <li>If queue status expires, start queue again.</li>
           <li>Reservation is a temporary hold. Order payment must finish before it expires.</li>
           <li>Use Chrome or a modern browser for the smoothest checkout flow.</li>
         </ul>
@@ -101,7 +132,7 @@ onBeforeUnmount(stopPolling)
         <div v-if="flow.queueStatus" class="queue-card">
           <div>
             <span>Queue Status</span>
-            <Tag :value="String(flow.queueStatus.status)" :severity="ready ? 'success' : 'warning'" />
+            <Tag :value="queueStatusLabel" :severity="queueStatusSeverity" />
           </div>
           <div>
             <span>Ahead</span>
@@ -113,16 +144,39 @@ onBeforeUnmount(stopPolling)
           </div>
         </div>
 
+        <p v-if="waiting" class="small-muted">
+          You are waiting in queue. This page will keep polling until you are released.
+        </p>
+        <p v-if="expired" class="small-muted">
+          Queue token expired. Start queue again to get a new queue token.
+        </p>
+
         <div class="center-actions">
           <Button
-            v-if="!ready"
+            v-if="canStartQueue"
             label="Start Queue"
             severity="danger"
             size="large"
             :loading="flow.isPending('queueJoin') || flow.isPending('queueStatus')"
             @click="enterQueue"
           />
-          <Button v-else label="Select Tickets" severity="danger" size="large" @click="goTickets" />
+          <Button
+            v-else-if="waiting"
+            label="Waiting In Queue"
+            severity="secondary"
+            size="large"
+            disabled
+            :loading="flow.isPending('queueStatus')"
+          />
+          <Button v-else-if="ready" label="Select Tickets" severity="danger" size="large" @click="goTickets" />
+          <Button
+            v-else
+            label="Waiting For Purchase Token"
+            severity="secondary"
+            size="large"
+            disabled
+            :loading="flow.isPending('queueStatus')"
+          />
         </div>
       </div>
     </section>
