@@ -10,6 +10,51 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
+var promoteReadyScript = goredis.NewScript(`
+local readyCount = redis.call("ZCARD", KEYS[2])
+local releaseLimit = tonumber(ARGV[1])
+local slots = releaseLimit - readyCount
+if slots <= 0 then
+	return {}
+end
+
+local entries = redis.call("ZPOPMIN", KEYS[1], slots)
+local promoted = {}
+local tokenIndex = 7
+
+for index = 1, #entries, 2 do
+	local queueToken = entries[index]
+	local score = entries[index + 1]
+	local snapshotKey = ARGV[5] .. queueToken
+	local snapshotPayload = redis.call("GET", snapshotKey)
+
+	if snapshotPayload then
+		local snapshot = cjson.decode(snapshotPayload)
+		if snapshot["Status"] == 1 and (snapshot["ExpiredAt"] == nil or snapshot["ExpiredAt"] >= ARGV[2]) then
+			local purchaseToken = ARGV[tokenIndex]
+			tokenIndex = tokenIndex + 1
+
+			snapshot["Status"] = 2
+			snapshot["PurchaseToken"] = purchaseToken
+			snapshot["PurchaseTokenExpiresAt"] = ARGV[3]
+			snapshot["UpdatedAt"] = ARGV[2]
+
+			local snapshotTTL = redis.call("PTTL", snapshotKey)
+			if snapshotTTL > 0 then
+				redis.call("PSETEX", snapshotKey, snapshotTTL, cjson.encode(snapshot))
+			else
+				redis.call("SET", snapshotKey, cjson.encode(snapshot))
+			end
+			redis.call("SET", ARGV[6] .. purchaseToken, queueToken, "PX", ARGV[4])
+			redis.call("ZADD", KEYS[2], score, queueToken)
+			table.insert(promoted, queueToken)
+		end
+	end
+end
+
+return promoted
+`)
+
 type RedisQueueStore struct {
 	client       *goredis.Client
 	releaseLimit int
@@ -36,12 +81,11 @@ func (s *RedisQueueStore) Join(ctx context.Context, input JoinQueueInput, now ti
 	}
 
 	queueToken := generateQueueToken(now)
-	eventQueueKey := redisEventQueueKey(input.EventID)
 	sequence, err := s.client.Incr(ctx, redisEventSeqKey(input.EventID)).Result()
 	if err != nil {
 		return nil, err
 	}
-	if err := s.client.ZAdd(ctx, eventQueueKey, goredis.Z{
+	if err := s.client.ZAdd(ctx, redisWaitingQueueKey(input.EventID), goredis.Z{
 		Score:  float64(sequence),
 		Member: queueToken,
 	}).Err(); err != nil {
@@ -51,7 +95,7 @@ func (s *RedisQueueStore) Join(ctx context.Context, input JoinQueueInput, now ti
 		return nil, err
 	}
 
-	rank, err := s.client.ZRank(ctx, eventQueueKey, queueToken).Result()
+	rank, err := s.client.ZRank(ctx, redisWaitingQueueKey(input.EventID), queueToken).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -87,11 +131,18 @@ func (s *RedisQueueStore) Get(ctx context.Context, queueToken string, now time.T
 		return nil, err
 	}
 
-	rank, err := s.client.ZRank(ctx, redisEventQueueKey(snapshot.EventID), queueToken).Result()
+	rank, err := s.client.ZRank(ctx, redisWaitingQueueKey(snapshot.EventID), queueToken).Result()
 	if err == nil {
 		snapshot.QueuePosition = rank + 1
 		snapshot.AheadCount = rank
 		snapshot.EstimatedWaitSeconds = rank * 30
+		return snapshot, nil
+	}
+
+	if _, err := s.client.ZRank(ctx, redisReadyQueueKey(snapshot.EventID), queueToken).Result(); err == nil {
+		snapshot.QueuePosition = 0
+		snapshot.AheadCount = 0
+		snapshot.EstimatedWaitSeconds = 0
 	}
 
 	return snapshot, nil
@@ -115,10 +166,13 @@ func (s *RedisQueueStore) ConsumePurchaseToken(ctx context.Context, purchaseToke
 	if err := s.client.Del(ctx, redisUserEventKey(queueUserEventKey(snapshot.EventID, snapshot.UserID))).Err(); err != nil {
 		return nil, err
 	}
-	if err := s.client.ZRem(ctx, redisEventQueueKey(snapshot.EventID), snapshot.QueueToken).Err(); err != nil {
+	if err := s.client.ZRem(ctx, redisReadyQueueKey(snapshot.EventID), snapshot.QueueToken).Err(); err != nil {
 		return nil, err
 	}
 	if err := s.saveSnapshot(ctx, *snapshot); err != nil {
+		return nil, err
+	}
+	if err := s.removeActiveEventIfEmpty(ctx, snapshot.EventID); err != nil {
 		return nil, err
 	}
 
@@ -162,14 +216,21 @@ func (s *RedisQueueStore) validatePurchaseToken(ctx context.Context, purchaseTok
 }
 
 func (s *RedisQueueStore) RestorePurchaseToken(ctx context.Context, snapshot QueueStatusSnapshot) error {
-	if err := s.client.ZAdd(ctx, redisEventQueueKey(snapshot.EventID), goredis.Z{
-		Score:  float64(snapshot.QueueSequence),
-		Member: snapshot.QueueToken,
-	}).Err(); err != nil {
-		return err
-	}
 	if snapshot.PurchaseToken != nil && snapshot.PurchaseTokenExpiresAt != nil {
 		if err := s.client.Set(ctx, redisPurchaseTokenKey(*snapshot.PurchaseToken), snapshot.QueueToken, time.Until(*snapshot.PurchaseTokenExpiresAt)).Err(); err != nil {
+			return err
+		}
+		if err := s.client.ZAdd(ctx, redisReadyQueueKey(snapshot.EventID), goredis.Z{
+			Score:  float64(snapshot.QueueSequence),
+			Member: snapshot.QueueToken,
+		}).Err(); err != nil {
+			return err
+		}
+	} else if snapshot.Status == QueueStatusWaiting && isQueueStatusActive(snapshot, time.Now()) {
+		if err := s.client.ZAdd(ctx, redisWaitingQueueKey(snapshot.EventID), goredis.Z{
+			Score:  float64(snapshot.QueueSequence),
+			Member: snapshot.QueueToken,
+		}).Err(); err != nil {
 			return err
 		}
 	}
@@ -180,6 +241,21 @@ func (s *RedisQueueStore) RestorePurchaseToken(ctx context.Context, snapshot Que
 }
 
 func (s *RedisQueueStore) SaveSnapshot(ctx context.Context, snapshot QueueStatusSnapshot) error {
+	if snapshot.PurchaseToken != nil && snapshot.PurchaseTokenExpiresAt != nil {
+		if err := s.client.ZAdd(ctx, redisReadyQueueKey(snapshot.EventID), goredis.Z{
+			Score:  float64(snapshot.QueueSequence),
+			Member: snapshot.QueueToken,
+		}).Err(); err != nil {
+			return err
+		}
+	} else if snapshot.Status == QueueStatusWaiting && isQueueStatusActive(snapshot, time.Now()) {
+		if err := s.client.ZAdd(ctx, redisWaitingQueueKey(snapshot.EventID), goredis.Z{
+			Score:  float64(snapshot.QueueSequence),
+			Member: snapshot.QueueToken,
+		}).Err(); err != nil {
+			return err
+		}
+	}
 	return s.saveSnapshot(ctx, snapshot)
 }
 
@@ -249,50 +325,45 @@ func (s *RedisQueueStore) CleanupExpiredQueues(ctx context.Context, now time.Tim
 }
 
 func (s *RedisQueueStore) promoteReady(ctx context.Context, eventID int64, now time.Time) error {
-	readyCount, err := s.readyCount(ctx, eventID, now)
+	readyCount, err := s.client.ZCard(ctx, redisReadyQueueKey(eventID)).Result()
 	if err != nil {
 		return err
 	}
-	if readyCount >= s.releaseLimit {
+	slots := s.releaseLimit - int(readyCount)
+	if slots <= 0 {
 		return nil
 	}
 
-	tokens, err := s.client.ZRange(ctx, redisEventQueueKey(eventID), 0, -1).Result()
-	if err != nil || len(tokens) == 0 {
-		return err
+	expiresAt := now.Add(5 * time.Minute)
+	purchaseTokenTTL := time.Until(expiresAt)
+	if purchaseTokenTTL <= 0 {
+		return nil
 	}
 
-	for _, token := range tokens {
-		if readyCount >= s.releaseLimit {
-			return nil
-		}
+	args := []interface{}{
+		s.releaseLimit,
+		now.Format(time.RFC3339Nano),
+		expiresAt.Format(time.RFC3339Nano),
+		purchaseTokenTTL.Milliseconds(),
+		redisQueueTokenKeyPrefix(),
+		redisPurchaseTokenKeyPrefix(),
+	}
+	for index := 0; index < s.releaseLimit; index++ {
+		args = append(args, generatePurchaseToken(now))
+	}
 
-		snapshot, loadErr := s.loadSnapshot(ctx, token)
-		if loadErr != nil || !isQueueStatusActive(*snapshot, now) || snapshot.Status == QueueStatusReady {
-			continue
-		}
-
-		purchaseToken := generatePurchaseToken(now)
-		expiresAt := now.Add(5 * time.Minute)
-		snapshot.Status = QueueStatusReady
-		snapshot.PurchaseToken = &purchaseToken
-		snapshot.PurchaseTokenExpiresAt = &expiresAt
-		snapshot.UpdatedAt = now
-
-		if err := s.client.Set(ctx, redisPurchaseTokenKey(purchaseToken), snapshot.QueueToken, time.Until(expiresAt)).Err(); err != nil {
-			return err
-		}
-		if err := s.saveSnapshot(ctx, *snapshot); err != nil {
-			return err
-		}
-		readyCount++
+	if _, err := promoteReadyScript.Run(ctx, s.client, []string{
+		redisWaitingQueueKey(eventID),
+		redisReadyQueueKey(eventID),
+	}, args...).Result(); err != nil {
+		return err
 	}
 
 	return nil
 }
 
 func (s *RedisQueueStore) cleanupExpiredPurchaseTokensByEvent(ctx context.Context, eventID int64, now time.Time) (int, error) {
-	tokens, err := s.client.ZRange(ctx, redisEventQueueKey(eventID), 0, -1).Result()
+	tokens, err := s.client.ZRange(ctx, redisReadyQueueKey(eventID), 0, -1).Result()
 	if err != nil || len(tokens) == 0 {
 		return 0, err
 	}
@@ -316,7 +387,7 @@ func (s *RedisQueueStore) cleanupExpiredPurchaseTokensByEvent(ctx context.Contex
 		if err := s.client.Del(ctx, redisUserEventKey(queueUserEventKey(snapshot.EventID, snapshot.UserID))).Err(); err != nil {
 			return cleaned, err
 		}
-		if err := s.client.ZRem(ctx, redisEventQueueKey(snapshot.EventID), snapshot.QueueToken).Err(); err != nil {
+		if err := s.client.ZRem(ctx, redisReadyQueueKey(snapshot.EventID), snapshot.QueueToken).Err(); err != nil {
 			return cleaned, err
 		}
 
@@ -330,13 +401,25 @@ func (s *RedisQueueStore) cleanupExpiredPurchaseTokensByEvent(ctx context.Contex
 		cleaned++
 	}
 
+	if err := s.removeActiveEventIfEmpty(ctx, eventID); err != nil {
+		return cleaned, err
+	}
+
 	return cleaned, nil
 }
 
 func (s *RedisQueueStore) cleanupExpiredQueuesByEvent(ctx context.Context, eventID int64, now time.Time) (int, error) {
-	tokens, err := s.client.ZRange(ctx, redisEventQueueKey(eventID), 0, -1).Result()
-	if err != nil || len(tokens) == 0 {
+	waitingTokens, err := s.client.ZRange(ctx, redisWaitingQueueKey(eventID), 0, -1).Result()
+	if err != nil {
 		return 0, err
+	}
+	readyTokens, err := s.client.ZRange(ctx, redisReadyQueueKey(eventID), 0, -1).Result()
+	if err != nil {
+		return 0, err
+	}
+	tokens := append(waitingTokens, readyTokens...)
+	if len(tokens) == 0 {
+		return 0, nil
 	}
 
 	cleaned := 0
@@ -357,7 +440,10 @@ func (s *RedisQueueStore) cleanupExpiredQueuesByEvent(ctx context.Context, event
 		if err := s.client.Del(ctx, redisUserEventKey(queueUserEventKey(snapshot.EventID, snapshot.UserID))).Err(); err != nil {
 			return cleaned, err
 		}
-		if err := s.client.ZRem(ctx, redisEventQueueKey(snapshot.EventID), snapshot.QueueToken).Err(); err != nil {
+		if err := s.client.ZRem(ctx, redisWaitingQueueKey(snapshot.EventID), snapshot.QueueToken).Err(); err != nil {
+			return cleaned, err
+		}
+		if err := s.client.ZRem(ctx, redisReadyQueueKey(snapshot.EventID), snapshot.QueueToken).Err(); err != nil {
 			return cleaned, err
 		}
 
@@ -371,14 +457,26 @@ func (s *RedisQueueStore) cleanupExpiredQueuesByEvent(ctx context.Context, event
 		cleaned++
 	}
 
-	size, err := s.client.ZCard(ctx, redisEventQueueKey(eventID)).Result()
-	if err == nil && size == 0 {
-		if err := s.client.SRem(ctx, redisActiveEventsKey(), strconv.FormatInt(eventID, 10)).Err(); err != nil {
-			return cleaned, err
-		}
+	if err := s.removeActiveEventIfEmpty(ctx, eventID); err != nil {
+		return cleaned, err
 	}
 
 	return cleaned, nil
+}
+
+func (s *RedisQueueStore) removeActiveEventIfEmpty(ctx context.Context, eventID int64) error {
+	waitingSize, waitingErr := s.client.ZCard(ctx, redisWaitingQueueKey(eventID)).Result()
+	if waitingErr != nil {
+		return waitingErr
+	}
+	readySize, readyErr := s.client.ZCard(ctx, redisReadyQueueKey(eventID)).Result()
+	if readyErr != nil {
+		return readyErr
+	}
+	if waitingSize > 0 || readySize > 0 {
+		return nil
+	}
+	return s.client.SRem(ctx, redisActiveEventsKey(), strconv.FormatInt(eventID, 10)).Err()
 }
 
 func (s *RedisQueueStore) loadSnapshot(ctx context.Context, queueToken string) (*QueueStatusSnapshot, error) {
@@ -405,8 +503,12 @@ func (s *RedisQueueStore) saveSnapshot(ctx context.Context, snapshot QueueStatus
 	return s.client.Set(ctx, redisQueueTokenKey(snapshot.QueueToken), payload, time.Until(snapshot.ExpiredAt)).Err()
 }
 
-func redisEventQueueKey(eventID int64) string {
-	return "queue:event:" + strconv.FormatInt(eventID, 10)
+func redisWaitingQueueKey(eventID int64) string {
+	return "queue:waiting:" + strconv.FormatInt(eventID, 10)
+}
+
+func redisReadyQueueKey(eventID int64) string {
+	return "queue:ready:" + strconv.FormatInt(eventID, 10)
 }
 
 func redisEventSeqKey(eventID int64) string {
@@ -414,11 +516,19 @@ func redisEventSeqKey(eventID int64) string {
 }
 
 func redisQueueTokenKey(queueToken string) string {
-	return "queue:token:" + queueToken
+	return redisQueueTokenKeyPrefix() + queueToken
+}
+
+func redisQueueTokenKeyPrefix() string {
+	return "queue:token:"
 }
 
 func redisPurchaseTokenKey(purchaseToken string) string {
-	return "queue:purchase:" + purchaseToken
+	return redisPurchaseTokenKeyPrefix() + purchaseToken
+}
+
+func redisPurchaseTokenKeyPrefix() string {
+	return "queue:purchase:"
 }
 
 func redisUserEventKey(key string) string {
@@ -427,24 +537,4 @@ func redisUserEventKey(key string) string {
 
 func redisActiveEventsKey() string {
 	return "queue:events:active"
-}
-
-func (s *RedisQueueStore) readyCount(ctx context.Context, eventID int64, now time.Time) (int, error) {
-	tokens, err := s.client.ZRange(ctx, redisEventQueueKey(eventID), 0, -1).Result()
-	if err != nil {
-		return 0, err
-	}
-
-	count := 0
-	for _, token := range tokens {
-		snapshot, loadErr := s.loadSnapshot(ctx, token)
-		if loadErr != nil || !isQueueStatusActive(*snapshot, now) {
-			continue
-		}
-		if snapshot.Status == QueueStatusReady && snapshot.PurchaseToken != nil {
-			count++
-		}
-	}
-
-	return count, nil
 }
