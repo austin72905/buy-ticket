@@ -129,6 +129,44 @@ func (r *MemoryAdminAuditLogRepository) Create(ctx context.Context, log *domain.
 	return nil
 }
 
+func (r *MemoryAdminAuditLogRepository) List(ctx context.Context, filter domain.AdminAuditLogListFilter) ([]domain.AdminAuditLog, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+
+	logs := make([]domain.AdminAuditLog, 0)
+	for _, log := range r.logs {
+		if filter.AdminUserID != 0 && log.AdminUserID != filter.AdminUserID {
+			continue
+		}
+		if filter.Cursor.CreatedAt != nil {
+			if log.CreatedAt.After(*filter.Cursor.CreatedAt) || log.CreatedAt.Equal(*filter.Cursor.CreatedAt) && log.ID >= filter.Cursor.ID {
+				continue
+			}
+		}
+
+		cloned := *log
+		logs = append(logs, cloned)
+	}
+
+	sort.SliceStable(logs, func(i, j int) bool {
+		if logs[i].CreatedAt.Equal(logs[j].CreatedAt) {
+			return logs[i].ID > logs[j].ID
+		}
+		return logs[i].CreatedAt.After(logs[j].CreatedAt)
+	})
+
+	if len(logs) > limit {
+		logs = logs[:limit]
+	}
+
+	return logs, nil
+}
+
 func NewMemoryUserRepository(users []*domain.User) *MemoryUserRepository {
 	repo := &MemoryUserRepository{
 		users:      make(map[int64]*domain.User, len(users)),

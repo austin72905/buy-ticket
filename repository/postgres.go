@@ -804,6 +804,30 @@ func (r *PostgresAdminAuditLogRepository) Create(ctx context.Context, log *domai
 	return nil
 }
 
+func (r *PostgresAdminAuditLogRepository) List(ctx context.Context, filter domain.AdminAuditLogListFilter) ([]domain.AdminAuditLog, error) {
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+
+	records, err := r.queries.ListAdminAuditLogs(ctx, db.ListAdminAuditLogsParams{
+		AdminUserID:     filter.AdminUserID,
+		CursorCreatedAt: nullablePgTimestamp(filter.Cursor.CreatedAt),
+		CursorID:        filter.Cursor.ID,
+		PageLimit:       int32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	logs := make([]domain.AdminAuditLog, 0, len(records))
+	for _, record := range records {
+		logs = append(logs, *toDomainAdminAuditLog(record))
+	}
+
+	return logs, nil
+}
+
 func (r *PostgresIdempotencyRepository) Complete(ctx context.Context, key, endpoint string, status int, responseBody []byte, now time.Time) error {
 	return r.queries.CompleteIdempotencyKey(ctx, db.CompleteIdempotencyKeyParams{
 		Key:            key,
@@ -914,6 +938,10 @@ func toDomainAdminUser(record db.AdminUser) *domain.AdminUser {
 }
 
 func toDomainAdminAuditLogFromCreateAdminAuditLog(record db.AdminAuditLog) *domain.AdminAuditLog {
+	return toDomainAdminAuditLog(record)
+}
+
+func toDomainAdminAuditLog(record db.AdminAuditLog) *domain.AdminAuditLog {
 	log := &domain.AdminAuditLog{
 		ID:          record.ID,
 		AdminUserID: record.AdminUserID,

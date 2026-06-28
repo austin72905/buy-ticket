@@ -34,3 +34,26 @@ func MaskEmail(value string) string {
 
 	return string(local[0]) + "***@" + parts[1]
 }
+
+func MaskIP(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+
+	if strings.Contains(value, ".") {
+		parts := strings.Split(value, ".")
+		if len(parts) == 4 {
+			return parts[0] + "." + parts[1] + ".*.*"
+		}
+	}
+
+	if strings.Contains(value, ":") {
+		parts := strings.Split(value, ":")
+		if len(parts) > 2 {
+			return parts[0] + ":" + parts[1] + ":****"
+		}
+	}
+
+	return "***"
+}

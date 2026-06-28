@@ -20,6 +20,7 @@ type AdminUserRepository interface {
 
 type AdminAuditLogRepository interface {
 	Create(ctx context.Context, log *domain.AdminAuditLog) error
+	List(ctx context.Context, filter domain.AdminAuditLogListFilter) ([]domain.AdminAuditLog, error)
 }
 
 type AdminOrderRepository interface {

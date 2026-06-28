@@ -28,6 +28,13 @@ type ListAdminOrdersInput struct {
 	Limit           int
 }
 
+type ListAdminAuditLogsInput struct {
+	AdminUser       *domain.AdminUser
+	CursorCreatedAt *time.Time
+	CursorID        int64
+	Limit           int
+}
+
 type RevealOrderSensitiveInput struct {
 	AdminUser *domain.AdminUser
 	OrderID   int64
@@ -94,6 +101,26 @@ func (s *AdminService) ListEventSections(ctx context.Context, adminUser *domain.
 	}
 
 	return s.AdminEventRepo.ListAdminEventSections(ctx, eventID, organizerID)
+}
+
+func (s *AdminService) ListAuditLogs(ctx context.Context, input ListAdminAuditLogsInput) ([]domain.AdminAuditLog, error) {
+	if input.AdminUser == nil {
+		return nil, ErrUnauthorized
+	}
+
+	adminUserID := int64(0)
+	if input.AdminUser.IsEventAdmin() {
+		adminUserID = input.AdminUser.ID
+	}
+
+	return s.AdminAuditLogRepo.List(ctx, domain.AdminAuditLogListFilter{
+		AdminUserID: adminUserID,
+		Cursor: domain.AdminAuditLogListCursor{
+			CreatedAt: input.CursorCreatedAt,
+			ID:        input.CursorID,
+		},
+		Limit: normalizeAdminListLimit(input.Limit),
+	})
 }
 
 func (s *AdminService) RevealOrderSensitive(ctx context.Context, input RevealOrderSensitiveInput) (*domain.AdminOrder, error) {

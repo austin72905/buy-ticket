@@ -1707,6 +1707,70 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 	return i, err
 }
 
+const listAdminAuditLogs = `-- name: ListAdminAuditLogs :many
+SELECT
+    id,
+    admin_user_id,
+    action,
+    target_type,
+    target_id,
+    reason,
+    ip_address,
+    user_agent,
+    created_at
+FROM admin_audit_logs
+WHERE ($1::bigint = 0 OR admin_user_id = $1)
+  AND (
+      $2::timestamptz IS NULL
+      OR created_at < $2
+      OR (created_at = $2 AND id < $3)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $4
+`
+
+type ListAdminAuditLogsParams struct {
+	AdminUserID     int64              `json:"admin_user_id"`
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        int64              `json:"cursor_id"`
+	PageLimit       int32              `json:"page_limit"`
+}
+
+func (q *Queries) ListAdminAuditLogs(ctx context.Context, arg ListAdminAuditLogsParams) ([]AdminAuditLog, error) {
+	rows, err := q.db.Query(ctx, listAdminAuditLogs,
+		arg.AdminUserID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AdminAuditLog{}
+	for rows.Next() {
+		var i AdminAuditLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.AdminUserID,
+			&i.Action,
+			&i.TargetType,
+			&i.TargetID,
+			&i.Reason,
+			&i.IpAddress,
+			&i.UserAgent,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAdminEventSections = `-- name: ListAdminEventSections :many
 SELECT
     s.id,

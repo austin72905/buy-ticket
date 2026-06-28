@@ -175,6 +175,28 @@ type AdminOrderListCursorDTO struct {
 	ID        int64  `json:"id"`
 }
 
+type AdminAuditLogListResponse struct {
+	Items      []AdminAuditLogResponse `json:"items"`
+	NextCursor *AdminAuditLogCursorDTO `json:"next_cursor,omitempty"`
+}
+
+type AdminAuditLogCursorDTO struct {
+	CreatedAt string `json:"created_at"`
+	ID        int64  `json:"id"`
+}
+
+type AdminAuditLogResponse struct {
+	ID          int64   `json:"id"`
+	AdminUserID int64   `json:"admin_user_id"`
+	Action      string  `json:"action"`
+	TargetType  string  `json:"target_type"`
+	TargetID    int64   `json:"target_id"`
+	Reason      *string `json:"reason,omitempty"`
+	IPAddress   *string `json:"ip_address,omitempty"`
+	UserAgent   *string `json:"user_agent,omitempty"`
+	CreatedAt   string  `json:"created_at"`
+}
+
 type AdminOrderResponse struct {
 	ID            int64   `json:"id"`
 	OrderNo       string  `json:"order_no"`
@@ -646,4 +668,44 @@ func newAdminOrderSensitiveResponse(order *domain.AdminOrder) AdminOrderSensitiv
 		UserName:  order.UserName,
 		UserEmail: order.UserEmail,
 	}
+}
+
+func newAdminAuditLogListResponse(logs []domain.AdminAuditLog, hasNext bool) AdminAuditLogListResponse {
+	items := make([]AdminAuditLogResponse, 0, len(logs))
+	for _, log := range logs {
+		items = append(items, newAdminAuditLogResponse(log))
+	}
+
+	response := AdminAuditLogListResponse{
+		Items: items,
+	}
+	if hasNext && len(logs) > 0 {
+		lastLog := logs[len(logs)-1]
+		response.NextCursor = &AdminAuditLogCursorDTO{
+			CreatedAt: lastLog.CreatedAt.Format(time.RFC3339),
+			ID:        lastLog.ID,
+		}
+	}
+
+	return response
+}
+
+func newAdminAuditLogResponse(log domain.AdminAuditLog) AdminAuditLogResponse {
+	response := AdminAuditLogResponse{
+		ID:          log.ID,
+		AdminUserID: log.AdminUserID,
+		Action:      log.Action,
+		TargetType:  log.TargetType,
+		TargetID:    log.TargetID,
+		Reason:      log.Reason,
+		UserAgent:   log.UserAgent,
+		CreatedAt:   log.CreatedAt.Format(time.RFC3339),
+	}
+
+	if log.IPAddress != nil {
+		maskedIP := service.MaskIP(*log.IPAddress)
+		response.IPAddress = &maskedIP
+	}
+
+	return response
 }

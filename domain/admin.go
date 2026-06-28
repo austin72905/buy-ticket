@@ -67,6 +67,17 @@ type AdminAuditLog struct {
 	CreatedAt   time.Time
 }
 
+type AdminAuditLogListCursor struct {
+	CreatedAt *time.Time
+	ID        int64
+}
+
+type AdminAuditLogListFilter struct {
+	AdminUserID int64
+	Cursor      AdminAuditLogListCursor
+	Limit       int
+}
+
 type AdminOrder struct {
 	ID            int64
 	OrderNo       string

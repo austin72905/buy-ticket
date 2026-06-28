@@ -33,6 +33,7 @@ func (c *AdminController) RegisterRoutes(router gin.IRouter) {
 	admin.GET("/events", c.ListEvents)
 	admin.GET("/events/:eventId", c.GetEvent)
 	admin.GET("/events/:eventId/sections", c.ListEventSections)
+	admin.GET("/audit-logs", c.ListAuditLogs)
 }
 
 // AdminListOrders godoc
@@ -263,6 +264,60 @@ func (c *AdminController) ListEventSections(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, newAdminSectionResponses(sections))
+}
+
+// AdminListAuditLogs godoc
+// @Summary List admin audit logs
+// @Description List admin audit logs with keyset pagination. SUPER_ADMIN can see all logs; EVENT_ADMIN can only see its own logs.
+// @Tags admin-audit-logs
+// @Produce json
+// @Param limit query int false "Page size, default 20, max 100"
+// @Param cursor_created_at query string false "Cursor created_at in RFC3339"
+// @Param cursor_id query int false "Cursor audit log id"
+// @Success 200 {object} AdminAuditLogListResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Router /admin/audit-logs [get]
+func (c *AdminController) ListAuditLogs(ctx *gin.Context) {
+	limit, err := parseOptionalIntQuery(ctx, "limit")
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+	cursorID, err := parseOptionalInt64Query(ctx, "cursor_id")
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+	cursorCreatedAt, err := parseOptionalTimeQuery(ctx, "cursor_created_at")
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	adminUser, _ := CurrentAdmin(ctx)
+	queryLimit := limit
+	if queryLimit <= 0 {
+		queryLimit = 20
+	}
+
+	logs, err := c.AdminService.ListAuditLogs(ctx.Request.Context(), service.ListAdminAuditLogsInput{
+		AdminUser:       adminUser,
+		CursorCreatedAt: cursorCreatedAt,
+		CursorID:        cursorID,
+		Limit:           queryLimit + 1,
+	})
+	if err != nil {
+		writeError(ctx, http.StatusInternalServerError, err)
+		return
+	}
+
+	hasNext := len(logs) > normalizeAdminResponseLimit(queryLimit)
+	if hasNext {
+		logs = logs[:normalizeAdminResponseLimit(queryLimit)]
+	}
+
+	ctx.JSON(http.StatusOK, newAdminAuditLogListResponse(logs, hasNext))
 }
 
 func parseOptionalIntQuery(ctx *gin.Context, name string) (int, error) {

@@ -1,5 +1,42 @@
 basePath: /
 definitions:
+  controller.AdminAuditLogCursorDTO:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+    type: object
+  controller.AdminAuditLogListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/controller.AdminAuditLogResponse'
+        type: array
+      next_cursor:
+        $ref: '#/definitions/controller.AdminAuditLogCursorDTO'
+    type: object
+  controller.AdminAuditLogResponse:
+    properties:
+      action:
+        type: string
+      admin_user_id:
+        type: integer
+      created_at:
+        type: string
+      id:
+        type: integer
+      ip_address:
+        type: string
+      reason:
+        type: string
+      target_id:
+        type: integer
+      target_type:
+        type: string
+      user_agent:
+        type: string
+    type: object
   controller.AdminEventResponse:
     properties:
       created_at:
@@ -478,6 +515,41 @@ info:
   title: buy-ticket API
   version: "1.0"
 paths:
+  /admin/audit-logs:
+    get:
+      description: List admin audit logs with keyset pagination. SUPER_ADMIN can see
+        all logs; EVENT_ADMIN can only see its own logs.
+      parameters:
+      - description: Page size, default 20, max 100
+        in: query
+        name: limit
+        type: integer
+      - description: Cursor created_at in RFC3339
+        in: query
+        name: cursor_created_at
+        type: string
+      - description: Cursor audit log id
+        in: query
+        name: cursor_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.AdminAuditLogListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: List admin audit logs
+      tags:
+      - admin-audit-logs
   /admin/auth/login:
     post:
       consumes:

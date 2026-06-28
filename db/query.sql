@@ -120,6 +120,27 @@ RETURNING
     user_agent,
     created_at;
 
+-- name: ListAdminAuditLogs :many
+SELECT
+    id,
+    admin_user_id,
+    action,
+    target_type,
+    target_id,
+    reason,
+    ip_address,
+    user_agent,
+    created_at
+FROM admin_audit_logs
+WHERE (sqlc.arg(admin_user_id)::bigint = 0 OR admin_user_id = sqlc.arg(admin_user_id))
+  AND (
+      sqlc.arg(cursor_created_at)::timestamptz IS NULL
+      OR created_at < sqlc.arg(cursor_created_at)
+      OR (created_at = sqlc.arg(cursor_created_at) AND id < sqlc.arg(cursor_id))
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(page_limit);
+
 -- name: GetEventByID :one
 SELECT
     id,

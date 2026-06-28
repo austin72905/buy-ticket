@@ -8,6 +8,58 @@
     },
     "basePath": "/",
     "paths": {
+        "/admin/audit-logs": {
+            "get": {
+                "description": "List admin audit logs with keyset pagination. SUPER_ADMIN can see all logs; EVENT_ADMIN can only see its own logs.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-audit-logs"
+                ],
+                "summary": "List admin audit logs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 20, max 100",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cursor created_at in RFC3339",
+                        "name": "cursor_created_at",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Cursor audit log id",
+                        "name": "cursor_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.AdminAuditLogListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/auth/login": {
             "post": {
                 "description": "Login with an admin account and create an admin session cookie.",
@@ -1251,6 +1303,63 @@
         }
     },
     "definitions": {
+        "controller.AdminAuditLogCursorDTO": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "controller.AdminAuditLogListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/controller.AdminAuditLogResponse"
+                    }
+                },
+                "next_cursor": {
+                    "$ref": "#/definitions/controller.AdminAuditLogCursorDTO"
+                }
+            }
+        },
+        "controller.AdminAuditLogResponse": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "admin_user_id": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "ip_address": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "target_id": {
+                    "type": "integer"
+                },
+                "target_type": {
+                    "type": "string"
+                },
+                "user_agent": {
+                    "type": "string"
+                }
+            }
+        },
         "controller.AdminEventResponse": {
             "type": "object",
             "properties": {
