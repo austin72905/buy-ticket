@@ -1571,6 +1571,123 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 	return i, err
 }
 
+const listAdminOrders = `-- name: ListAdminOrders :many
+SELECT
+    o.id,
+    o.order_no,
+    o.reservation_id,
+    o.reservation_no,
+    o.event_id,
+    o.event_name,
+    o.section_id,
+    o.section_name,
+    o.user_id,
+    o.user_name,
+    u.email AS user_email,
+    o.quantity,
+    o.unit_price,
+    o.total_amount,
+    o.status,
+    o.expires_at,
+    o.paid_at,
+    o.created_at,
+    o.updated_at
+FROM orders o
+JOIN events e ON e.id = o.event_id
+JOIN users u ON u.id = o.user_id
+WHERE ($1::bigint = 0 OR e.organizer_id = $1)
+  AND ($2::bigint = 0 OR o.event_id = $2)
+  AND ($3::bigint = 0 OR o.user_id = $3)
+  AND ($4::smallint = 0 OR o.status = $4)
+  AND (
+      $5::timestamptz IS NULL
+      OR o.created_at < $5
+      OR (o.created_at = $5 AND o.id < $6)
+  )
+ORDER BY o.created_at DESC, o.id DESC
+LIMIT $7
+`
+
+type ListAdminOrdersParams struct {
+	OrganizerID     int64              `json:"organizer_id"`
+	EventID         int64              `json:"event_id"`
+	UserID          int64              `json:"user_id"`
+	Status          int16              `json:"status"`
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        int64              `json:"cursor_id"`
+	PageLimit       int32              `json:"page_limit"`
+}
+
+type ListAdminOrdersRow struct {
+	ID            int64              `json:"id"`
+	OrderNo       string             `json:"order_no"`
+	ReservationID int64              `json:"reservation_id"`
+	ReservationNo string             `json:"reservation_no"`
+	EventID       int64              `json:"event_id"`
+	EventName     string             `json:"event_name"`
+	SectionID     int64              `json:"section_id"`
+	SectionName   string             `json:"section_name"`
+	UserID        int64              `json:"user_id"`
+	UserName      string             `json:"user_name"`
+	UserEmail     string             `json:"user_email"`
+	Quantity      int32              `json:"quantity"`
+	UnitPrice     int64              `json:"unit_price"`
+	TotalAmount   int64              `json:"total_amount"`
+	Status        int16              `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	PaidAt        pgtype.Timestamptz `json:"paid_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListAdminOrders(ctx context.Context, arg ListAdminOrdersParams) ([]ListAdminOrdersRow, error) {
+	rows, err := q.db.Query(ctx, listAdminOrders,
+		arg.OrganizerID,
+		arg.EventID,
+		arg.UserID,
+		arg.Status,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAdminOrdersRow{}
+	for rows.Next() {
+		var i ListAdminOrdersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderNo,
+			&i.ReservationID,
+			&i.ReservationNo,
+			&i.EventID,
+			&i.EventName,
+			&i.SectionID,
+			&i.SectionName,
+			&i.UserID,
+			&i.UserName,
+			&i.UserEmail,
+			&i.Quantity,
+			&i.UnitPrice,
+			&i.TotalAmount,
+			&i.Status,
+			&i.ExpiresAt,
+			&i.PaidAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEvents = `-- name: ListEvents :many
 SELECT
     id,

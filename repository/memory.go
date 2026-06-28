@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 	"time"
 
@@ -480,6 +481,65 @@ func (r *MemoryOrderRepository) ListByUserID(ctx context.Context, userID int64) 
 
 		cloned := *order
 		orders = append(orders, cloned)
+	}
+
+	return orders, nil
+}
+
+func (r *MemoryOrderRepository) ListAdminOrders(ctx context.Context, filter domain.AdminOrderListFilter) ([]domain.AdminOrder, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+
+	orders := make([]domain.AdminOrder, 0)
+	for _, order := range r.orders {
+		if filter.EventID != 0 && order.EventID != filter.EventID {
+			continue
+		}
+		if filter.UserID != 0 && order.UserID != filter.UserID {
+			continue
+		}
+		if filter.Status != 0 && order.Status != filter.Status {
+			continue
+		}
+		if filter.Cursor.CreatedAt != nil {
+			if order.CreatedAt.After(*filter.Cursor.CreatedAt) || order.CreatedAt.Equal(*filter.Cursor.CreatedAt) && order.ID >= filter.Cursor.ID {
+				continue
+			}
+		}
+
+		orders = append(orders, domain.AdminOrder{
+			ID:            order.ID,
+			OrderNo:       order.OrderNo,
+			ReservationID: order.ReservationID,
+			EventID:       order.EventID,
+			SectionID:     order.SectionID,
+			UserID:        order.UserID,
+			UserName:      "",
+			UserEmail:     "",
+			Quantity:      order.Quantity,
+			UnitPrice:     order.UnitPrice,
+			TotalAmount:   order.TotalAmount,
+			Status:        order.Status,
+			ExpiresAt:     order.ExpiresAt,
+			CreatedAt:     order.CreatedAt,
+			UpdatedAt:     order.UpdatedAt,
+		})
+	}
+
+	sort.SliceStable(orders, func(i, j int) bool {
+		if orders[i].CreatedAt.Equal(orders[j].CreatedAt) {
+			return orders[i].ID > orders[j].ID
+		}
+		return orders[i].CreatedAt.After(orders[j].CreatedAt)
+	})
+
+	if len(orders) > limit {
+		orders = orders[:limit]
 	}
 
 	return orders, nil

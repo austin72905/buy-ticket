@@ -132,6 +132,37 @@ type AdminUserResponse struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+type AdminOrderListResponse struct {
+	Items      []AdminOrderResponse     `json:"items"`
+	NextCursor *AdminOrderListCursorDTO `json:"next_cursor,omitempty"`
+}
+
+type AdminOrderListCursorDTO struct {
+	CreatedAt string `json:"created_at"`
+	ID        int64  `json:"id"`
+}
+
+type AdminOrderResponse struct {
+	ID            int64   `json:"id"`
+	OrderNo       string  `json:"order_no"`
+	ReservationID int64   `json:"reservation_id"`
+	EventID       int64   `json:"event_id"`
+	EventName     string  `json:"event_name"`
+	SectionID     int64   `json:"section_id"`
+	SectionName   string  `json:"section_name"`
+	UserID        int64   `json:"user_id"`
+	UserName      string  `json:"user_name"`
+	UserEmail     string  `json:"user_email"`
+	Quantity      int     `json:"quantity"`
+	UnitPrice     int64   `json:"unit_price"`
+	TotalAmount   int64   `json:"total_amount"`
+	Status        int8    `json:"status"`
+	ExpiresAt     string  `json:"expires_at"`
+	PaidAt        *string `json:"paid_at,omitempty"`
+	CreatedAt     string  `json:"created_at"`
+	UpdatedAt     string  `json:"updated_at"`
+}
+
 type SectionResponse struct {
 	ID               int64  `json:"id"`
 	EventID          int64  `json:"event_id"`
@@ -466,4 +497,53 @@ func newAdminUserResponse(adminUser *domain.AdminUser) AdminUserResponse {
 		CreatedAt:   adminUser.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:   adminUser.UpdatedAt.Format(time.RFC3339),
 	}
+}
+
+func newAdminOrderListResponse(orders []domain.AdminOrder, hasNext bool) AdminOrderListResponse {
+	items := make([]AdminOrderResponse, 0, len(orders))
+	for _, order := range orders {
+		items = append(items, newAdminOrderResponse(order))
+	}
+
+	response := AdminOrderListResponse{
+		Items: items,
+	}
+	if hasNext && len(orders) > 0 {
+		lastOrder := orders[len(orders)-1]
+		response.NextCursor = &AdminOrderListCursorDTO{
+			CreatedAt: lastOrder.CreatedAt.Format(time.RFC3339),
+			ID:        lastOrder.ID,
+		}
+	}
+
+	return response
+}
+
+func newAdminOrderResponse(order domain.AdminOrder) AdminOrderResponse {
+	response := AdminOrderResponse{
+		ID:            order.ID,
+		OrderNo:       order.OrderNo,
+		ReservationID: order.ReservationID,
+		EventID:       order.EventID,
+		EventName:     order.EventName,
+		SectionID:     order.SectionID,
+		SectionName:   order.SectionName,
+		UserID:        order.UserID,
+		UserName:      service.MaskName(order.UserName),
+		UserEmail:     service.MaskEmail(order.UserEmail),
+		Quantity:      order.Quantity,
+		UnitPrice:     order.UnitPrice,
+		TotalAmount:   order.TotalAmount,
+		Status:        int8(order.Status),
+		ExpiresAt:     order.ExpiresAt.Format(time.RFC3339),
+		CreatedAt:     order.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:     order.UpdatedAt.Format(time.RFC3339),
+	}
+
+	if order.PaidAt != nil {
+		paidAt := order.PaidAt.Format(time.RFC3339)
+		response.PaidAt = &paidAt
+	}
+
+	return response
 }

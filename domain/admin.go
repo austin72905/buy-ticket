@@ -66,3 +66,38 @@ type AdminAuditLog struct {
 	UserAgent   *string
 	CreatedAt   time.Time
 }
+
+type AdminOrder struct {
+	ID            int64
+	OrderNo       string
+	ReservationID int64
+	EventID       int64
+	EventName     string
+	SectionID     int64
+	SectionName   string
+	UserID        int64
+	UserName      string
+	UserEmail     string
+	Quantity      int
+	UnitPrice     int64
+	TotalAmount   int64
+	Status        OrderStatus
+	ExpiresAt     time.Time
+	PaidAt        *time.Time
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type AdminOrderListCursor struct {
+	CreatedAt *time.Time
+	ID        int64
+}
+
+type AdminOrderListFilter struct {
+	OrganizerID *int64
+	EventID     int64
+	UserID      int64
+	Status      OrderStatus
+	Cursor      AdminOrderListCursor
+	Limit       int
+}

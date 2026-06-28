@@ -391,6 +391,38 @@ func (r *PostgresOrderRepository) ListByUserID(ctx context.Context, userID int64
 	return orders, nil
 }
 
+func (r *PostgresOrderRepository) ListAdminOrders(ctx context.Context, filter domain.AdminOrderListFilter) ([]domain.AdminOrder, error) {
+	organizerID := int64(0)
+	if filter.OrganizerID != nil {
+		organizerID = *filter.OrganizerID
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+
+	records, err := r.queries.ListAdminOrders(ctx, db.ListAdminOrdersParams{
+		OrganizerID:     organizerID,
+		EventID:         filter.EventID,
+		UserID:          filter.UserID,
+		Status:          int16(filter.Status),
+		CursorCreatedAt: nullablePgTimestamp(filter.Cursor.CreatedAt),
+		CursorID:        filter.Cursor.ID,
+		PageLimit:       int32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	orders := make([]domain.AdminOrder, 0, len(records))
+	for _, record := range records {
+		orders = append(orders, *toDomainAdminOrder(record))
+	}
+
+	return orders, nil
+}
+
 func (r *PostgresOrderRepository) ListExpiredPending(ctx context.Context, now time.Time, limit int) ([]domain.Order, error) {
 	if limit <= 0 {
 		limit = 100
@@ -892,6 +924,35 @@ func toDomainOrder(record db.Order) *domain.Order {
 		CreatedAt:     record.CreatedAt.Time,
 		UpdatedAt:     record.UpdatedAt.Time,
 	}
+}
+
+func toDomainAdminOrder(record db.ListAdminOrdersRow) *domain.AdminOrder {
+	order := &domain.AdminOrder{
+		ID:            record.ID,
+		OrderNo:       record.OrderNo,
+		ReservationID: record.ReservationID,
+		EventID:       record.EventID,
+		EventName:     record.EventName,
+		SectionID:     record.SectionID,
+		SectionName:   record.SectionName,
+		UserID:        record.UserID,
+		UserName:      record.UserName,
+		UserEmail:     record.UserEmail,
+		Quantity:      int(record.Quantity),
+		UnitPrice:     record.UnitPrice,
+		TotalAmount:   record.TotalAmount,
+		Status:        domain.OrderStatus(record.Status),
+		ExpiresAt:     record.ExpiresAt.Time,
+		CreatedAt:     record.CreatedAt.Time,
+		UpdatedAt:     record.UpdatedAt.Time,
+	}
+
+	if record.PaidAt.Valid {
+		paidAt := record.PaidAt.Time
+		order.PaidAt = &paidAt
+	}
+
+	return order
 }
 
 func toDomainPayment(record db.Payment) *domain.Payment {

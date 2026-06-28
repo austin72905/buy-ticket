@@ -635,6 +635,42 @@ FROM orders
 WHERE user_id = $1
 ORDER BY created_at DESC, id DESC;
 
+-- name: ListAdminOrders :many
+SELECT
+    o.id,
+    o.order_no,
+    o.reservation_id,
+    o.reservation_no,
+    o.event_id,
+    o.event_name,
+    o.section_id,
+    o.section_name,
+    o.user_id,
+    o.user_name,
+    u.email AS user_email,
+    o.quantity,
+    o.unit_price,
+    o.total_amount,
+    o.status,
+    o.expires_at,
+    o.paid_at,
+    o.created_at,
+    o.updated_at
+FROM orders o
+JOIN events e ON e.id = o.event_id
+JOIN users u ON u.id = o.user_id
+WHERE (sqlc.arg(organizer_id)::bigint = 0 OR e.organizer_id = sqlc.arg(organizer_id))
+  AND (sqlc.arg(event_id)::bigint = 0 OR o.event_id = sqlc.arg(event_id))
+  AND (sqlc.arg(user_id)::bigint = 0 OR o.user_id = sqlc.arg(user_id))
+  AND (sqlc.arg(status)::smallint = 0 OR o.status = sqlc.arg(status))
+  AND (
+      sqlc.arg(cursor_created_at)::timestamptz IS NULL
+      OR o.created_at < sqlc.arg(cursor_created_at)
+      OR (o.created_at = sqlc.arg(cursor_created_at) AND o.id < sqlc.arg(cursor_id))
+  )
+ORDER BY o.created_at DESC, o.id DESC
+LIMIT sqlc.arg(page_limit);
+
 -- name: CreatePayment :one
 INSERT INTO payments (
     payment_no,

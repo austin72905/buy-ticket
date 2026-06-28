@@ -7,6 +7,61 @@ definitions:
       password:
         type: string
     type: object
+  controller.AdminOrderListCursorDTO:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+    type: object
+  controller.AdminOrderListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/controller.AdminOrderResponse'
+        type: array
+      next_cursor:
+        $ref: '#/definitions/controller.AdminOrderListCursorDTO'
+    type: object
+  controller.AdminOrderResponse:
+    properties:
+      created_at:
+        type: string
+      event_id:
+        type: integer
+      event_name:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: integer
+      order_no:
+        type: string
+      paid_at:
+        type: string
+      quantity:
+        type: integer
+      reservation_id:
+        type: integer
+      section_id:
+        type: integer
+      section_name:
+        type: string
+      status:
+        type: integer
+      total_amount:
+        type: integer
+      unit_price:
+        type: integer
+      updated_at:
+        type: string
+      user_email:
+        type: string
+      user_id:
+        type: integer
+      user_name:
+        type: string
+    type: object
   controller.AdminUserResponse:
     properties:
       created_at:
@@ -413,6 +468,57 @@ paths:
       summary: Get current admin
       tags:
       - admin-auth
+  /admin/orders:
+    get:
+      description: List orders for admin backoffice with keyset pagination. EVENT_ADMIN
+        is scoped to its organizer.
+      parameters:
+      - description: Page size, default 20, max 100
+        in: query
+        name: limit
+        type: integer
+      - description: Cursor created_at in RFC3339
+        in: query
+        name: cursor_created_at
+        type: string
+      - description: Cursor order id
+        in: query
+        name: cursor_id
+        type: integer
+      - description: Filter by event id
+        in: query
+        name: event_id
+        type: integer
+      - description: Filter by user id
+        in: query
+        name: user_id
+        type: integer
+      - description: Filter by order status
+        in: query
+        name: status
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.AdminOrderListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: List admin orders
+      tags:
+      - admin-orders
   /events:
     get:
       description: 取得目前系統中的活動列表

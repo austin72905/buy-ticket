@@ -38,6 +38,7 @@ type Querier interface {
 	GetSectionByEventAndID(ctx context.Context, arg GetSectionByEventAndIDParams) (EventSection, error)
 	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
 	GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error)
+	ListAdminOrders(ctx context.Context, arg ListAdminOrdersParams) ([]ListAdminOrdersRow, error)
 	ListEvents(ctx context.Context) ([]ListEventsRow, error)
 	ListExpiredHoldingReservations(ctx context.Context, arg ListExpiredHoldingReservationsParams) ([]Reservation, error)
 	ListExpiredPendingOrders(ctx context.Context, arg ListExpiredPendingOrdersParams) ([]Order, error)

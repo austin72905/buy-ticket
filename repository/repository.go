@@ -22,6 +22,10 @@ type AdminAuditLogRepository interface {
 	Create(ctx context.Context, log *domain.AdminAuditLog) error
 }
 
+type AdminOrderRepository interface {
+	ListAdminOrders(ctx context.Context, filter domain.AdminOrderListFilter) ([]domain.AdminOrder, error)
+}
+
 type EventRepository interface {
 	FindByID(ctx context.Context, eventID int64) (*domain.Event, error)
 	List(ctx context.Context) ([]domain.Event, error)
