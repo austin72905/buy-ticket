@@ -116,6 +116,67 @@ func (r *PostgresEventRepository) List(ctx context.Context) ([]domain.Event, err
 	return events, nil
 }
 
+func (r *PostgresEventRepository) ListAdminEvents(ctx context.Context, organizerID *int64) ([]domain.Event, error) {
+	organizerIDValue := int64(0)
+	if organizerID != nil {
+		organizerIDValue = *organizerID
+	}
+
+	records, err := r.queries.ListAdminEvents(ctx, organizerIDValue)
+	if err != nil {
+		return nil, err
+	}
+
+	events := make([]domain.Event, 0, len(records))
+	for _, record := range records {
+		events = append(events, *toDomainEventFromListAdminEvents(record))
+	}
+
+	return events, nil
+}
+
+func (r *PostgresEventRepository) FindAdminEventByID(ctx context.Context, eventID int64, organizerID *int64) (*domain.Event, error) {
+	organizerIDValue := int64(0)
+	if organizerID != nil {
+		organizerIDValue = *organizerID
+	}
+
+	record, err := r.queries.GetAdminEventByID(ctx, db.GetAdminEventByIDParams{
+		EventID:     eventID,
+		OrganizerID: organizerIDValue,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrEventNotFound
+		}
+		return nil, err
+	}
+
+	return toDomainEventFromGetAdminEventByID(record), nil
+}
+
+func (r *PostgresEventRepository) ListAdminEventSections(ctx context.Context, eventID int64, organizerID *int64) ([]domain.Section, error) {
+	organizerIDValue := int64(0)
+	if organizerID != nil {
+		organizerIDValue = *organizerID
+	}
+
+	records, err := r.queries.ListAdminEventSections(ctx, db.ListAdminEventSectionsParams{
+		EventID:     eventID,
+		OrganizerID: organizerIDValue,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sections := make([]domain.Section, 0, len(records))
+	for _, record := range records {
+		sections = append(sections, *toDomainSection(record))
+	}
+
+	return sections, nil
+}
+
 func (r *PostgresUserRepository) FindByID(ctx context.Context, userID int64) (*domain.User, error) {
 	record, err := r.queries.GetUserByID(ctx, userID)
 	if err != nil {
@@ -787,6 +848,38 @@ func toDomainEventFromGetEventByID(record db.GetEventByIDRow) *domain.Event {
 }
 
 func toDomainEventFromListEvents(record db.ListEventsRow) *domain.Event {
+	return &domain.Event{
+		ID:          record.ID,
+		OrganizerID: record.OrganizerID,
+		Name:        record.Name,
+		StartAt:     record.StartAt.Time,
+		EndAt:       record.EndAt.Time,
+		SaleStartAt: record.SaleStartAt.Time,
+		SaleEndAt:   record.SaleEndAt.Time,
+		Venue:       record.Venue,
+		Status:      domain.EventStatus(record.Status),
+		CreatedAt:   record.CreatedAt.Time,
+		UpdatedAt:   record.UpdatedAt.Time,
+	}
+}
+
+func toDomainEventFromListAdminEvents(record db.ListAdminEventsRow) *domain.Event {
+	return &domain.Event{
+		ID:          record.ID,
+		OrganizerID: record.OrganizerID,
+		Name:        record.Name,
+		StartAt:     record.StartAt.Time,
+		EndAt:       record.EndAt.Time,
+		SaleStartAt: record.SaleStartAt.Time,
+		SaleEndAt:   record.SaleEndAt.Time,
+		Venue:       record.Venue,
+		Status:      domain.EventStatus(record.Status),
+		CreatedAt:   record.CreatedAt.Time,
+		UpdatedAt:   record.UpdatedAt.Time,
+	}
+}
+
+func toDomainEventFromGetAdminEventByID(record db.GetAdminEventByIDRow) *domain.Event {
 	return &domain.Event{
 		ID:          record.ID,
 		OrganizerID: record.OrganizerID,

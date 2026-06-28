@@ -241,6 +241,54 @@ func (r *MemoryEventRepository) List(ctx context.Context) ([]domain.Event, error
 	return events, nil
 }
 
+func (r *MemoryEventRepository) ListAdminEvents(ctx context.Context, organizerID *int64) ([]domain.Event, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	events := make([]domain.Event, 0, len(r.events))
+	for _, event := range r.events {
+		if organizerID != nil && event.OrganizerID != *organizerID {
+			continue
+		}
+
+		cloned := *event
+		events = append(events, cloned)
+	}
+
+	return events, nil
+}
+
+func (r *MemoryEventRepository) FindAdminEventByID(ctx context.Context, eventID int64, organizerID *int64) (*domain.Event, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	event, ok := r.events[eventID]
+	if !ok {
+		return nil, ErrEventNotFound
+	}
+	if organizerID != nil && event.OrganizerID != *organizerID {
+		return nil, ErrEventNotFound
+	}
+
+	cloned := *event
+	return &cloned, nil
+}
+
+func (r *MemoryEventRepository) ListAdminEventSections(ctx context.Context, eventID int64, organizerID *int64) ([]domain.Section, error) {
+	event, err := r.FindAdminEventByID(ctx, eventID, organizerID)
+	if err != nil {
+		return nil, err
+	}
+
+	sections := make([]domain.Section, 0, len(event.Sections))
+	for _, section := range event.Sections {
+		cloned := section
+		sections = append(sections, cloned)
+	}
+
+	return sections, nil
+}
+
 type MemorySectionRepository struct {
 	mu       sync.RWMutex
 	sections map[int64]*domain.Section

@@ -153,6 +153,45 @@ SELECT
 FROM events
 ORDER BY id;
 
+-- name: ListAdminEvents :many
+SELECT
+    id,
+    organizer_id,
+    name,
+    venue,
+    status,
+    start_at,
+    end_at,
+    sale_start_at,
+    sale_end_at,
+    created_at,
+    updated_at
+FROM events
+WHERE sqlc.arg(organizer_id)::bigint = 0
+   OR organizer_id = sqlc.arg(organizer_id)
+ORDER BY id;
+
+-- name: GetAdminEventByID :one
+SELECT
+    id,
+    organizer_id,
+    name,
+    venue,
+    status,
+    start_at,
+    end_at,
+    sale_start_at,
+    sale_end_at,
+    created_at,
+    updated_at
+FROM events
+WHERE id = sqlc.arg(event_id)
+  AND (
+      sqlc.arg(organizer_id)::bigint = 0
+      OR organizer_id = sqlc.arg(organizer_id)
+  )
+LIMIT 1;
+
 -- name: CreateEvent :one
 INSERT INTO events (
     organizer_id,
@@ -215,6 +254,29 @@ SELECT
 FROM event_sections
 WHERE event_id = $1
 ORDER BY id;
+
+-- name: ListAdminEventSections :many
+SELECT
+    s.id,
+    s.event_id,
+    s.event_name,
+    s.section_name,
+    s.price,
+    s.total_quantity,
+    s.reserved_quantity,
+    s.sold_quantity,
+    s.purchase_limit,
+    s.status,
+    s.created_at,
+    s.updated_at
+FROM event_sections s
+JOIN events e ON e.id = s.event_id
+WHERE s.event_id = sqlc.arg(event_id)
+  AND (
+      sqlc.arg(organizer_id)::bigint = 0
+      OR e.organizer_id = sqlc.arg(organizer_id)
+  )
+ORDER BY s.id;
 
 -- name: CreateSection :one
 INSERT INTO event_sections (

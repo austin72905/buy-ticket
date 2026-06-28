@@ -30,6 +30,9 @@ func (c *AdminController) RegisterRoutes(router gin.IRouter) {
 	admin.Use(AttachCurrentAdmin(c.AdminAuthService), RequireAdmin())
 	admin.GET("/orders", c.ListOrders)
 	admin.POST("/orders/:orderId/reveal-sensitive", RequireAdminRole(domain.AdminRoleSuperAdmin), c.RevealOrderSensitive)
+	admin.GET("/events", c.ListEvents)
+	admin.GET("/events/:eventId", c.GetEvent)
+	admin.GET("/events/:eventId/sections", c.ListEventSections)
 }
 
 // AdminListOrders godoc
@@ -164,6 +167,102 @@ func (c *AdminController) RevealOrderSensitive(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, newAdminOrderSensitiveResponse(order))
+}
+
+// AdminListEvents godoc
+// @Summary List admin events
+// @Description List events for admin backoffice. EVENT_ADMIN is scoped to its organizer.
+// @Tags admin-events
+// @Produce json
+// @Success 200 {array} AdminEventResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Router /admin/events [get]
+func (c *AdminController) ListEvents(ctx *gin.Context) {
+	adminUser, _ := CurrentAdmin(ctx)
+	events, err := c.AdminService.ListEvents(ctx.Request.Context(), adminUser)
+	if err != nil {
+		if errors.Is(err, service.ErrForbidden) {
+			writeError(ctx, http.StatusForbidden, err)
+			return
+		}
+		writeError(ctx, http.StatusInternalServerError, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newAdminEventResponses(events))
+}
+
+// AdminGetEvent godoc
+// @Summary Get admin event
+// @Description Get an event for admin backoffice. EVENT_ADMIN is scoped to its organizer.
+// @Tags admin-events
+// @Produce json
+// @Param eventId path int true "Event ID"
+// @Success 200 {object} AdminEventResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /admin/events/{eventId} [get]
+func (c *AdminController) GetEvent(ctx *gin.Context) {
+	eventID, err := strconv.ParseInt(ctx.Param("eventId"), 10, 64)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	adminUser, _ := CurrentAdmin(ctx)
+	event, err := c.AdminService.GetEvent(ctx.Request.Context(), adminUser, eventID)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrForbidden):
+			writeError(ctx, http.StatusForbidden, err)
+		case errors.Is(err, repository.ErrEventNotFound):
+			writeError(ctx, http.StatusNotFound, err)
+		default:
+			writeError(ctx, http.StatusInternalServerError, err)
+		}
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newAdminEventResponse(*event))
+}
+
+// AdminListEventSections godoc
+// @Summary List admin event sections
+// @Description List event sections with inventory quantities. EVENT_ADMIN is scoped to its organizer.
+// @Tags admin-events
+// @Produce json
+// @Param eventId path int true "Event ID"
+// @Success 200 {array} AdminSectionResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /admin/events/{eventId}/sections [get]
+func (c *AdminController) ListEventSections(ctx *gin.Context) {
+	eventID, err := strconv.ParseInt(ctx.Param("eventId"), 10, 64)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	adminUser, _ := CurrentAdmin(ctx)
+	sections, err := c.AdminService.ListEventSections(ctx.Request.Context(), adminUser, eventID)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrForbidden):
+			writeError(ctx, http.StatusForbidden, err)
+		case errors.Is(err, repository.ErrEventNotFound):
+			writeError(ctx, http.StatusNotFound, err)
+		default:
+			writeError(ctx, http.StatusInternalServerError, err)
+		}
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newAdminSectionResponses(sections))
 }
 
 func parseOptionalIntQuery(ctx *gin.Context, name string) (int, error) {

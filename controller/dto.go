@@ -136,6 +136,35 @@ type AdminUserResponse struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+type AdminEventResponse struct {
+	ID          int64  `json:"id"`
+	OrganizerID int64  `json:"organizer_id"`
+	Name        string `json:"name"`
+	Venue       string `json:"venue"`
+	Status      int8   `json:"status"`
+	StartAt     string `json:"start_at"`
+	EndAt       string `json:"end_at"`
+	SaleStartAt string `json:"sale_start_at"`
+	SaleEndAt   string `json:"sale_end_at"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type AdminSectionResponse struct {
+	ID                int64  `json:"id"`
+	EventID           int64  `json:"event_id"`
+	Name              string `json:"name"`
+	Price             int64  `json:"price"`
+	TotalQuantity     int    `json:"total_quantity"`
+	ReservedQuantity  int    `json:"reserved_quantity"`
+	SoldQuantity      int    `json:"sold_quantity"`
+	AvailableQuantity int    `json:"available_quantity"`
+	PurchaseLimit     int    `json:"purchase_limit"`
+	Status            int8   `json:"status"`
+	CreatedAt         string `json:"created_at"`
+	UpdatedAt         string `json:"updated_at"`
+}
+
 type AdminOrderListResponse struct {
 	Items      []AdminOrderResponse     `json:"items"`
 	NextCursor *AdminOrderListCursorDTO `json:"next_cursor,omitempty"`
@@ -509,6 +538,55 @@ func newAdminUserResponse(adminUser *domain.AdminUser) AdminUserResponse {
 		CreatedAt:   adminUser.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:   adminUser.UpdatedAt.Format(time.RFC3339),
 	}
+}
+
+func newAdminEventResponse(event domain.Event) AdminEventResponse {
+	return AdminEventResponse{
+		ID:          event.ID,
+		OrganizerID: event.OrganizerID,
+		Name:        event.Name,
+		Venue:       event.Venue,
+		Status:      int8(event.Status),
+		StartAt:     event.StartAt.Format(time.RFC3339),
+		EndAt:       event.EndAt.Format(time.RFC3339),
+		SaleStartAt: event.SaleStartAt.Format(time.RFC3339),
+		SaleEndAt:   event.SaleEndAt.Format(time.RFC3339),
+		CreatedAt:   event.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:   event.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func newAdminEventResponses(events []domain.Event) []AdminEventResponse {
+	response := make([]AdminEventResponse, 0, len(events))
+	for _, event := range events {
+		response = append(response, newAdminEventResponse(event))
+	}
+	return response
+}
+
+func newAdminSectionResponse(section domain.Section) AdminSectionResponse {
+	return AdminSectionResponse{
+		ID:                section.ID,
+		EventID:           section.EventID,
+		Name:              section.Name,
+		Price:             section.Price,
+		TotalQuantity:     section.TotalQuantity,
+		ReservedQuantity:  section.ReservedQuantity,
+		SoldQuantity:      section.SoldQuantity,
+		AvailableQuantity: section.AvailableQuantity(),
+		PurchaseLimit:     section.PurchaseLimit,
+		Status:            int8(section.Status),
+		CreatedAt:         section.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:         section.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func newAdminSectionResponses(sections []domain.Section) []AdminSectionResponse {
+	response := make([]AdminSectionResponse, 0, len(sections))
+	for _, section := range sections {
+		response = append(response, newAdminSectionResponse(section))
+	}
+	return response
 }
 
 func newAdminOrderListResponse(orders []domain.AdminOrder, hasNext bool) AdminOrderListResponse {

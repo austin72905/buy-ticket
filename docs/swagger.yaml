@@ -1,5 +1,30 @@
 basePath: /
 definitions:
+  controller.AdminEventResponse:
+    properties:
+      created_at:
+        type: string
+      end_at:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      organizer_id:
+        type: integer
+      sale_end_at:
+        type: string
+      sale_start_at:
+        type: string
+      start_at:
+        type: string
+      status:
+        type: integer
+      updated_at:
+        type: string
+      venue:
+        type: string
+    type: object
   controller.AdminLoginRequest:
     properties:
       email:
@@ -73,6 +98,33 @@ definitions:
       user_id:
         type: integer
       user_name:
+        type: string
+    type: object
+  controller.AdminSectionResponse:
+    properties:
+      available_quantity:
+        type: integer
+      created_at:
+        type: string
+      event_id:
+        type: integer
+      id:
+        type: integer
+      name:
+        type: string
+      price:
+        type: integer
+      purchase_limit:
+        type: integer
+      reserved_quantity:
+        type: integer
+      sold_quantity:
+        type: integer
+      status:
+        type: integer
+      total_quantity:
+        type: integer
+      updated_at:
         type: string
     type: object
   controller.AdminUserResponse:
@@ -469,6 +521,104 @@ paths:
       summary: Admin logout
       tags:
       - admin-auth
+  /admin/events:
+    get:
+      description: List events for admin backoffice. EVENT_ADMIN is scoped to its
+        organizer.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.AdminEventResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: List admin events
+      tags:
+      - admin-events
+  /admin/events/{eventId}:
+    get:
+      description: Get an event for admin backoffice. EVENT_ADMIN is scoped to its
+        organizer.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.AdminEventResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Get admin event
+      tags:
+      - admin-events
+  /admin/events/{eventId}/sections:
+    get:
+      description: List event sections with inventory quantities. EVENT_ADMIN is scoped
+        to its organizer.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.AdminSectionResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: List admin event sections
+      tags:
+      - admin-events
   /admin/me:
     get:
       description: Get the currently authenticated admin user.

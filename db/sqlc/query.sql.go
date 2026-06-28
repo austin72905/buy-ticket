@@ -947,6 +947,66 @@ func (q *Queries) GetActiveReservationByUserAndEvent(ctx context.Context, arg Ge
 	return i, err
 }
 
+const getAdminEventByID = `-- name: GetAdminEventByID :one
+SELECT
+    id,
+    organizer_id,
+    name,
+    venue,
+    status,
+    start_at,
+    end_at,
+    sale_start_at,
+    sale_end_at,
+    created_at,
+    updated_at
+FROM events
+WHERE id = $1
+  AND (
+      $2::bigint = 0
+      OR organizer_id = $2
+  )
+LIMIT 1
+`
+
+type GetAdminEventByIDParams struct {
+	EventID     int64 `json:"event_id"`
+	OrganizerID int64 `json:"organizer_id"`
+}
+
+type GetAdminEventByIDRow struct {
+	ID          int64              `json:"id"`
+	OrganizerID int64              `json:"organizer_id"`
+	Name        string             `json:"name"`
+	Venue       string             `json:"venue"`
+	Status      int16              `json:"status"`
+	StartAt     pgtype.Timestamptz `json:"start_at"`
+	EndAt       pgtype.Timestamptz `json:"end_at"`
+	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
+	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetAdminEventByID(ctx context.Context, arg GetAdminEventByIDParams) (GetAdminEventByIDRow, error) {
+	row := q.db.QueryRow(ctx, getAdminEventByID, arg.EventID, arg.OrganizerID)
+	var i GetAdminEventByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizerID,
+		&i.Name,
+		&i.Venue,
+		&i.Status,
+		&i.StartAt,
+		&i.EndAt,
+		&i.SaleStartAt,
+		&i.SaleEndAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAdminOrderSensitiveByID = `-- name: GetAdminOrderSensitiveByID :one
 SELECT
     o.id,
@@ -1645,6 +1705,133 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listAdminEventSections = `-- name: ListAdminEventSections :many
+SELECT
+    s.id,
+    s.event_id,
+    s.event_name,
+    s.section_name,
+    s.price,
+    s.total_quantity,
+    s.reserved_quantity,
+    s.sold_quantity,
+    s.purchase_limit,
+    s.status,
+    s.created_at,
+    s.updated_at
+FROM event_sections s
+JOIN events e ON e.id = s.event_id
+WHERE s.event_id = $1
+  AND (
+      $2::bigint = 0
+      OR e.organizer_id = $2
+  )
+ORDER BY s.id
+`
+
+type ListAdminEventSectionsParams struct {
+	EventID     int64 `json:"event_id"`
+	OrganizerID int64 `json:"organizer_id"`
+}
+
+func (q *Queries) ListAdminEventSections(ctx context.Context, arg ListAdminEventSectionsParams) ([]EventSection, error) {
+	rows, err := q.db.Query(ctx, listAdminEventSections, arg.EventID, arg.OrganizerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EventSection{}
+	for rows.Next() {
+		var i EventSection
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventID,
+			&i.EventName,
+			&i.SectionName,
+			&i.Price,
+			&i.TotalQuantity,
+			&i.ReservedQuantity,
+			&i.SoldQuantity,
+			&i.PurchaseLimit,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAdminEvents = `-- name: ListAdminEvents :many
+SELECT
+    id,
+    organizer_id,
+    name,
+    venue,
+    status,
+    start_at,
+    end_at,
+    sale_start_at,
+    sale_end_at,
+    created_at,
+    updated_at
+FROM events
+WHERE $1::bigint = 0
+   OR organizer_id = $1
+ORDER BY id
+`
+
+type ListAdminEventsRow struct {
+	ID          int64              `json:"id"`
+	OrganizerID int64              `json:"organizer_id"`
+	Name        string             `json:"name"`
+	Venue       string             `json:"venue"`
+	Status      int16              `json:"status"`
+	StartAt     pgtype.Timestamptz `json:"start_at"`
+	EndAt       pgtype.Timestamptz `json:"end_at"`
+	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
+	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListAdminEvents(ctx context.Context, organizerID int64) ([]ListAdminEventsRow, error) {
+	rows, err := q.db.Query(ctx, listAdminEvents, organizerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAdminEventsRow{}
+	for rows.Next() {
+		var i ListAdminEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizerID,
+			&i.Name,
+			&i.Venue,
+			&i.Status,
+			&i.StartAt,
+			&i.EndAt,
+			&i.SaleStartAt,
+			&i.SaleEndAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAdminOrders = `-- name: ListAdminOrders :many

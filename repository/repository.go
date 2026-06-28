@@ -27,6 +27,12 @@ type AdminOrderRepository interface {
 	FindAdminOrderSensitiveByID(ctx context.Context, orderID int64) (*domain.AdminOrder, error)
 }
 
+type AdminEventRepository interface {
+	ListAdminEvents(ctx context.Context, organizerID *int64) ([]domain.Event, error)
+	FindAdminEventByID(ctx context.Context, eventID int64, organizerID *int64) (*domain.Event, error)
+	ListAdminEventSections(ctx context.Context, eventID int64, organizerID *int64) ([]domain.Section, error)
+}
+
 type EventRepository interface {
 	FindByID(ctx context.Context, eventID int64) (*domain.Event, error)
 	List(ctx context.Context) ([]domain.Event, error)

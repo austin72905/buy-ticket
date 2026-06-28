@@ -74,6 +74,150 @@
                 }
             }
         },
+        "/admin/events": {
+            "get": {
+                "description": "List events for admin backoffice. EVENT_ADMIN is scoped to its organizer.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-events"
+                ],
+                "summary": "List admin events",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/controller.AdminEventResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/events/{eventId}": {
+            "get": {
+                "description": "Get an event for admin backoffice. EVENT_ADMIN is scoped to its organizer.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-events"
+                ],
+                "summary": "Get admin event",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.AdminEventResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/events/{eventId}/sections": {
+            "get": {
+                "description": "List event sections with inventory quantities. EVENT_ADMIN is scoped to its organizer.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-events"
+                ],
+                "summary": "List admin event sections",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/controller.AdminSectionResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/me": {
             "get": {
                 "description": "Get the currently authenticated admin user.",
@@ -1107,6 +1251,44 @@
         }
     },
     "definitions": {
+        "controller.AdminEventResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "end_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "organizer_id": {
+                    "type": "integer"
+                },
+                "sale_end_at": {
+                    "type": "string"
+                },
+                "sale_start_at": {
+                    "type": "string"
+                },
+                "start_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "venue": {
+                    "type": "string"
+                }
+            }
+        },
         "controller.AdminLoginRequest": {
             "type": "object",
             "properties": {
@@ -1218,6 +1400,47 @@
                     "type": "integer"
                 },
                 "user_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.AdminSectionResponse": {
+            "type": "object",
+            "properties": {
+                "available_quantity": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "event_id": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "integer"
+                },
+                "purchase_limit": {
+                    "type": "integer"
+                },
+                "reserved_quantity": {
+                    "type": "integer"
+                },
+                "sold_quantity": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "total_quantity": {
+                    "type": "integer"
+                },
+                "updated_at": {
                     "type": "string"
                 }
             }
