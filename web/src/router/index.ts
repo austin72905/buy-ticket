@@ -1,5 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+import AdminAuditLogsView from '../views/admin/AdminAuditLogsView.vue'
+import AdminEventDetailView from '../views/admin/AdminEventDetailView.vue'
+import AdminEventsView from '../views/admin/AdminEventsView.vue'
+import AdminForbiddenView from '../views/admin/AdminForbiddenView.vue'
+import AdminLoginView from '../views/admin/AdminLoginView.vue'
+import AdminOrdersView from '../views/admin/AdminOrdersView.vue'
 import CheckoutView from '../views/CheckoutView.vue'
 import EventDetailView from '../views/EventDetailView.vue'
 import EventInfoView from '../views/EventInfoView.vue'
@@ -10,6 +16,7 @@ import OrderView from '../views/OrderView.vue'
 import PaymentView from '../views/PaymentView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import ReservationView from '../views/ReservationView.vue'
+import { useAdminAuthStore } from '../stores/adminAuth'
 import { useBookingFlowStore } from '../stores/bookingFlow'
 
 const router = createRouter({
@@ -18,6 +25,45 @@ const router = createRouter({
     {
       path: '/',
       redirect: '/events',
+    },
+    {
+      path: '/admin',
+      redirect: '/admin/orders',
+    },
+    {
+      path: '/admin/login',
+      name: 'admin-login',
+      component: AdminLoginView,
+    },
+    {
+      path: '/admin/orders',
+      name: 'admin-orders',
+      component: AdminOrdersView,
+      meta: { requiresAdminAuth: true },
+    },
+    {
+      path: '/admin/events',
+      name: 'admin-events',
+      component: AdminEventsView,
+      meta: { requiresAdminAuth: true },
+    },
+    {
+      path: '/admin/events/:eventId',
+      name: 'admin-event-detail',
+      component: AdminEventDetailView,
+      meta: { requiresAdminAuth: true },
+    },
+    {
+      path: '/admin/audit-logs',
+      name: 'admin-audit-logs',
+      component: AdminAuditLogsView,
+      meta: { requiresAdminAuth: true },
+    },
+    {
+      path: '/admin/forbidden',
+      name: 'admin-forbidden',
+      component: AdminForbiddenView,
+      meta: { requiresAdminAuth: true },
     },
     {
       path: '/events',
@@ -79,6 +125,27 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  if (to.matched.some((record) => record.meta.requiresAdminAuth)) {
+    const adminAuth = useAdminAuthStore()
+
+    if (adminAuth.currentAdmin) {
+      return true
+    }
+
+    try {
+      await adminAuth.loadAdminMe()
+      return true
+    } catch {
+      adminAuth.clearAdmin()
+      return {
+        name: 'admin-login',
+        query: {
+          redirect: to.fullPath,
+        },
+      }
+    }
+  }
+
   if (!to.matched.some((record) => record.meta.requiresAuth)) {
     return true
   }
