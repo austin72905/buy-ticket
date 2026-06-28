@@ -45,9 +45,85 @@ SET
     updated_at = $3
 WHERE id = $1;
 
+-- name: GetAdminUserByID :one
+SELECT
+    id,
+    organizer_id,
+    name,
+    email,
+    password_hash,
+    role,
+    status,
+    created_at,
+    updated_at
+FROM admin_users
+WHERE id = $1
+LIMIT 1;
+
+-- name: GetAdminUserByEmail :one
+SELECT
+    id,
+    organizer_id,
+    name,
+    email,
+    password_hash,
+    role,
+    status,
+    created_at,
+    updated_at
+FROM admin_users
+WHERE email = $1
+LIMIT 1;
+
+-- name: CreateAdminUser :one
+INSERT INTO admin_users (
+    organizer_id,
+    name,
+    email,
+    password_hash,
+    role,
+    status
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+)
+RETURNING
+    id,
+    organizer_id,
+    name,
+    email,
+    password_hash,
+    role,
+    status,
+    created_at,
+    updated_at;
+
+-- name: CreateAdminAuditLog :one
+INSERT INTO admin_audit_logs (
+    admin_user_id,
+    action,
+    target_type,
+    target_id,
+    reason,
+    ip_address,
+    user_agent
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+)
+RETURNING
+    id,
+    admin_user_id,
+    action,
+    target_type,
+    target_id,
+    reason,
+    ip_address,
+    user_agent,
+    created_at;
+
 -- name: GetEventByID :one
 SELECT
     id,
+    organizer_id,
     name,
     venue,
     status,
@@ -64,6 +140,7 @@ LIMIT 1;
 -- name: ListEvents :many
 SELECT
     id,
+    organizer_id,
     name,
     venue,
     status,
@@ -78,6 +155,7 @@ ORDER BY id;
 
 -- name: CreateEvent :one
 INSERT INTO events (
+    organizer_id,
     name,
     venue,
     status,
@@ -86,10 +164,11 @@ INSERT INTO events (
     sale_start_at,
     sale_end_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5, $6, $7, $8
 )
 RETURNING
     id,
+    organizer_id,
     name,
     venue,
     status,

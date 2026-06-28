@@ -13,6 +13,7 @@ const (
 
 type Event struct {
 	ID          int64
+	OrganizerID int64
 	Name        string
 	StartAt     time.Time
 	EndAt       time.Time

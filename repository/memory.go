@@ -25,6 +25,109 @@ type MemoryUserRepository struct {
 	nextID     int64
 }
 
+type MemoryAdminUserRepository struct {
+	mu         sync.RWMutex
+	adminUsers map[int64]*domain.AdminUser
+	emailIndex map[string]int64
+	nextID     int64
+}
+
+func NewMemoryAdminUserRepository(adminUsers []*domain.AdminUser) *MemoryAdminUserRepository {
+	repo := &MemoryAdminUserRepository{
+		adminUsers: make(map[int64]*domain.AdminUser, len(adminUsers)),
+		emailIndex: make(map[string]int64, len(adminUsers)),
+		nextID:     1,
+	}
+
+	var maxID int64
+	for _, adminUser := range adminUsers {
+		cloned := *adminUser
+		repo.adminUsers[adminUser.ID] = &cloned
+		repo.emailIndex[adminUser.Email] = adminUser.ID
+		if adminUser.ID > maxID {
+			maxID = adminUser.ID
+		}
+	}
+
+	repo.nextID = maxID + 1
+	return repo
+}
+
+func (r *MemoryAdminUserRepository) FindByID(ctx context.Context, adminUserID int64) (*domain.AdminUser, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	adminUser, ok := r.adminUsers[adminUserID]
+	if !ok {
+		return nil, ErrAdminUserNotFound
+	}
+
+	cloned := *adminUser
+	return &cloned, nil
+}
+
+func (r *MemoryAdminUserRepository) FindByEmail(ctx context.Context, email string) (*domain.AdminUser, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	adminUserID, ok := r.emailIndex[email]
+	if !ok {
+		return nil, ErrAdminUserNotFound
+	}
+
+	adminUser, exists := r.adminUsers[adminUserID]
+	if !exists {
+		return nil, ErrAdminUserNotFound
+	}
+
+	cloned := *adminUser
+	return &cloned, nil
+}
+
+func (r *MemoryAdminUserRepository) Save(ctx context.Context, adminUser *domain.AdminUser) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cloned := *adminUser
+	if cloned.ID == 0 {
+		cloned.ID = r.nextID
+		r.nextID++
+		adminUser.ID = cloned.ID
+	}
+
+	r.adminUsers[cloned.ID] = &cloned
+	r.emailIndex[cloned.Email] = cloned.ID
+	return nil
+}
+
+type MemoryAdminAuditLogRepository struct {
+	mu     sync.RWMutex
+	logs   map[int64]*domain.AdminAuditLog
+	nextID int64
+}
+
+func NewMemoryAdminAuditLogRepository() *MemoryAdminAuditLogRepository {
+	return &MemoryAdminAuditLogRepository{
+		logs:   map[int64]*domain.AdminAuditLog{},
+		nextID: 1,
+	}
+}
+
+func (r *MemoryAdminAuditLogRepository) Create(ctx context.Context, log *domain.AdminAuditLog) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cloned := *log
+	if cloned.ID == 0 {
+		cloned.ID = r.nextID
+		r.nextID++
+		log.ID = cloned.ID
+	}
+
+	r.logs[cloned.ID] = &cloned
+	return nil
+}
+
 func NewMemoryUserRepository(users []*domain.User) *MemoryUserRepository {
 	repo := &MemoryUserRepository{
 		users:      make(map[int64]*domain.User, len(users)),
@@ -555,7 +658,7 @@ func (r *MemoryPaymentAttemptRepository) Save(ctx context.Context, attempt *doma
 	return nil
 }
 
-func SeedSampleData() ([]*domain.User, []*domain.Event, []*domain.Section) {
+func SeedSampleData() ([]*domain.User, []*domain.AdminUser, []*domain.Event, []*domain.Section) {
 	now := time.Now()
 
 	users := []*domain.User{
@@ -564,6 +667,19 @@ func SeedSampleData() ([]*domain.User, []*domain.Event, []*domain.Section) {
 			Name:         "Austin Lin",
 			Email:        "austin@example.com",
 			PasswordHash: "PENDING_RESET",
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		},
+	}
+
+	adminUsers := []*domain.AdminUser{
+		{
+			ID:           1,
+			Name:         "Super Admin",
+			Email:        "admin@example.com",
+			PasswordHash: "$2a$10$C98Lze8JLKbSUnfmKjJ9VeKsmGNw4q71gUA53CSVEJHrpYJcGQG3G",
+			Role:         domain.AdminRoleSuperAdmin,
+			Status:       domain.AdminUserStatusActive,
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		},
@@ -597,6 +713,7 @@ func SeedSampleData() ([]*domain.User, []*domain.Event, []*domain.Section) {
 	events := []*domain.Event{
 		{
 			ID:          1,
+			OrganizerID: 1,
 			Name:        "Sample Concert",
 			StartAt:     now.Add(30 * 24 * time.Hour),
 			EndAt:       now.Add(30*24*time.Hour + 2*time.Hour),
@@ -610,5 +727,5 @@ func SeedSampleData() ([]*domain.User, []*domain.Event, []*domain.Section) {
 		},
 	}
 
-	return users, events, sections
+	return users, adminUsers, events, sections
 }

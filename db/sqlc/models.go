@@ -8,6 +8,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AdminAuditLog struct {
+	ID          int64              `json:"id"`
+	AdminUserID int64              `json:"admin_user_id"`
+	Action      string             `json:"action"`
+	TargetType  string             `json:"target_type"`
+	TargetID    int64              `json:"target_id"`
+	Reason      pgtype.Text        `json:"reason"`
+	IpAddress   pgtype.Text        `json:"ip_address"`
+	UserAgent   pgtype.Text        `json:"user_agent"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type AdminUser struct {
+	ID           int64              `json:"id"`
+	OrganizerID  pgtype.Int8        `json:"organizer_id"`
+	Name         string             `json:"name"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	Role         string             `json:"role"`
+	Status       int16              `json:"status"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Event struct {
 	ID          int64              `json:"id"`
 	Name        string             `json:"name"`
@@ -19,6 +43,7 @@ type Event struct {
 	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	OrganizerID int64              `json:"organizer_id"`
 }
 
 type EventSection struct {
@@ -70,6 +95,14 @@ type Order struct {
 	PaidAt        pgtype.Timestamptz `json:"paid_at"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Organizer struct {
+	ID        int64              `json:"id"`
+	Name      string             `json:"name"`
+	Status    int16              `json:"status"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Payment struct {

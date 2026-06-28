@@ -116,7 +116,7 @@ func (app *BuyTicketApp) Initialize() {
 	}
 	applyEnvOverrides(app.Runtime)
 
-	userRepo, eventRepo, sectionRepo, reservationRepo, orderRepo, paymentRepo, dbPool := buildRepositories(app.Runtime)
+	userRepo, adminUserRepo, eventRepo, sectionRepo, reservationRepo, orderRepo, paymentRepo, dbPool := buildRepositories(app.Runtime)
 
 	bookingService := service.NewBookingService(
 		eventRepo,
@@ -155,7 +155,7 @@ func (app *BuyTicketApp) Initialize() {
 	}
 
 	if role == appRoleAll || role == appRoleAPI {
-		registerHTTPServer(app.Runtime, userRepo, bookingService)
+		registerHTTPServer(app.Runtime, userRepo, adminUserRepo, bookingService)
 	}
 
 	log.Printf("app role configured: %s", role)
@@ -180,10 +180,13 @@ func parseAppRole() appRole {
 func registerHTTPServer(
 	runtime *infraapp.Runtime,
 	userRepo repository.UserRepository,
+	adminUserRepo repository.AdminUserRepository,
 	bookingService *service.BookingService,
 ) {
 	authService := service.NewAuthService(userRepo)
+	adminAuthService := service.NewAdminAuthService(adminUserRepo)
 	authController := controller.NewAuthController(authService)
+	adminAuthController := controller.NewAdminAuthController(adminAuthService)
 	bookingController := controller.NewBookingController(bookingService)
 	bookingController.QueueJoinMaxInFlight = queueJoinMaxInFlight(runtime)
 	bookingController.QueueJoinRetryAfter = queueJoinRetryAfter(runtime)
@@ -196,6 +199,7 @@ func registerHTTPServer(
 	})
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	authController.RegisterRoutes(router)
+	adminAuthController.RegisterRoutes(router)
 	bookingController.RegisterRoutes(router)
 
 	addr := runtime.Property.RequiredProperty("server.addr")
@@ -418,6 +422,7 @@ func mockPaymentTimeout(runtime *infraapp.Runtime) time.Duration {
 
 func buildRepositories(runtime *infraapp.Runtime) (
 	repository.UserRepository,
+	repository.AdminUserRepository,
 	repository.EventRepository,
 	repository.SectionRepository,
 	repository.ReservationRepository,
@@ -431,6 +436,7 @@ func buildRepositories(runtime *infraapp.Runtime) (
 		pool := pg.Pool()
 		queries := db.New(pool)
 		return repository.NewPostgresUserRepository(queries),
+			repository.NewPostgresAdminUserRepository(queries),
 			repository.NewPostgresEventRepository(queries),
 			repository.NewPostgresSectionRepository(queries),
 			repository.NewPostgresReservationRepository(queries),
@@ -439,8 +445,9 @@ func buildRepositories(runtime *infraapp.Runtime) (
 			pool
 	}
 
-	users, events, sections := repository.SeedSampleData()
+	users, adminUsers, events, sections := repository.SeedSampleData()
 	return repository.NewMemoryUserRepository(users),
+		repository.NewMemoryAdminUserRepository(adminUsers),
 		repository.NewMemoryEventRepository(events),
 		repository.NewMemorySectionRepository(sections),
 		repository.NewMemoryReservationRepository(),

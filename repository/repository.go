@@ -10,6 +10,17 @@ import (
 
 var ErrIdempotencyKeyNotFound = errors.New("idempotency key not found")
 var ErrPaymentAttemptNotFound = errors.New("payment attempt not found")
+var ErrAdminUserNotFound = errors.New("admin user not found")
+
+type AdminUserRepository interface {
+	FindByID(ctx context.Context, adminUserID int64) (*domain.AdminUser, error)
+	FindByEmail(ctx context.Context, email string) (*domain.AdminUser, error)
+	Save(ctx context.Context, adminUser *domain.AdminUser) error
+}
+
+type AdminAuditLogRepository interface {
+	Create(ctx context.Context, log *domain.AdminAuditLog) error
+}
 
 type EventRepository interface {
 	FindByID(ctx context.Context, eventID int64) (*domain.Event, error)

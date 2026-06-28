@@ -21,6 +21,14 @@ type PostgresUserRepository struct {
 	queries *db.Queries
 }
 
+type PostgresAdminUserRepository struct {
+	queries *db.Queries
+}
+
+type PostgresAdminAuditLogRepository struct {
+	queries *db.Queries
+}
+
 type PostgresSectionRepository struct {
 	queries *db.Queries
 }
@@ -53,6 +61,14 @@ func NewPostgresUserRepository(queries *db.Queries) *PostgresUserRepository {
 	return &PostgresUserRepository{queries: queries}
 }
 
+func NewPostgresAdminUserRepository(queries *db.Queries) *PostgresAdminUserRepository {
+	return &PostgresAdminUserRepository{queries: queries}
+}
+
+func NewPostgresAdminAuditLogRepository(queries *db.Queries) *PostgresAdminAuditLogRepository {
+	return &PostgresAdminAuditLogRepository{queries: queries}
+}
+
 func NewPostgresSectionRepository(queries *db.Queries) *PostgresSectionRepository {
 	return &PostgresSectionRepository{queries: queries}
 }
@@ -83,7 +99,7 @@ func (r *PostgresEventRepository) FindByID(ctx context.Context, eventID int64) (
 		return nil, err
 	}
 
-	return toDomainEvent(record), nil
+	return toDomainEventFromGetEventByID(record), nil
 }
 
 func (r *PostgresEventRepository) List(ctx context.Context) ([]domain.Event, error) {
@@ -94,7 +110,7 @@ func (r *PostgresEventRepository) List(ctx context.Context) ([]domain.Event, err
 
 	events := make([]domain.Event, 0, len(records))
 	for _, record := range records {
-		events = append(events, *toDomainEvent(record))
+		events = append(events, *toDomainEventFromListEvents(record))
 	}
 
 	return events, nil
@@ -620,6 +636,69 @@ func (r *PostgresIdempotencyRepository) Create(ctx context.Context, record *doma
 	return nil
 }
 
+func (r *PostgresAdminUserRepository) FindByID(ctx context.Context, adminUserID int64) (*domain.AdminUser, error) {
+	record, err := r.queries.GetAdminUserByID(ctx, adminUserID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAdminUserNotFound
+		}
+		return nil, err
+	}
+
+	return toDomainAdminUser(record), nil
+}
+
+func (r *PostgresAdminUserRepository) FindByEmail(ctx context.Context, email string) (*domain.AdminUser, error) {
+	record, err := r.queries.GetAdminUserByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAdminUserNotFound
+		}
+		return nil, err
+	}
+
+	return toDomainAdminUser(record), nil
+}
+
+func (r *PostgresAdminUserRepository) Save(ctx context.Context, adminUser *domain.AdminUser) error {
+	if adminUser.ID != 0 {
+		return nil
+	}
+
+	record, err := r.queries.CreateAdminUser(ctx, db.CreateAdminUserParams{
+		OrganizerID:  nullablePgInt8(adminUser.OrganizerID),
+		Name:         adminUser.Name,
+		Email:        adminUser.Email,
+		PasswordHash: adminUser.PasswordHash,
+		Role:         string(adminUser.Role),
+		Status:       int16(adminUser.Status),
+	})
+	if err != nil {
+		return err
+	}
+
+	*adminUser = *toDomainAdminUser(record)
+	return nil
+}
+
+func (r *PostgresAdminAuditLogRepository) Create(ctx context.Context, log *domain.AdminAuditLog) error {
+	record, err := r.queries.CreateAdminAuditLog(ctx, db.CreateAdminAuditLogParams{
+		AdminUserID: log.AdminUserID,
+		Action:      log.Action,
+		TargetType:  log.TargetType,
+		TargetID:    log.TargetID,
+		Reason:      nullablePgText(log.Reason),
+		IpAddress:   nullablePgText(log.IPAddress),
+		UserAgent:   nullablePgText(log.UserAgent),
+	})
+	if err != nil {
+		return err
+	}
+
+	*log = *toDomainAdminAuditLogFromCreateAdminAuditLog(record)
+	return nil
+}
+
 func (r *PostgresIdempotencyRepository) Complete(ctx context.Context, key, endpoint string, status int, responseBody []byte, now time.Time) error {
 	return r.queries.CompleteIdempotencyKey(ctx, db.CompleteIdempotencyKeyParams{
 		Key:            key,
@@ -634,6 +713,7 @@ func (r *PostgresIdempotencyRepository) Complete(ctx context.Context, key, endpo
 func toDomainEvent(record db.Event) *domain.Event {
 	return &domain.Event{
 		ID:          record.ID,
+		OrganizerID: record.OrganizerID,
 		Name:        record.Name,
 		StartAt:     record.StartAt.Time,
 		EndAt:       record.EndAt.Time,
@@ -644,6 +724,80 @@ func toDomainEvent(record db.Event) *domain.Event {
 		CreatedAt:   record.CreatedAt.Time,
 		UpdatedAt:   record.UpdatedAt.Time,
 	}
+}
+
+func toDomainEventFromGetEventByID(record db.GetEventByIDRow) *domain.Event {
+	return &domain.Event{
+		ID:          record.ID,
+		OrganizerID: record.OrganizerID,
+		Name:        record.Name,
+		StartAt:     record.StartAt.Time,
+		EndAt:       record.EndAt.Time,
+		SaleStartAt: record.SaleStartAt.Time,
+		SaleEndAt:   record.SaleEndAt.Time,
+		Venue:       record.Venue,
+		Status:      domain.EventStatus(record.Status),
+		CreatedAt:   record.CreatedAt.Time,
+		UpdatedAt:   record.UpdatedAt.Time,
+	}
+}
+
+func toDomainEventFromListEvents(record db.ListEventsRow) *domain.Event {
+	return &domain.Event{
+		ID:          record.ID,
+		OrganizerID: record.OrganizerID,
+		Name:        record.Name,
+		StartAt:     record.StartAt.Time,
+		EndAt:       record.EndAt.Time,
+		SaleStartAt: record.SaleStartAt.Time,
+		SaleEndAt:   record.SaleEndAt.Time,
+		Venue:       record.Venue,
+		Status:      domain.EventStatus(record.Status),
+		CreatedAt:   record.CreatedAt.Time,
+		UpdatedAt:   record.UpdatedAt.Time,
+	}
+}
+
+func toDomainAdminUser(record db.AdminUser) *domain.AdminUser {
+	adminUser := &domain.AdminUser{
+		ID:           record.ID,
+		Name:         record.Name,
+		Email:        record.Email,
+		PasswordHash: record.PasswordHash,
+		Role:         domain.AdminRole(record.Role),
+		Status:       domain.AdminUserStatus(record.Status),
+		CreatedAt:    record.CreatedAt.Time,
+		UpdatedAt:    record.UpdatedAt.Time,
+	}
+	if record.OrganizerID.Valid {
+		organizerID := record.OrganizerID.Int64
+		adminUser.OrganizerID = &organizerID
+	}
+	return adminUser
+}
+
+func toDomainAdminAuditLogFromCreateAdminAuditLog(record db.AdminAuditLog) *domain.AdminAuditLog {
+	log := &domain.AdminAuditLog{
+		ID:          record.ID,
+		AdminUserID: record.AdminUserID,
+		Action:      record.Action,
+		TargetType:  record.TargetType,
+		TargetID:    record.TargetID,
+		CreatedAt:   record.CreatedAt.Time,
+	}
+	if record.Reason.Valid {
+		reason := record.Reason.String
+		log.Reason = &reason
+	}
+	if record.IpAddress.Valid {
+		ipAddress := record.IpAddress.String
+		log.IPAddress = &ipAddress
+	}
+	if record.UserAgent.Valid {
+		userAgent := record.UserAgent.String
+		log.UserAgent = &userAgent
+	}
+	return log
 }
 
 func toDomainUser(record db.User) *domain.User {

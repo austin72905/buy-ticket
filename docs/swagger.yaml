@@ -1,5 +1,31 @@
 basePath: /
 definitions:
+  controller.AdminLoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  controller.AdminUserResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      organizer_id:
+        type: integer
+      role:
+        type: string
+      status:
+        type: integer
+      updated_at:
+        type: string
+    type: object
   controller.CancelReservationRequest:
     properties:
       cancelled_at:
@@ -327,6 +353,66 @@ info:
   title: buy-ticket API
   version: "1.0"
 paths:
+  /admin/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Login with an admin account and create an admin session cookie.
+      parameters:
+      - description: Admin login request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.AdminLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.AdminUserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Admin login
+      tags:
+      - admin-auth
+  /admin/auth/logout:
+    post:
+      description: Clear the current admin session cookie.
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Admin logout
+      tags:
+      - admin-auth
+  /admin/me:
+    get:
+      description: Get the currently authenticated admin user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.AdminUserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Get current admin
+      tags:
+      - admin-auth
   /events:
     get:
       description: 取得目前系統中的活動列表

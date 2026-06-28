@@ -105,8 +105,124 @@ func (q *Queries) ConfirmSectionSale(ctx context.Context, arg ConfirmSectionSale
 	return i, err
 }
 
+const createAdminAuditLog = `-- name: CreateAdminAuditLog :one
+INSERT INTO admin_audit_logs (
+    admin_user_id,
+    action,
+    target_type,
+    target_id,
+    reason,
+    ip_address,
+    user_agent
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+)
+RETURNING
+    id,
+    admin_user_id,
+    action,
+    target_type,
+    target_id,
+    reason,
+    ip_address,
+    user_agent,
+    created_at
+`
+
+type CreateAdminAuditLogParams struct {
+	AdminUserID int64       `json:"admin_user_id"`
+	Action      string      `json:"action"`
+	TargetType  string      `json:"target_type"`
+	TargetID    int64       `json:"target_id"`
+	Reason      pgtype.Text `json:"reason"`
+	IpAddress   pgtype.Text `json:"ip_address"`
+	UserAgent   pgtype.Text `json:"user_agent"`
+}
+
+func (q *Queries) CreateAdminAuditLog(ctx context.Context, arg CreateAdminAuditLogParams) (AdminAuditLog, error) {
+	row := q.db.QueryRow(ctx, createAdminAuditLog,
+		arg.AdminUserID,
+		arg.Action,
+		arg.TargetType,
+		arg.TargetID,
+		arg.Reason,
+		arg.IpAddress,
+		arg.UserAgent,
+	)
+	var i AdminAuditLog
+	err := row.Scan(
+		&i.ID,
+		&i.AdminUserID,
+		&i.Action,
+		&i.TargetType,
+		&i.TargetID,
+		&i.Reason,
+		&i.IpAddress,
+		&i.UserAgent,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createAdminUser = `-- name: CreateAdminUser :one
+INSERT INTO admin_users (
+    organizer_id,
+    name,
+    email,
+    password_hash,
+    role,
+    status
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+)
+RETURNING
+    id,
+    organizer_id,
+    name,
+    email,
+    password_hash,
+    role,
+    status,
+    created_at,
+    updated_at
+`
+
+type CreateAdminUserParams struct {
+	OrganizerID  pgtype.Int8 `json:"organizer_id"`
+	Name         string      `json:"name"`
+	Email        string      `json:"email"`
+	PasswordHash string      `json:"password_hash"`
+	Role         string      `json:"role"`
+	Status       int16       `json:"status"`
+}
+
+func (q *Queries) CreateAdminUser(ctx context.Context, arg CreateAdminUserParams) (AdminUser, error) {
+	row := q.db.QueryRow(ctx, createAdminUser,
+		arg.OrganizerID,
+		arg.Name,
+		arg.Email,
+		arg.PasswordHash,
+		arg.Role,
+		arg.Status,
+	)
+	var i AdminUser
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizerID,
+		&i.Name,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createEvent = `-- name: CreateEvent :one
 INSERT INTO events (
+    organizer_id,
     name,
     venue,
     status,
@@ -115,10 +231,11 @@ INSERT INTO events (
     sale_start_at,
     sale_end_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5, $6, $7, $8
 )
 RETURNING
     id,
+    organizer_id,
     name,
     venue,
     status,
@@ -131,6 +248,7 @@ RETURNING
 `
 
 type CreateEventParams struct {
+	OrganizerID int64              `json:"organizer_id"`
 	Name        string             `json:"name"`
 	Venue       string             `json:"venue"`
 	Status      int16              `json:"status"`
@@ -140,8 +258,23 @@ type CreateEventParams struct {
 	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
 }
 
-func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (Event, error) {
+type CreateEventRow struct {
+	ID          int64              `json:"id"`
+	OrganizerID int64              `json:"organizer_id"`
+	Name        string             `json:"name"`
+	Venue       string             `json:"venue"`
+	Status      int16              `json:"status"`
+	StartAt     pgtype.Timestamptz `json:"start_at"`
+	EndAt       pgtype.Timestamptz `json:"end_at"`
+	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
+	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (CreateEventRow, error) {
 	row := q.db.QueryRow(ctx, createEvent,
+		arg.OrganizerID,
 		arg.Name,
 		arg.Venue,
 		arg.Status,
@@ -150,9 +283,10 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (Event
 		arg.SaleStartAt,
 		arg.SaleEndAt,
 	)
-	var i Event
+	var i CreateEventRow
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizerID,
 		&i.Name,
 		&i.Venue,
 		&i.Status,
@@ -813,9 +947,76 @@ func (q *Queries) GetActiveReservationByUserAndEvent(ctx context.Context, arg Ge
 	return i, err
 }
 
+const getAdminUserByEmail = `-- name: GetAdminUserByEmail :one
+SELECT
+    id,
+    organizer_id,
+    name,
+    email,
+    password_hash,
+    role,
+    status,
+    created_at,
+    updated_at
+FROM admin_users
+WHERE email = $1
+LIMIT 1
+`
+
+func (q *Queries) GetAdminUserByEmail(ctx context.Context, email string) (AdminUser, error) {
+	row := q.db.QueryRow(ctx, getAdminUserByEmail, email)
+	var i AdminUser
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizerID,
+		&i.Name,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getAdminUserByID = `-- name: GetAdminUserByID :one
+SELECT
+    id,
+    organizer_id,
+    name,
+    email,
+    password_hash,
+    role,
+    status,
+    created_at,
+    updated_at
+FROM admin_users
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetAdminUserByID(ctx context.Context, id int64) (AdminUser, error) {
+	row := q.db.QueryRow(ctx, getAdminUserByID, id)
+	var i AdminUser
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizerID,
+		&i.Name,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getEventByID = `-- name: GetEventByID :one
 SELECT
     id,
+    organizer_id,
     name,
     venue,
     status,
@@ -830,11 +1031,26 @@ WHERE id = $1
 LIMIT 1
 `
 
-func (q *Queries) GetEventByID(ctx context.Context, id int64) (Event, error) {
+type GetEventByIDRow struct {
+	ID          int64              `json:"id"`
+	OrganizerID int64              `json:"organizer_id"`
+	Name        string             `json:"name"`
+	Venue       string             `json:"venue"`
+	Status      int16              `json:"status"`
+	StartAt     pgtype.Timestamptz `json:"start_at"`
+	EndAt       pgtype.Timestamptz `json:"end_at"`
+	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
+	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetEventByID(ctx context.Context, id int64) (GetEventByIDRow, error) {
 	row := q.db.QueryRow(ctx, getEventByID, id)
-	var i Event
+	var i GetEventByIDRow
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizerID,
 		&i.Name,
 		&i.Venue,
 		&i.Status,
@@ -1358,6 +1574,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 const listEvents = `-- name: ListEvents :many
 SELECT
     id,
+    organizer_id,
     name,
     venue,
     status,
@@ -1371,17 +1588,32 @@ FROM events
 ORDER BY id
 `
 
-func (q *Queries) ListEvents(ctx context.Context) ([]Event, error) {
+type ListEventsRow struct {
+	ID          int64              `json:"id"`
+	OrganizerID int64              `json:"organizer_id"`
+	Name        string             `json:"name"`
+	Venue       string             `json:"venue"`
+	Status      int16              `json:"status"`
+	StartAt     pgtype.Timestamptz `json:"start_at"`
+	EndAt       pgtype.Timestamptz `json:"end_at"`
+	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
+	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListEvents(ctx context.Context) ([]ListEventsRow, error) {
 	rows, err := q.db.Query(ctx, listEvents)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Event{}
+	items := []ListEventsRow{}
 	for rows.Next() {
-		var i Event
+		var i ListEventsRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.OrganizerID,
 			&i.Name,
 			&i.Venue,
 			&i.Status,

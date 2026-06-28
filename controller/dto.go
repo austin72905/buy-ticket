@@ -34,6 +34,11 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+type AdminLoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
 type CreateOrderRequest struct {
 	ReservationID int64  `json:"reservation_id"`
 	OrderNo       string `json:"order_no"`
@@ -114,6 +119,17 @@ type UserResponse struct {
 	Email     string `json:"email"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
+}
+
+type AdminUserResponse struct {
+	ID          int64  `json:"id"`
+	OrganizerID *int64 `json:"organizer_id,omitempty"`
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	Role        string `json:"role"`
+	Status      int8   `json:"status"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
 }
 
 type SectionResponse struct {
@@ -437,4 +453,17 @@ func newPaymentAttemptResponse(attempt *domain.PaymentAttempt) PaymentAttemptRes
 	}
 
 	return response
+}
+
+func newAdminUserResponse(adminUser *domain.AdminUser) AdminUserResponse {
+	return AdminUserResponse{
+		ID:          adminUser.ID,
+		OrganizerID: adminUser.OrganizerID,
+		Name:        adminUser.Name,
+		Email:       adminUser.Email,
+		Role:        string(adminUser.Role),
+		Status:      int8(adminUser.Status),
+		CreatedAt:   adminUser.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:   adminUser.UpdatedAt.Format(time.RFC3339),
+	}
 }
