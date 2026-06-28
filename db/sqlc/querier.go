@@ -24,6 +24,7 @@ type Querier interface {
 	CreateSection(ctx context.Context, arg CreateSectionParams) (EventSection, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	GetActiveReservationByUserAndEvent(ctx context.Context, arg GetActiveReservationByUserAndEventParams) (Reservation, error)
+	GetAdminOrderSensitiveByID(ctx context.Context, id int64) (GetAdminOrderSensitiveByIDRow, error)
 	GetAdminUserByEmail(ctx context.Context, email string) (AdminUser, error)
 	GetAdminUserByID(ctx context.Context, id int64) (AdminUser, error)
 	GetEventByID(ctx context.Context, id int64) (GetEventByIDRow, error)

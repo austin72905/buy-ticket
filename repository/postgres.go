@@ -423,6 +423,18 @@ func (r *PostgresOrderRepository) ListAdminOrders(ctx context.Context, filter do
 	return orders, nil
 }
 
+func (r *PostgresOrderRepository) FindAdminOrderSensitiveByID(ctx context.Context, orderID int64) (*domain.AdminOrder, error) {
+	record, err := r.queries.GetAdminOrderSensitiveByID(ctx, orderID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrOrderNotFound
+		}
+		return nil, err
+	}
+
+	return toDomainAdminOrderFromSensitive(record), nil
+}
+
 func (r *PostgresOrderRepository) ListExpiredPending(ctx context.Context, now time.Time, limit int) ([]domain.Order, error) {
 	if limit <= 0 {
 		limit = 100
@@ -927,6 +939,35 @@ func toDomainOrder(record db.Order) *domain.Order {
 }
 
 func toDomainAdminOrder(record db.ListAdminOrdersRow) *domain.AdminOrder {
+	order := &domain.AdminOrder{
+		ID:            record.ID,
+		OrderNo:       record.OrderNo,
+		ReservationID: record.ReservationID,
+		EventID:       record.EventID,
+		EventName:     record.EventName,
+		SectionID:     record.SectionID,
+		SectionName:   record.SectionName,
+		UserID:        record.UserID,
+		UserName:      record.UserName,
+		UserEmail:     record.UserEmail,
+		Quantity:      int(record.Quantity),
+		UnitPrice:     record.UnitPrice,
+		TotalAmount:   record.TotalAmount,
+		Status:        domain.OrderStatus(record.Status),
+		ExpiresAt:     record.ExpiresAt.Time,
+		CreatedAt:     record.CreatedAt.Time,
+		UpdatedAt:     record.UpdatedAt.Time,
+	}
+
+	if record.PaidAt.Valid {
+		paidAt := record.PaidAt.Time
+		order.PaidAt = &paidAt
+	}
+
+	return order
+}
+
+func toDomainAdminOrderFromSensitive(record db.GetAdminOrderSensitiveByIDRow) *domain.AdminOrder {
 	order := &domain.AdminOrder{
 		ID:            record.ID,
 		OrderNo:       record.OrderNo,

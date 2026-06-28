@@ -947,6 +947,82 @@ func (q *Queries) GetActiveReservationByUserAndEvent(ctx context.Context, arg Ge
 	return i, err
 }
 
+const getAdminOrderSensitiveByID = `-- name: GetAdminOrderSensitiveByID :one
+SELECT
+    o.id,
+    o.order_no,
+    o.reservation_id,
+    o.reservation_no,
+    o.event_id,
+    o.event_name,
+    o.section_id,
+    o.section_name,
+    o.user_id,
+    o.user_name,
+    u.email AS user_email,
+    o.quantity,
+    o.unit_price,
+    o.total_amount,
+    o.status,
+    o.expires_at,
+    o.paid_at,
+    o.created_at,
+    o.updated_at
+FROM orders o
+JOIN users u ON u.id = o.user_id
+WHERE o.id = $1
+LIMIT 1
+`
+
+type GetAdminOrderSensitiveByIDRow struct {
+	ID            int64              `json:"id"`
+	OrderNo       string             `json:"order_no"`
+	ReservationID int64              `json:"reservation_id"`
+	ReservationNo string             `json:"reservation_no"`
+	EventID       int64              `json:"event_id"`
+	EventName     string             `json:"event_name"`
+	SectionID     int64              `json:"section_id"`
+	SectionName   string             `json:"section_name"`
+	UserID        int64              `json:"user_id"`
+	UserName      string             `json:"user_name"`
+	UserEmail     string             `json:"user_email"`
+	Quantity      int32              `json:"quantity"`
+	UnitPrice     int64              `json:"unit_price"`
+	TotalAmount   int64              `json:"total_amount"`
+	Status        int16              `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	PaidAt        pgtype.Timestamptz `json:"paid_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetAdminOrderSensitiveByID(ctx context.Context, id int64) (GetAdminOrderSensitiveByIDRow, error) {
+	row := q.db.QueryRow(ctx, getAdminOrderSensitiveByID, id)
+	var i GetAdminOrderSensitiveByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrderNo,
+		&i.ReservationID,
+		&i.ReservationNo,
+		&i.EventID,
+		&i.EventName,
+		&i.SectionID,
+		&i.SectionName,
+		&i.UserID,
+		&i.UserName,
+		&i.UserEmail,
+		&i.Quantity,
+		&i.UnitPrice,
+		&i.TotalAmount,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.PaidAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAdminUserByEmail = `-- name: GetAdminUserByEmail :one
 SELECT
     id,

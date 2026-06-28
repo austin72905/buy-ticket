@@ -671,6 +671,32 @@ WHERE (sqlc.arg(organizer_id)::bigint = 0 OR e.organizer_id = sqlc.arg(organizer
 ORDER BY o.created_at DESC, o.id DESC
 LIMIT sqlc.arg(page_limit);
 
+-- name: GetAdminOrderSensitiveByID :one
+SELECT
+    o.id,
+    o.order_no,
+    o.reservation_id,
+    o.reservation_no,
+    o.event_id,
+    o.event_name,
+    o.section_id,
+    o.section_name,
+    o.user_id,
+    o.user_name,
+    u.email AS user_email,
+    o.quantity,
+    o.unit_price,
+    o.total_amount,
+    o.status,
+    o.expires_at,
+    o.paid_at,
+    o.created_at,
+    o.updated_at
+FROM orders o
+JOIN users u ON u.id = o.user_id
+WHERE o.id = $1
+LIMIT 1;
+
 -- name: CreatePayment :one
 INSERT INTO payments (
     payment_no,

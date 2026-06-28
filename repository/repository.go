@@ -24,6 +24,7 @@ type AdminAuditLogRepository interface {
 
 type AdminOrderRepository interface {
 	ListAdminOrders(ctx context.Context, filter domain.AdminOrderListFilter) ([]domain.AdminOrder, error)
+	FindAdminOrderSensitiveByID(ctx context.Context, orderID int64) (*domain.AdminOrder, error)
 }
 
 type EventRepository interface {

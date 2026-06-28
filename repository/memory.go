@@ -545,6 +545,34 @@ func (r *MemoryOrderRepository) ListAdminOrders(ctx context.Context, filter doma
 	return orders, nil
 }
 
+func (r *MemoryOrderRepository) FindAdminOrderSensitiveByID(ctx context.Context, orderID int64) (*domain.AdminOrder, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	order, ok := r.orders[orderID]
+	if !ok {
+		return nil, ErrOrderNotFound
+	}
+
+	return &domain.AdminOrder{
+		ID:            order.ID,
+		OrderNo:       order.OrderNo,
+		ReservationID: order.ReservationID,
+		EventID:       order.EventID,
+		SectionID:     order.SectionID,
+		UserID:        order.UserID,
+		UserName:      "",
+		UserEmail:     "",
+		Quantity:      order.Quantity,
+		UnitPrice:     order.UnitPrice,
+		TotalAmount:   order.TotalAmount,
+		Status:        order.Status,
+		ExpiresAt:     order.ExpiresAt,
+		CreatedAt:     order.CreatedAt,
+		UpdatedAt:     order.UpdatedAt,
+	}, nil
+}
+
 func (r *MemoryOrderRepository) ListExpiredPending(ctx context.Context, now time.Time, limit int) ([]domain.Order, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

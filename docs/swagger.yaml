@@ -62,6 +62,19 @@ definitions:
       user_name:
         type: string
     type: object
+  controller.AdminOrderSensitiveResponse:
+    properties:
+      order_id:
+        type: integer
+      order_no:
+        type: string
+      user_email:
+        type: string
+      user_id:
+        type: integer
+      user_name:
+        type: string
+    type: object
   controller.AdminUserResponse:
     properties:
       created_at:
@@ -330,6 +343,11 @@ definitions:
         example: 1
         type: integer
     type: object
+  controller.RevealSensitiveRequest:
+    properties:
+      reason:
+        type: string
+    type: object
   controller.SaleStatusResponse:
     properties:
       can_join_queue:
@@ -517,6 +535,50 @@ paths:
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
       summary: List admin orders
+      tags:
+      - admin-orders
+  /admin/orders/{orderId}/reveal-sensitive:
+    post:
+      consumes:
+      - application/json
+      description: Reveal full user information for an order. Only SUPER_ADMIN can
+        use this endpoint and a reason is required.
+      parameters:
+      - description: Order ID
+        in: path
+        name: orderId
+        required: true
+        type: integer
+      - description: Reveal reason
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.RevealSensitiveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.AdminOrderSensitiveResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Reveal order sensitive data
       tags:
       - admin-orders
   /events:

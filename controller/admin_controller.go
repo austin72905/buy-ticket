@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"buy-ticket/domain"
+	"buy-ticket/repository"
 	"buy-ticket/service"
 
 	"github.com/gin-gonic/gin"
@@ -28,6 +29,7 @@ func (c *AdminController) RegisterRoutes(router gin.IRouter) {
 	admin := router.Group("/admin")
 	admin.Use(AttachCurrentAdmin(c.AdminAuthService), RequireAdmin())
 	admin.GET("/orders", c.ListOrders)
+	admin.POST("/orders/:orderId/reveal-sensitive", RequireAdminRole(domain.AdminRoleSuperAdmin), c.RevealOrderSensitive)
 }
 
 // AdminListOrders godoc
@@ -108,6 +110,60 @@ func (c *AdminController) ListOrders(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, newAdminOrderListResponse(orders, hasNext))
+}
+
+// AdminRevealOrderSensitive godoc
+// @Summary Reveal order sensitive data
+// @Description Reveal full user information for an order. Only SUPER_ADMIN can use this endpoint and a reason is required.
+// @Tags admin-orders
+// @Accept json
+// @Produce json
+// @Param orderId path int true "Order ID"
+// @Param request body RevealSensitiveRequest true "Reveal reason"
+// @Success 200 {object} AdminOrderSensitiveResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /admin/orders/{orderId}/reveal-sensitive [post]
+func (c *AdminController) RevealOrderSensitive(ctx *gin.Context) {
+	orderID, err := strconv.ParseInt(ctx.Param("orderId"), 10, 64)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	var request RevealSensitiveRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	adminUser, _ := CurrentAdmin(ctx)
+	ipAddress := ctx.ClientIP()
+	userAgent := ctx.GetHeader("User-Agent")
+	order, err := c.AdminService.RevealOrderSensitive(ctx.Request.Context(), service.RevealOrderSensitiveInput{
+		AdminUser: adminUser,
+		OrderID:   orderID,
+		Reason:    request.Reason,
+		IPAddress: &ipAddress,
+		UserAgent: &userAgent,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvalidAdminRevealReason):
+			writeError(ctx, http.StatusBadRequest, err)
+		case errors.Is(err, service.ErrForbidden):
+			writeError(ctx, http.StatusForbidden, err)
+		case errors.Is(err, repository.ErrOrderNotFound):
+			writeError(ctx, http.StatusNotFound, err)
+		default:
+			writeError(ctx, http.StatusInternalServerError, err)
+		}
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newAdminOrderSensitiveResponse(order))
 }
 
 func parseOptionalIntQuery(ctx *gin.Context, name string) (int, error) {

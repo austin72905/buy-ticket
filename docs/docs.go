@@ -183,6 +183,71 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/orders/{orderId}/reveal-sensitive": {
+            "post": {
+                "description": "Reveal full user information for an order. Only SUPER_ADMIN can use this endpoint and a reason is required.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-orders"
+                ],
+                "summary": "Reveal order sensitive data",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Order ID",
+                        "name": "orderId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reveal reason",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.RevealSensitiveRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.AdminOrderSensitiveResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/events": {
             "get": {
                 "description": "取得目前系統中的活動列表",
@@ -1144,6 +1209,26 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.AdminOrderSensitiveResponse": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "integer"
+                },
+                "order_no": {
+                    "type": "string"
+                },
+                "user_email": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                },
+                "user_name": {
+                    "type": "string"
+                }
+            }
+        },
         "controller.AdminUserResponse": {
             "type": "object",
             "properties": {
@@ -1548,6 +1633,14 @@ const docTemplate = `{
                 "section_id": {
                     "type": "integer",
                     "example": 1
+                }
+            }
+        },
+        "controller.RevealSensitiveRequest": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
                 }
             }
         },

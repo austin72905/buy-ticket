@@ -39,6 +39,10 @@ type AdminLoginRequest struct {
 	Password string `json:"password"`
 }
 
+type RevealSensitiveRequest struct {
+	Reason string `json:"reason"`
+}
+
 type CreateOrderRequest struct {
 	ReservationID int64  `json:"reservation_id"`
 	OrderNo       string `json:"order_no"`
@@ -161,6 +165,14 @@ type AdminOrderResponse struct {
 	PaidAt        *string `json:"paid_at,omitempty"`
 	CreatedAt     string  `json:"created_at"`
 	UpdatedAt     string  `json:"updated_at"`
+}
+
+type AdminOrderSensitiveResponse struct {
+	OrderID   int64  `json:"order_id"`
+	OrderNo   string `json:"order_no"`
+	UserID    int64  `json:"user_id"`
+	UserName  string `json:"user_name"`
+	UserEmail string `json:"user_email"`
 }
 
 type SectionResponse struct {
@@ -546,4 +558,14 @@ func newAdminOrderResponse(order domain.AdminOrder) AdminOrderResponse {
 	}
 
 	return response
+}
+
+func newAdminOrderSensitiveResponse(order *domain.AdminOrder) AdminOrderSensitiveResponse {
+	return AdminOrderSensitiveResponse{
+		OrderID:   order.ID,
+		OrderNo:   order.OrderNo,
+		UserID:    order.UserID,
+		UserName:  order.UserName,
+		UserEmail: order.UserEmail,
+	}
 }
