@@ -2,7 +2,6 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
 
 	"buy-ticket/domain"
 	"buy-ticket/service"
@@ -12,16 +11,16 @@ import (
 
 const currentUserContextKey = "current_user"
 
-func AttachCurrentUser(authService *service.AuthService) gin.HandlerFunc {
+func AttachCurrentUser(authService *service.AuthService, sessionStore service.SessionStore) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		userIDValue, err := ctx.Cookie(sessionCookieName)
-		if err != nil || userIDValue == "" {
+		token, err := ctx.Cookie(sessionCookieName)
+		if err != nil || token == "" {
 			ctx.Next()
 			return
 		}
 
-		userID, parseErr := strconv.ParseInt(userIDValue, 10, 64)
-		if parseErr != nil {
+		userID, sessionErr := sessionStore.Get(ctx.Request.Context(), service.SessionKindUser, token)
+		if sessionErr != nil {
 			ctx.Next()
 			return
 		}

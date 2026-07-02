@@ -2,7 +2,6 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"buy-ticket/service"
@@ -14,11 +13,15 @@ const adminSessionCookieName = "buy_ticket_admin_session"
 
 type AdminAuthController struct {
 	AdminAuthService *service.AdminAuthService
+	SessionStore     service.SessionStore
+	SessionTTL       time.Duration
 }
 
-func NewAdminAuthController(adminAuthService *service.AdminAuthService) *AdminAuthController {
+func NewAdminAuthController(adminAuthService *service.AdminAuthService, sessionStore service.SessionStore, sessionTTL time.Duration) *AdminAuthController {
 	return &AdminAuthController{
 		AdminAuthService: adminAuthService,
+		SessionStore:     sessionStore,
+		SessionTTL:       sessionTTL,
 	}
 }
 
@@ -26,7 +29,7 @@ func (c *AdminAuthController) RegisterRoutes(router gin.IRouter) {
 	router.POST("/admin/auth/login", c.Login)
 
 	authenticated := router.Group("/admin")
-	authenticated.Use(AttachCurrentAdmin(c.AdminAuthService), RequireAdmin())
+	authenticated.Use(AttachCurrentAdmin(c.AdminAuthService, c.SessionStore), RequireAdmin())
 	authenticated.POST("/auth/logout", c.Logout)
 	authenticated.GET("/me", c.Me)
 }
@@ -58,7 +61,13 @@ func (c *AdminAuthController) Login(ctx *gin.Context) {
 		return
 	}
 
-	writeAdminSessionCookie(ctx, adminUser.ID)
+	token, err := c.SessionStore.Create(ctx.Request.Context(), service.SessionKindAdmin, adminUser.ID, c.SessionTTL)
+	if err != nil {
+		writeError(ctx, http.StatusInternalServerError, err)
+		return
+	}
+
+	writeAdminSessionCookie(ctx, token, c.SessionTTL)
 	ctx.JSON(http.StatusOK, newAdminUserResponse(adminUser))
 }
 
@@ -70,6 +79,9 @@ func (c *AdminAuthController) Login(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Router /admin/auth/logout [post]
 func (c *AdminAuthController) Logout(ctx *gin.Context) {
+	if token, err := ctx.Cookie(adminSessionCookieName); err == nil && token != "" {
+		_ = c.SessionStore.Delete(ctx.Request.Context(), service.SessionKindAdmin, token)
+	}
 	clearAdminSessionCookie(ctx)
 	ctx.Status(http.StatusNoContent)
 }
@@ -87,11 +99,13 @@ func (c *AdminAuthController) Me(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newAdminUserResponse(adminUser))
 }
 
-func writeAdminSessionCookie(ctx *gin.Context, adminUserID int64) {
-	maxAge := int((7 * 24 * time.Hour).Seconds())
-	ctx.SetCookie(adminSessionCookieName, strconv.FormatInt(adminUserID, 10), maxAge, "/", "", false, true)
+func writeAdminSessionCookie(ctx *gin.Context, token string, ttl time.Duration) {
+	maxAge := int(ttl.Seconds())
+	ctx.SetSameSite(http.SameSiteLaxMode)
+	ctx.SetCookie(adminSessionCookieName, token, maxAge, "/", "", false, true)
 }
 
 func clearAdminSessionCookie(ctx *gin.Context) {
+	ctx.SetSameSite(http.SameSiteLaxMode)
 	ctx.SetCookie(adminSessionCookieName, "", -1, "/", "", false, true)
 }

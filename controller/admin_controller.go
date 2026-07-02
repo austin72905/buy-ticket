@@ -16,18 +16,20 @@ import (
 type AdminController struct {
 	AdminAuthService *service.AdminAuthService
 	AdminService     *service.AdminService
+	SessionStore     service.SessionStore
 }
 
-func NewAdminController(adminAuthService *service.AdminAuthService, adminService *service.AdminService) *AdminController {
+func NewAdminController(adminAuthService *service.AdminAuthService, adminService *service.AdminService, sessionStore service.SessionStore) *AdminController {
 	return &AdminController{
 		AdminAuthService: adminAuthService,
 		AdminService:     adminService,
+		SessionStore:     sessionStore,
 	}
 }
 
 func (c *AdminController) RegisterRoutes(router gin.IRouter) {
 	admin := router.Group("/admin")
-	admin.Use(AttachCurrentAdmin(c.AdminAuthService), RequireAdmin())
+	admin.Use(AttachCurrentAdmin(c.AdminAuthService, c.SessionStore), RequireAdmin())
 	admin.GET("/orders", c.ListOrders)
 	admin.POST("/orders/:orderId/reveal-sensitive", RequireAdminRole(domain.AdminRoleSuperAdmin), c.RevealOrderSensitive)
 	admin.GET("/events", c.ListEvents)

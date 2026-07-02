@@ -103,7 +103,12 @@ func TestBookingControllerJoinQueue(t *testing.T) {
 				Email: "test@example.com",
 			},
 		})
-		router.Use(AttachCurrentUser(service.NewAuthService(userRepo)))
+		sessionStore := service.NewMemorySessionStore()
+		sessionToken, err := sessionStore.Create(context.Background(), service.SessionKindUser, 1, time.Hour)
+		if err != nil {
+			t.Fatalf("create session failed: %v", err)
+		}
+		router.Use(AttachCurrentUser(service.NewAuthService(userRepo), sessionStore))
 		controller.RegisterRoutes(router)
 
 		body := `{"event_id":1,"client_id":"web-device-001","request_id":"req-001","channel":"web"}`
@@ -111,7 +116,7 @@ func TestBookingControllerJoinQueue(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		req.AddCookie(&http.Cookie{
 			Name:  sessionCookieName,
-			Value: "1",
+			Value: sessionToken,
 		})
 		resp := httptest.NewRecorder()
 		router.ServeHTTP(resp, req)
@@ -255,7 +260,12 @@ func TestBookingControllerStartPayment(t *testing.T) {
 				Email: "test@example.com",
 			},
 		})
-		router.Use(AttachCurrentUser(service.NewAuthService(userRepo)))
+		sessionStore := service.NewMemorySessionStore()
+		sessionToken, err := sessionStore.Create(context.Background(), service.SessionKindUser, 3, time.Hour)
+		if err != nil {
+			t.Fatalf("create session failed: %v", err)
+		}
+		router.Use(AttachCurrentUser(service.NewAuthService(userRepo), sessionStore))
 		controller.RegisterRoutes(router)
 
 		req := httptest.NewRequest(http.MethodPost, "/payments/start", bytes.NewBufferString(`{"order_id":20,"method":"credit_card","provider":"mock_ecpay"}`))
@@ -263,7 +273,7 @@ func TestBookingControllerStartPayment(t *testing.T) {
 		req.Header.Set("Idempotency-Key", "pay-key-controller-001")
 		req.AddCookie(&http.Cookie{
 			Name:  sessionCookieName,
-			Value: "3",
+			Value: sessionToken,
 		})
 		resp := httptest.NewRecorder()
 		router.ServeHTTP(resp, req)

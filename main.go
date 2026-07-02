@@ -145,6 +145,8 @@ func (app *BuyTicketApp) Initialize() {
 		HashKey:    app.Runtime.Property.Property("payment.mock.hash_key"),
 		HashIV:     app.Runtime.Property.Property("payment.mock.hash_iv"),
 	}
+	sessionStore := buildSessionStore(app.Runtime)
+	sessionTTL := sessionTTL(app.Runtime)
 
 	if role == appRoleAll || role == appRoleScheduler {
 		if err := bookingService.RebuildStock(context.Background()); err != nil {
@@ -155,7 +157,7 @@ func (app *BuyTicketApp) Initialize() {
 	}
 
 	if role == appRoleAll || role == appRoleAPI {
-		registerHTTPServer(app.Runtime, userRepo, adminUserRepo, adminAuditLogRepo, adminOrderRepo, adminEventRepo, bookingService)
+		registerHTTPServer(app.Runtime, userRepo, adminUserRepo, adminAuditLogRepo, adminOrderRepo, adminEventRepo, bookingService, sessionStore, sessionTTL)
 	}
 
 	log.Printf("app role configured: %s", role)
@@ -185,19 +187,21 @@ func registerHTTPServer(
 	adminOrderRepo repository.AdminOrderRepository,
 	adminEventRepo repository.AdminEventRepository,
 	bookingService *service.BookingService,
+	sessionStore service.SessionStore,
+	sessionTTL time.Duration,
 ) {
 	authService := service.NewAuthService(userRepo)
 	adminAuthService := service.NewAdminAuthService(adminUserRepo)
 	adminService := service.NewAdminService(adminOrderRepo, adminEventRepo, adminAuditLogRepo)
-	authController := controller.NewAuthController(authService)
-	adminAuthController := controller.NewAdminAuthController(adminAuthService)
-	adminController := controller.NewAdminController(adminAuthService, adminService)
+	authController := controller.NewAuthController(authService, sessionStore, sessionTTL)
+	adminAuthController := controller.NewAdminAuthController(adminAuthService, sessionStore, sessionTTL)
+	adminController := controller.NewAdminController(adminAuthService, adminService, sessionStore)
 	bookingController := controller.NewBookingController(bookingService)
 	bookingController.QueueJoinMaxInFlight = queueJoinMaxInFlight(runtime)
 	bookingController.QueueJoinRetryAfter = queueJoinRetryAfter(runtime)
 
 	router := runtime.Web.Router()
-	router.Use(controller.AttachCurrentUser(authService))
+	router.Use(controller.AttachCurrentUser(authService, sessionStore))
 	docs.SwaggerInfo.BasePath = "/"
 	router.GET("/healthz", func(ctx *gin.Context) {
 		ctx.JSON(200, gin.H{"status": "ok"})
@@ -223,6 +227,7 @@ func applyEnvOverrides(runtime *infraapp.Runtime) {
 		"QUEUE_JOIN_RETRY_AFTER_SECONDS": "queue.join.retry_after_seconds",
 		"ORDER_EXPIRE_BATCH_SIZE":        "order.expire.batch.size",
 		"ORDER_PAYMENT_TTL_MINUTES":      "order.payment.ttl_minutes",
+		"SESSION_TTL_HOURS":              "session.ttl_hours",
 		"POSTGRES_DSN":                   "postgres.dsn",
 		"POSTGRES_POOL_MAX_IDLE_CONNS":   "postgres.pool.maxIdleConns",
 		"POSTGRES_POOL_MAX_OPEN_CONNS":   "postgres.pool.maxOpenConns",
@@ -266,6 +271,16 @@ func buildStockStore(runtime *infraapp.Runtime) service.StockStore {
 	redisComponent := infraredis.Register(runtime, "stock")
 	redisComponent.LoadFromPrefix("redis")
 	return service.NewRedisStockStore(redisComponent.Client())
+}
+
+func buildSessionStore(runtime *infraapp.Runtime) service.SessionStore {
+	if runtime.Property.Property("redis.addr") == "" {
+		return service.NewMemorySessionStore()
+	}
+
+	redisComponent := infraredis.Register(runtime, "session")
+	redisComponent.LoadFromPrefix("redis")
+	return service.NewRedisSessionStore(redisComponent.Client())
 }
 
 func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.BookingService) {
@@ -410,6 +425,20 @@ func orderPaymentTTL(runtime *infraapp.Runtime) time.Duration {
 	}
 
 	return time.Duration(minutes) * time.Minute
+}
+
+func sessionTTL(runtime *infraapp.Runtime) time.Duration {
+	value := runtime.Property.Property("session.ttl_hours")
+	if value == "" {
+		return 7 * 24 * time.Hour
+	}
+
+	hours, err := strconv.Atoi(value)
+	if err != nil || hours <= 0 {
+		return 7 * 24 * time.Hour
+	}
+
+	return time.Duration(hours) * time.Hour
 }
 
 func mockPaymentTimeout(runtime *infraapp.Runtime) time.Duration {

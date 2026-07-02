@@ -41,6 +41,9 @@ order:
   expireBatchSize: 100
   paymentTTLMinutes: 10
 
+session:
+  ttlHours: 168
+
 postgres:
   dsn: "postgres://postgres:postgres@host.k3d.internal:5432/buy_ticket?sslmode=disable"
   pool:

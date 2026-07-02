@@ -2,7 +2,6 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
 
 	"buy-ticket/domain"
 	"buy-ticket/service"
@@ -12,16 +11,16 @@ import (
 
 const currentAdminContextKey = "current_admin"
 
-func AttachCurrentAdmin(adminAuthService *service.AdminAuthService) gin.HandlerFunc {
+func AttachCurrentAdmin(adminAuthService *service.AdminAuthService, sessionStore service.SessionStore) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		adminUserIDValue, err := ctx.Cookie(adminSessionCookieName)
-		if err != nil || adminUserIDValue == "" {
+		token, err := ctx.Cookie(adminSessionCookieName)
+		if err != nil || token == "" {
 			ctx.Next()
 			return
 		}
 
-		adminUserID, parseErr := strconv.ParseInt(adminUserIDValue, 10, 64)
-		if parseErr != nil {
+		adminUserID, sessionErr := sessionStore.Get(ctx.Request.Context(), service.SessionKindAdmin, token)
+		if sessionErr != nil {
 			ctx.Next()
 			return
 		}

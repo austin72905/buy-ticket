@@ -19,6 +19,9 @@ postgres:
 redis:
   addr: "host.k3d.internal:6379"
 
+session:
+  ttlHours: 168
+
 payment:
   mock:
     baseURL: "http://host.k3d.internal:8081"
