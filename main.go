@@ -132,10 +132,15 @@ func (app *BuyTicketApp) Initialize() {
 		bookingService.IdempotencyRepo = repository.NewPostgresIdempotencyRepository(db.New(dbPool))
 	}
 	bookingService.MockPaymentCallbackURL = app.Runtime.Property.Property("payment.mock.callback_url")
+	paymentBreakerConfig := paymentCircuitBreakerConfig(app.Runtime)
 	if mockPaymentBaseURL := app.Runtime.Property.Property("payment.mock.base_url"); mockPaymentBaseURL != "" {
-		bookingService.MockPaymentClient = service.NewHTTPMockPaymentClient(
+		mockPaymentClient := service.NewHTTPMockPaymentClient(
 			mockPaymentBaseURL,
 			mockPaymentTimeout(app.Runtime),
+		)
+		bookingService.MockPaymentClient = service.NewCircuitBreakerMockPaymentClient(
+			mockPaymentClient,
+			paymentBreakerConfig,
 		)
 	}
 	bookingService.QueueStore = buildQueueStore(app.Runtime)
@@ -219,29 +224,33 @@ func registerHTTPServer(
 
 func applyEnvOverrides(runtime *infraapp.Runtime) {
 	envOverrides := map[string]string{
-		"SERVER_ADDR":                    "server.addr",
-		"APP_STORE":                      "app.store",
-		"QUEUE_STORE":                    "queue.store",
-		"QUEUE_RELEASE_LIMIT":            "queue.release.limit",
-		"QUEUE_JOIN_MAX_IN_FLIGHT":       "queue.join.max_in_flight",
-		"QUEUE_JOIN_RETRY_AFTER_SECONDS": "queue.join.retry_after_seconds",
-		"ORDER_EXPIRE_BATCH_SIZE":        "order.expire.batch.size",
-		"ORDER_PAYMENT_TTL_MINUTES":      "order.payment.ttl_minutes",
-		"SESSION_TTL_HOURS":              "session.ttl_hours",
-		"POSTGRES_DSN":                   "postgres.dsn",
-		"POSTGRES_POOL_MAX_IDLE_CONNS":   "postgres.pool.maxIdleConns",
-		"POSTGRES_POOL_MAX_OPEN_CONNS":   "postgres.pool.maxOpenConns",
-		"POSTGRES_CONN_MAX_IDLE_TIME":    "postgres.connMaxIdleTime",
-		"POSTGRES_CONN_MAX_LIFETIME":     "postgres.connMaxLifetime",
-		"REDIS_ADDR":                     "redis.addr",
-		"REDIS_DB":                       "redis.db",
-		"REDIS_PASSWORD":                 "redis.password",
-		"PAYMENT_MOCK_MERCHANT_ID":       "payment.mock.merchant_id",
-		"PAYMENT_MOCK_HASH_KEY":          "payment.mock.hash_key",
-		"PAYMENT_MOCK_HASH_IV":           "payment.mock.hash_iv",
-		"PAYMENT_MOCK_BASE_URL":          "payment.mock.base_url",
-		"PAYMENT_MOCK_CALLBACK_URL":      "payment.mock.callback_url",
-		"PAYMENT_MOCK_TIMEOUT_SECONDS":   "payment.mock.timeout_seconds",
+		"SERVER_ADDR":                            "server.addr",
+		"APP_STORE":                              "app.store",
+		"QUEUE_STORE":                            "queue.store",
+		"QUEUE_RELEASE_LIMIT":                    "queue.release.limit",
+		"QUEUE_JOIN_MAX_IN_FLIGHT":               "queue.join.max_in_flight",
+		"QUEUE_JOIN_RETRY_AFTER_SECONDS":         "queue.join.retry_after_seconds",
+		"ORDER_EXPIRE_BATCH_SIZE":                "order.expire.batch.size",
+		"ORDER_PAYMENT_TTL_MINUTES":              "order.payment.ttl_minutes",
+		"SESSION_TTL_HOURS":                      "session.ttl_hours",
+		"POSTGRES_DSN":                           "postgres.dsn",
+		"POSTGRES_POOL_MAX_IDLE_CONNS":           "postgres.pool.maxIdleConns",
+		"POSTGRES_POOL_MAX_OPEN_CONNS":           "postgres.pool.maxOpenConns",
+		"POSTGRES_CONN_MAX_IDLE_TIME":            "postgres.connMaxIdleTime",
+		"POSTGRES_CONN_MAX_LIFETIME":             "postgres.connMaxLifetime",
+		"REDIS_ADDR":                             "redis.addr",
+		"REDIS_DB":                               "redis.db",
+		"REDIS_PASSWORD":                         "redis.password",
+		"PAYMENT_MOCK_MERCHANT_ID":               "payment.mock.merchant_id",
+		"PAYMENT_MOCK_HASH_KEY":                  "payment.mock.hash_key",
+		"PAYMENT_MOCK_HASH_IV":                   "payment.mock.hash_iv",
+		"PAYMENT_MOCK_BASE_URL":                  "payment.mock.base_url",
+		"PAYMENT_MOCK_CALLBACK_URL":              "payment.mock.callback_url",
+		"PAYMENT_MOCK_TIMEOUT_SECONDS":           "payment.mock.timeout_seconds",
+		"PAYMENT_BREAKER_ENABLED":                "payment.breaker.enabled",
+		"PAYMENT_BREAKER_CONSECUTIVE_FAILURES":   "payment.breaker.consecutive_failures",
+		"PAYMENT_BREAKER_OPEN_TIMEOUT_SECONDS":   "payment.breaker.open_timeout_seconds",
+		"PAYMENT_BREAKER_HALF_OPEN_MAX_REQUESTS": "payment.breaker.half_open_max_requests",
 	}
 
 	for envName, propertyKey := range envOverrides {
@@ -450,6 +459,57 @@ func mockPaymentTimeout(runtime *infraapp.Runtime) time.Duration {
 	seconds, err := strconv.Atoi(value)
 	if err != nil || seconds <= 0 {
 		return 3 * time.Second
+	}
+
+	return time.Duration(seconds) * time.Second
+}
+
+func paymentCircuitBreakerConfig(runtime *infraapp.Runtime) service.PaymentCircuitBreakerConfig {
+	return service.PaymentCircuitBreakerConfig{
+		Enabled:             boolProperty(runtime, "payment.breaker.enabled", true),
+		ConsecutiveFailures: uint32Property(runtime, "payment.breaker.consecutive_failures", 5),
+		OpenTimeout:         secondsProperty(runtime, "payment.breaker.open_timeout_seconds", 30),
+		HalfOpenMaxRequests: uint32Property(runtime, "payment.breaker.half_open_max_requests", 1),
+	}
+}
+
+func boolProperty(runtime *infraapp.Runtime, key string, fallback bool) bool {
+	value := runtime.Property.Property(key)
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+
+	return parsed
+}
+
+func uint32Property(runtime *infraapp.Runtime, key string, fallback uint32) uint32 {
+	value := runtime.Property.Property(key)
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseUint(value, 10, 32)
+	if err != nil || parsed == 0 {
+		return fallback
+	}
+
+	return uint32(parsed)
+}
+
+func secondsProperty(runtime *infraapp.Runtime, key string, fallbackSeconds int) time.Duration {
+	value := runtime.Property.Property(key)
+	if value == "" {
+		return time.Duration(fallbackSeconds) * time.Second
+	}
+
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return time.Duration(fallbackSeconds) * time.Second
 	}
 
 	return time.Duration(seconds) * time.Second

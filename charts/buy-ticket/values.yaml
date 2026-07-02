@@ -65,6 +65,11 @@ payment:
     baseURL: "http://host.k3d.internal:8081"
     callbackURL: "http://buy-ticket.local/payments/provider/ecpay/callback"
     timeoutSeconds: 3
+  breaker:
+    enabled: true
+    consecutiveFailures: 5
+    openTimeoutSeconds: 30
+    halfOpenMaxRequests: 1
 
 podAnnotations: {}
 podLabels: {}

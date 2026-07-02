@@ -179,6 +179,55 @@ func TestBookingServiceStartMockPaymentAttempt(t *testing.T) {
 			t.Fatalf("expected timeout status, got %d", attempt.Status)
 		}
 	})
+
+	t.Run("circuit breaker open marks attempt timeout", func(t *testing.T) {
+		mockClient := NewCircuitBreakerMockPaymentClient(&fakeMockPaymentClient{err: errors.New("connection refused")}, PaymentCircuitBreakerConfig{
+			Enabled:             true,
+			ConsecutiveFailures: 1,
+			OpenTimeout:         time.Minute,
+			HalfOpenMaxRequests: 1,
+		})
+		svc := &BookingService{
+			OrderRepo: &fakeOrderRepository{
+				orders: map[int64]*domain.Order{
+					10: {
+						ID:          10,
+						Status:      domain.OrderStatusPendingPayment,
+						TotalAmount: 2800,
+					},
+				},
+			},
+			PaymentAttemptRepo:     &fakePaymentAttemptRepository{},
+			MockPaymentClient:      mockClient,
+			MockPaymentCallbackURL: "http://localhost:8080/payments/provider/ecpay/callback",
+		}
+
+		_, err := svc.StartMockPaymentAttempt(context.Background(), CreatePaymentAttemptInput{
+			OrderID:        10,
+			IdempotencyKey: "pay-open-key-001",
+			Provider:       "mock_ecpay",
+			Method:         "credit_card",
+		})
+		if err != nil {
+			t.Fatalf("first provider failure should be stored as timeout: %v", err)
+		}
+
+		attempt, err := svc.StartMockPaymentAttempt(context.Background(), CreatePaymentAttemptInput{
+			OrderID:        10,
+			IdempotencyKey: "pay-open-key-002",
+			Provider:       "mock_ecpay",
+			Method:         "credit_card",
+		})
+		if err != nil {
+			t.Fatalf("open circuit should be stored as timeout: %v", err)
+		}
+		if attempt.Status != domain.PaymentAttemptStatusTimeout {
+			t.Fatalf("expected timeout status, got %d", attempt.Status)
+		}
+		if attempt.FailureReason == nil || *attempt.FailureReason != ErrPaymentProviderCircuitOpen.Error() {
+			t.Fatalf("expected circuit open failure reason, got %v", attempt.FailureReason)
+		}
+	})
 }
 
 type fakePaymentAttemptRepository struct {

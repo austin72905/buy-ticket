@@ -26,6 +26,11 @@ payment:
   mock:
     baseURL: "http://host.k3d.internal:8081"
     callbackURL: "http://host.k3d.internal:8080/payments/provider/ecpay/callback"
+  breaker:
+    enabled: true
+    consecutiveFailures: 5
+    openTimeoutSeconds: 30
+    halfOpenMaxRequests: 1
 
 scheduler:
   enabled: true
