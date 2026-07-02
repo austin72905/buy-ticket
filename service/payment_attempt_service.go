@@ -32,7 +32,7 @@ func (s *BookingService) CreatePaymentAttempt(ctx context.Context, input CreateP
 	if input.IdempotencyKey != "" {
 		existingAttempt, err := s.PaymentAttemptRepo.FindByIdempotencyKey(ctx, input.IdempotencyKey)
 		if err == nil {
-			if existingAttempt.OrderID != input.OrderID || existingAttempt.Method != input.Method || existingAttempt.Provider != provider {
+			if existingAttempt.OrderID != input.OrderID || existingAttempt.Method != input.Method || !paymentAttemptProviderMatches(provider, existingAttempt.Provider) {
 				return nil, ErrPaymentAttemptIdempotencyConflict
 			}
 			return existingAttempt, nil
@@ -81,7 +81,7 @@ func (s *BookingService) StartMockPaymentAttempt(ctx context.Context, input Crea
 	if input.IdempotencyKey != "" {
 		existingAttempt, err := s.PaymentAttemptRepo.FindByIdempotencyKey(ctx, input.IdempotencyKey)
 		if err == nil {
-			if existingAttempt.OrderID != input.OrderID || existingAttempt.Method != input.Method || existingAttempt.Provider != provider {
+			if existingAttempt.OrderID != input.OrderID || existingAttempt.Method != input.Method || !paymentAttemptProviderMatches(provider, existingAttempt.Provider) {
 				return nil, ErrPaymentAttemptIdempotencyConflict
 			}
 			return existingAttempt, nil
@@ -89,6 +89,24 @@ func (s *BookingService) StartMockPaymentAttempt(ctx context.Context, input Crea
 		if !errors.Is(err, repository.ErrPaymentAttemptNotFound) {
 			return nil, err
 		}
+	}
+
+	paymentClient := s.MockPaymentClient
+	var providerSelectErr error
+	if s.MockPaymentRouter != nil {
+		preferredProvider := ""
+		if provider != "mock_ecpay" {
+			preferredProvider = provider
+		}
+		selectedProvider, selectErr := s.MockPaymentRouter.Select(ctx, preferredProvider)
+		if selectErr == nil {
+			input.Provider = selectedProvider.Name
+			paymentClient = selectedProvider.Client
+		}
+		if selectErr != nil && !errors.Is(selectErr, ErrPaymentProviderCircuitOpen) {
+			return nil, selectErr
+		}
+		providerSelectErr = selectErr
 	}
 
 	attempt, err := s.CreatePaymentAttempt(ctx, input)
@@ -100,14 +118,21 @@ func (s *BookingService) StartMockPaymentAttempt(ctx context.Context, input Crea
 		return attempt, nil
 	}
 
-	if s.MockPaymentClient == nil || s.MockPaymentCallbackURL == "" {
+	if errors.Is(providerSelectErr, ErrPaymentProviderCircuitOpen) {
+		if !attempt.MarkTimeout(ErrPaymentProviderCircuitOpen.Error(), nil, time.Now()) {
+			return attempt, nil
+		}
+		return attempt, s.PaymentAttemptRepo.Save(ctx, attempt)
+	}
+
+	if paymentClient == nil || s.MockPaymentCallbackURL == "" {
 		if !attempt.MarkTimeout(ErrMockPaymentClientNotConfigured.Error(), nil, time.Now()) {
 			return attempt, nil
 		}
 		return attempt, s.PaymentAttemptRepo.Save(ctx, attempt)
 	}
 
-	responsePayload, err := s.MockPaymentClient.Process(ctx, MockPaymentProcessInput{
+	responsePayload, err := paymentClient.Process(ctx, MockPaymentProcessInput{
 		MerchantTradeNo: attempt.MerchantTradeNo,
 		Amount:          attempt.Amount,
 		PayType:         "ECPAY",
@@ -137,6 +162,16 @@ func normalizePaymentAttemptProvider(provider string) string {
 		return "mock_ecpay"
 	}
 	return provider
+}
+
+func paymentAttemptProviderMatches(requestedProvider, existingProvider string) bool {
+	if requestedProvider == "" || requestedProvider == "mock_ecpay" {
+		return existingProvider == "mock_ecpay" ||
+			existingProvider == "mock_ecpay_primary" ||
+			existingProvider == "mock_ecpay_backup"
+	}
+
+	return existingProvider == requestedProvider
 }
 
 func generateMerchantTradeNo(orderID int64, now time.Time) string {

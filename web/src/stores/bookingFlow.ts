@@ -402,7 +402,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
       setError('payOrder', 'Order is required.')
       return
     }
-    if (payment.value || paymentAttempt.value) {
+    if (payment.value || (paymentAttempt.value && ![3, 4, 5].includes(paymentAttempt.value.status))) {
       setError('payOrder', 'Payment has already been submitted.')
       return
     }

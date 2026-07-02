@@ -133,15 +133,9 @@ func (app *BuyTicketApp) Initialize() {
 	}
 	bookingService.MockPaymentCallbackURL = app.Runtime.Property.Property("payment.mock.callback_url")
 	paymentBreakerConfig := paymentCircuitBreakerConfig(app.Runtime)
-	if mockPaymentBaseURL := app.Runtime.Property.Property("payment.mock.base_url"); mockPaymentBaseURL != "" {
-		mockPaymentClient := service.NewHTTPMockPaymentClient(
-			mockPaymentBaseURL,
-			mockPaymentTimeout(app.Runtime),
-		)
-		bookingService.MockPaymentClient = service.NewCircuitBreakerMockPaymentClient(
-			mockPaymentClient,
-			paymentBreakerConfig,
-		)
+	if mockPaymentRouter := buildMockPaymentProviderRouter(app.Runtime, paymentBreakerConfig); mockPaymentRouter != nil {
+		bookingService.MockPaymentRouter = mockPaymentRouter
+		bookingService.MockPaymentClient = mockPaymentRouter.PrimaryClient()
 	}
 	bookingService.QueueStore = buildQueueStore(app.Runtime)
 	bookingService.StockStore = buildStockStore(app.Runtime)
@@ -245,6 +239,7 @@ func applyEnvOverrides(runtime *infraapp.Runtime) {
 		"PAYMENT_MOCK_HASH_KEY":                  "payment.mock.hash_key",
 		"PAYMENT_MOCK_HASH_IV":                   "payment.mock.hash_iv",
 		"PAYMENT_MOCK_BASE_URL":                  "payment.mock.base_url",
+		"PAYMENT_MOCK_BACKUP_BASE_URL":           "payment.mock.backup_base_url",
 		"PAYMENT_MOCK_CALLBACK_URL":              "payment.mock.callback_url",
 		"PAYMENT_MOCK_TIMEOUT_SECONDS":           "payment.mock.timeout_seconds",
 		"PAYMENT_BREAKER_ENABLED":                "payment.breaker.enabled",
@@ -290,6 +285,37 @@ func buildSessionStore(runtime *infraapp.Runtime) service.SessionStore {
 	redisComponent := infraredis.Register(runtime, "session")
 	redisComponent.LoadFromPrefix("redis")
 	return service.NewRedisSessionStore(redisComponent.Client())
+}
+
+func buildMockPaymentProviderRouter(runtime *infraapp.Runtime, breakerConfig service.PaymentCircuitBreakerConfig) *service.MockPaymentProviderRouter {
+	timeout := mockPaymentTimeout(runtime)
+	providers := make([]service.MockPaymentProvider, 0, 2)
+
+	if baseURL := runtime.Property.Property("payment.mock.base_url"); baseURL != "" {
+		providers = append(providers, service.MockPaymentProvider{
+			Name: "mock_ecpay_primary",
+			Client: service.NewCircuitBreakerMockPaymentClient(
+				service.NewHTTPMockPaymentClient(baseURL, timeout),
+				breakerConfig,
+			),
+		})
+	}
+
+	if baseURL := runtime.Property.Property("payment.mock.backup_base_url"); baseURL != "" {
+		providers = append(providers, service.MockPaymentProvider{
+			Name: "mock_ecpay_backup",
+			Client: service.NewCircuitBreakerMockPaymentClient(
+				service.NewHTTPMockPaymentClient(baseURL, timeout),
+				breakerConfig,
+			),
+		})
+	}
+
+	if len(providers) == 0 {
+		return nil
+	}
+
+	return service.NewMockPaymentProviderRouter(providers)
 }
 
 func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.BookingService) {

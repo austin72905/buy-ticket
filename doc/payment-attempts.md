@@ -89,6 +89,7 @@ Mock pay service 預設設定：
 
 ```properties
 payment.mock.base_url=http://localhost:8081
+payment.mock.backup_base_url=
 payment.mock.callback_url=http://localhost:8080/payments/provider/ecpay/callback
 payment.mock.timeout_seconds=3
 ```
@@ -136,7 +137,50 @@ Status：
 
 表示付款嘗試已建立，但付款尚未完成。
 
-## 5. 下一步
+## 5. Provider router 與 circuit breaker
+
+目前 provider-style 付款流程已加入 provider router：
+
+```text
+mock_ecpay_primary -> payment.mock.base_url
+mock_ecpay_backup  -> payment.mock.backup_base_url
+```
+
+`payment.mock.backup_base_url` 預設為空，代表只使用 primary provider。設定 backup 後，新的 `payment_attempt` 可以在 primary breaker open 時改走 backup。
+
+Circuit breaker 預設：
+
+```properties
+payment.breaker.enabled=true
+payment.breaker.consecutive_failures=5
+payment.breaker.open_timeout_seconds=30
+payment.breaker.half_open_max_requests=1
+```
+
+行為規則：
+
+- `4xx` provider response 視為 request 問題，不計入 breaker failure。
+- `5xx`、connection refused、timeout 會計入 breaker failure。
+- primary breaker open 時，新的 attempt 會選 backup。
+- 既有 timeout attempt 不會跨 provider 重送。
+- 同一個 `Idempotency-Key` retry 仍回同一筆 attempt。
+
+範例：
+
+```text
+attempt 1:
+  provider = mock_ecpay_primary
+  status = timeout
+  failure_reason = connection refused
+
+attempt 2:
+  provider = mock_ecpay_backup
+  status = processing
+```
+
+這個設計的重點是：fallback 只套用在新的付款嘗試，不直接把舊 attempt 轉送到另一家 provider，避免重複扣款。
+
+## 6. 下一步
 
 後續可以接續做：
 
@@ -146,7 +190,7 @@ Status：
 4. callback 成功後，建立 payment、order paid、reservation confirmed。
 5. 前端改用 `POST /payments/start`。
 
-## 6. 和 idempotency 的關係
+## 7. 和 idempotency 的關係
 
 `Idempotency-Key` 保護的是「前端到 buy-ticket」這次付款啟動請求。
 

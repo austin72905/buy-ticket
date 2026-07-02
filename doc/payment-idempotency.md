@@ -99,6 +99,28 @@ Idempotency 的目的，是讓同一個會產生副作用的請求被重送時�
 - 不可以在不確認 primary attempt 已失敗或已過期前，直接讓 backup provider 對同一筆 order 收款。
 - fallback 如果被允許，必須建立新的 payment attempt，並清楚記錄 provider、attempt 狀態與關聯。
 
+目前專案採用的安全規則：
+
+```text
+同一個 payment_attempt 不跨 provider 重送。
+primary provider breaker open 後，只有新的 payment_attempt 才能選 backup provider。
+```
+
+也就是：
+
+```text
+attempt 1 -> provider A -> timeout
+attempt 2 -> provider B -> processing
+```
+
+而不是：
+
+```text
+attempt 1 -> provider A timeout -> 自動改送 provider B
+```
+
+這樣可以避免 provider A 其實已成功但 response timeout，系統又送到 provider B 造成重複扣款。
+
 ## 3. 目前專案狀態
 
 目前專案有局部防重複，並已先補上 payment-only idempotency 的基礎，但還不是完整付款 provider idempotency。
@@ -119,8 +141,10 @@ Idempotency 的目的，是讓同一個會產生副作用的請求被重送時�
 - `Idempotency-Key` 目前是過渡期 optional，尚未對前端強制。
 - `POST /orders` 雖然有 DB unique 保護，但 retry 時不一定能拿回第一次建立的 order response。
 - `payment_attempts` 基礎表與 repository 已建立，見 `doc/payment-attempts.md`。
-- 尚未接 payment provider start flow。
-- 尚未處理 provider timeout 後 fallback 的完整 attempt 狀態。
+- `POST /payments/start` 已接 provider-style start flow。
+- provider router 已支援 primary / backup mock payment provider。
+- provider timeout 後，前端可明確重新發起付款，後端會建立新的 attempt。
+- 新 attempt 才允許在 primary breaker open 時選 backup provider。
 - `POST /queue/join` 有 `request_id`，但目前不是完整 idempotency layer。
 
 ## 4. 未來設計
@@ -190,6 +214,7 @@ ON idempotency_keys (key, endpoint);
 - callback 必須用 provider transaction number 做防重複。
 - primary provider timeout 時，不可以直接假設付款失敗。
 - 如果 fallback 到 backup provider，必須建立新的 payment attempt，並記錄原 attempt 和 fallback attempt 的關係。
+- fallback 只允許新的 `payment_attempt` 選 backup provider，不允許舊 attempt 跨 provider 重送。
 
 建議流程：
 
@@ -200,6 +225,14 @@ ON idempotency_keys (key, endpoint);
 5. Provider callback 回來後驗簽。
 6. Callback handler 做 idempotency 檢查。
 7. 後端只執行一次：payment paid、order paid、reservation confirmed。
+
+目前實作狀態：
+
+- `POST /payments/start` 會建立 `payment_attempt`。
+- 前端會送 `Idempotency-Key`。
+- 同 key retry 回同一筆 attempt。
+- timeout / failed / cancelled 後，前端可明確按重新付款，產生新的 `Idempotency-Key` 和新的 attempt。
+- provider router 會在 primary breaker open 時，讓新的 attempt 選 backup provider。
 
 ## 6. 驗收條件
 

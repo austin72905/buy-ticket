@@ -24,6 +24,9 @@ This document describes the current `buy-ticket` booking flow:
 7. Create reservation with `POST /reservations` and the `purchase_token`.
 8. Create order with `POST /orders`.
 9. Start provider payment with `POST /payments/start`; frontend should send `Idempotency-Key`.
+   - New payment attempts use provider router.
+   - If primary payment provider breaker is open, a new attempt can use backup provider.
+   - Existing timeout attempts are not resent across providers.
 10. Background jobs clean up expired queues, purchase tokens, unpaid orders, and Redis stock drift.
 
 Authenticated write APIs read the current user from the session cookie. The frontend must not send `user_id` for queue join or reservation creation.
@@ -52,7 +55,10 @@ flowchart TD
     M --> N["Create pending_payment order"]
     N --> O["POST /payments/start"]
     O --> P["Create payment_attempt"]
-    P --> Q["Call mock payment service"]
+    P --> V{"Primary breaker open?"}
+    V -- "No" --> Q["Call primary mock payment service"]
+    V -- "Yes" --> Z["Call backup mock payment service if configured"]
+    Z --> T
     Q --> T{"Provider callback successful?"}
     T -- "No" --> U["Wait for retry or expiration job"]
     T -- "Yes" --> R["order = paid"]
@@ -104,7 +110,9 @@ sequenceDiagram
     API-->>Client: order response
 
     Client->>API: POST /payments/start + Idempotency-Key
-    API->>Booking: Create payment_attempt
+    API->>Booking: Start provider payment
+    Booking->>Booking: Select provider by router / circuit breaker
+    Booking->>Booking: Create payment_attempt
     Booking->>Booking: amount = order.total_amount
     Booking->>Booking: Generate merchant_trade_no
     Booking->>Payment: POST /api/payment/process
@@ -255,3 +263,17 @@ The project currently keeps two payment entry points:
 - `POST /payments/start`: provider-style flow. It creates a `payment_attempt` and returns `202 Accepted`; it does not mark the order paid.
 
 This keeps the current demo flow working while adding the provider payment foundation.
+
+Provider router behavior:
+
+- `mock_ecpay_primary` uses `payment.mock.base_url`.
+- `mock_ecpay_backup` uses `payment.mock.backup_base_url`.
+- If primary circuit breaker is open, only a new `payment_attempt` may use backup.
+- Existing timeout attempts are kept as historical records and are not automatically resent.
+
+Circuit breaker defaults:
+
+- `payment.breaker.enabled=true`
+- `payment.breaker.consecutive_failures=5`
+- `payment.breaker.open_timeout_seconds=30`
+- `payment.breaker.half_open_max_requests=1`

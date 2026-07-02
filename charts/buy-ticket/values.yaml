@@ -63,6 +63,7 @@ payment:
     hashKey: TEST_SECRET
     hashIV: TEST_HASH_IV
     baseURL: "http://host.k3d.internal:8081"
+    backupBaseURL: ""
     callbackURL: "http://buy-ticket.local/payments/provider/ecpay/callback"
     timeoutSeconds: 3
   breaker:

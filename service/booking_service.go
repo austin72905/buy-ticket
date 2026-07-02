@@ -42,6 +42,7 @@ type BookingService struct {
 	PaymentAttemptRepo     repository.PaymentAttemptRepository
 	IdempotencyRepo        repository.IdempotencyRepository
 	MockPaymentClient      MockPaymentClient
+	MockPaymentRouter      *MockPaymentProviderRouter
 	MockPaymentCallbackURL string
 	QueueStore             QueueStore
 	StockStore             StockStore

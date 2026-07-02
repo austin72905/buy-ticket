@@ -16,12 +16,15 @@ const flow = useBookingFlowStore()
 const eventId = computed(() => Number(route.params.eventId))
 const paymentMethod = 'credit_card'
 const paymentIdempotencyKey = ref('')
+const canRetryPaymentAttempt = computed(() =>
+  Boolean(flow.paymentAttempt && [3, 4, 5].includes(flow.paymentAttempt.status)),
+)
 const canStartMockPayment = computed(() =>
   Boolean(
     flow.order &&
       canPayOrder(flow.order.status) &&
       !flow.payment &&
-      !flow.paymentAttempt &&
+      (!flow.paymentAttempt || canRetryPaymentAttempt.value) &&
       !flow.isPending('payOrder'),
   ),
 )
@@ -158,7 +161,7 @@ watch(
           </div>
           <Button
             v-if="canStartMockPayment"
-            label="Start Mock Payment"
+            :label="canRetryPaymentAttempt ? 'Restart Mock Payment' : 'Start Mock Payment'"
             severity="danger"
             :loading="flow.isPending('payOrder')"
             @click="payOrder"
@@ -171,8 +174,9 @@ watch(
             <span>The order, reservation, and section sale count are updated by the backend.</span>
           </div>
           <div v-else-if="flow.paymentAttempt" class="success-panel">
-            <strong>Payment attempt submitted</strong>
-            <span>The backend has called the mock payment service. Callback will update the order to paid.</span>
+            <strong>{{ canRetryPaymentAttempt ? 'Payment attempt did not complete' : 'Payment attempt submitted' }}</strong>
+            <span v-if="canRetryPaymentAttempt">You can restart payment. The backend will create a new payment attempt.</span>
+            <span v-else>The backend has called the mock payment service. Callback will update the order to paid.</span>
           </div>
         </aside>
       </div>

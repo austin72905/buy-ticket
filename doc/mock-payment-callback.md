@@ -34,9 +34,50 @@ payment.mock.merchant_id=TEST_MERCHANT
 payment.mock.hash_key=TEST_SECRET
 payment.mock.hash_iv=TEST_HASH_IV
 payment.mock.base_url=http://localhost:8081
+payment.mock.backup_base_url=
 payment.mock.callback_url=http://localhost:8080/payments/provider/ecpay/callback
 payment.mock.timeout_seconds=3
+payment.breaker.enabled=true
+payment.breaker.consecutive_failures=5
+payment.breaker.open_timeout_seconds=30
+payment.breaker.half_open_max_requests=1
 ```
+
+### Payment provider router 與 circuit breaker
+
+目前 `POST /payments/start` 會透過 provider router 選擇 mock payment provider：
+
+```text
+mock_ecpay_primary -> payment.mock.base_url
+mock_ecpay_backup  -> payment.mock.backup_base_url
+```
+
+`payment.mock.backup_base_url` 預設為空，代表只使用 primary provider。若要啟用 backup：
+
+```properties
+payment.mock.backup_base_url=http://localhost:8082
+```
+
+或用環境變數：
+
+```powershell
+$env:PAYMENT_MOCK_BACKUP_BASE_URL="http://localhost:8082"
+```
+
+Circuit breaker 預設策略：
+
+```text
+連續 5 次 provider 呼叫失敗 -> breaker open
+open 30 秒 -> half-open
+half-open 只允許 1 次探測請求
+```
+
+重要規則：
+
+- breaker 只保護 provider 呼叫，不會把既有 `payment_attempt` 跨 provider 重送。
+- 若 primary breaker open，新的 `payment_attempt` 才會選 backup。
+- 舊的 timeout attempt 保留原 provider 與狀態，等待 callback 或後續 reconciliation。
+- 這樣可以避免 primary 其實已成功但 response timeout 時，又自動送到 backup 造成重複扣款。
 
 buy-ticket API：
 
@@ -255,7 +296,27 @@ GET /me/payments
 
 ---
 
-## 5. Idempotency 行為
+## 5. Provider timeout、breaker 與重啟付款
+
+如果 `ec-payment-service` 沒有啟動，或 `POST /api/payment/process` 超時：
+
+- `/payments/start` 仍會建立 `payment_attempts`。
+- attempt 會被標記為 `timeout`。
+- order 不會改成 paid。
+- reservation 不會改成 confirmed。
+
+如果 primary provider 已觸發 circuit breaker：
+
+- 新的付款啟動請求會優先跳過 primary。
+- 若有設定 backup provider，新的 `payment_attempt` 會記錄 `provider = mock_ecpay_backup`。
+- 若沒有可用 provider，仍會建立 `payment_attempt`，但狀態會是 `timeout`，`failure_reason` 會記錄 circuit breaker open。
+- 前端可以讓使用者按「Restart Mock Payment」建立新的 attempt；這會使用新的 `Idempotency-Key`。
+
+同一個 `Idempotency-Key` retry 時仍會回同一筆 attempt，不會因為 retry 就切換 provider。
+
+---
+
+## 6. Idempotency 行為
 
 前端呼叫 `POST /payments/start` 時應送：
 
@@ -272,7 +333,7 @@ Idempotency-Key: <uuid>
 
 ---
 
-## 6. Callback 關聯規則
+## 7. Callback 關聯規則
 
 目前 callback 已不再支援舊的 `MerchantTradeNo -> order_no` fallback。
 
@@ -286,7 +347,7 @@ MerchantTradeNo -> payment_attempts.merchant_trade_no -> payment_attempts.order_
 
 ---
 
-## 7. 常見問題
+## 8. 常見問題
 
 ### invalid payment signature
 
@@ -335,5 +396,6 @@ curl http://localhost:8081/health
 
 ```properties
 payment.mock.base_url=http://localhost:8081
+payment.mock.backup_base_url=http://localhost:8082
 payment.mock.callback_url=http://localhost:8080/payments/provider/ecpay/callback
 ```

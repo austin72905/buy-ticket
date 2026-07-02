@@ -27,6 +27,7 @@ type MockPaymentProcessInput struct {
 }
 
 var ErrPaymentProviderCircuitOpen = errors.New("payment provider circuit breaker is open")
+var ErrPaymentProviderNotConfigured = errors.New("payment provider is not configured")
 
 type MockPaymentHTTPStatusError struct {
 	StatusCode int
@@ -154,4 +155,70 @@ func (c *CircuitBreakerMockPaymentClient) Process(ctx context.Context, input Moc
 		return nil, ErrPaymentProviderCircuitOpen
 	}
 	return response, err
+}
+
+func (c *CircuitBreakerMockPaymentClient) Available() bool {
+	return c.breaker.State() != gobreaker.StateOpen
+}
+
+type MockPaymentProvider struct {
+	Name   string
+	Client MockPaymentClient
+}
+
+type MockPaymentProviderRouter struct {
+	providers []MockPaymentProvider
+}
+
+func NewMockPaymentProviderRouter(providers []MockPaymentProvider) *MockPaymentProviderRouter {
+	enabledProviders := make([]MockPaymentProvider, 0, len(providers))
+	for _, provider := range providers {
+		if provider.Name == "" || provider.Client == nil {
+			continue
+		}
+		enabledProviders = append(enabledProviders, provider)
+	}
+
+	return &MockPaymentProviderRouter{providers: enabledProviders}
+}
+
+func (r *MockPaymentProviderRouter) Select(ctx context.Context, preferredProvider string) (MockPaymentProvider, error) {
+	_ = ctx
+	if r == nil || len(r.providers) == 0 {
+		return MockPaymentProvider{}, ErrPaymentProviderNotConfigured
+	}
+
+	if preferredProvider != "" {
+		for _, provider := range r.providers {
+			if provider.Name == preferredProvider {
+				if !mockPaymentProviderAvailable(provider) {
+					return MockPaymentProvider{}, ErrPaymentProviderCircuitOpen
+				}
+				return provider, nil
+			}
+		}
+	}
+
+	for _, provider := range r.providers {
+		if !mockPaymentProviderAvailable(provider) {
+			continue
+		}
+		return provider, nil
+	}
+
+	return MockPaymentProvider{}, ErrPaymentProviderCircuitOpen
+}
+
+func (r *MockPaymentProviderRouter) PrimaryClient() MockPaymentClient {
+	if r == nil || len(r.providers) == 0 {
+		return nil
+	}
+	return r.providers[0].Client
+}
+
+func mockPaymentProviderAvailable(provider MockPaymentProvider) bool {
+	if availability, ok := provider.Client.(interface{ Available() bool }); ok {
+		return availability.Available()
+	}
+	return true
 }

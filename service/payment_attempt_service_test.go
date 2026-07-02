@@ -228,6 +228,73 @@ func TestBookingServiceStartMockPaymentAttempt(t *testing.T) {
 			t.Fatalf("expected circuit open failure reason, got %v", attempt.FailureReason)
 		}
 	})
+
+	t.Run("new attempt uses backup provider when primary circuit is open", func(t *testing.T) {
+		primaryClient := NewCircuitBreakerMockPaymentClient(&fakeMockPaymentClient{err: errors.New("connection refused")}, PaymentCircuitBreakerConfig{
+			Enabled:             true,
+			ConsecutiveFailures: 1,
+			OpenTimeout:         time.Minute,
+			HalfOpenMaxRequests: 1,
+		})
+		backupClient := NewCircuitBreakerMockPaymentClient(&fakeMockPaymentClient{response: []byte(`{"status":"processing","provider":"backup"}`)}, PaymentCircuitBreakerConfig{
+			Enabled:             true,
+			ConsecutiveFailures: 1,
+			OpenTimeout:         time.Minute,
+			HalfOpenMaxRequests: 1,
+		})
+		svc := &BookingService{
+			OrderRepo: &fakeOrderRepository{
+				orders: map[int64]*domain.Order{
+					10: {
+						ID:          10,
+						Status:      domain.OrderStatusPendingPayment,
+						TotalAmount: 2800,
+					},
+				},
+			},
+			PaymentAttemptRepo: &fakePaymentAttemptRepository{},
+			MockPaymentRouter: NewMockPaymentProviderRouter([]MockPaymentProvider{
+				{Name: "mock_ecpay_primary", Client: primaryClient},
+				{Name: "mock_ecpay_backup", Client: backupClient},
+			}),
+			MockPaymentCallbackURL: "http://localhost:8080/payments/provider/ecpay/callback",
+		}
+
+		firstAttempt, err := svc.StartMockPaymentAttempt(context.Background(), CreatePaymentAttemptInput{
+			OrderID:        10,
+			IdempotencyKey: "pay-router-key-001",
+			Provider:       "mock_ecpay",
+			Method:         "credit_card",
+		})
+		if err != nil {
+			t.Fatalf("first provider failure should be stored as timeout: %v", err)
+		}
+		if firstAttempt.Provider != "mock_ecpay_primary" {
+			t.Fatalf("expected primary provider, got %s", firstAttempt.Provider)
+		}
+		if firstAttempt.Status != domain.PaymentAttemptStatusTimeout {
+			t.Fatalf("expected timeout status, got %d", firstAttempt.Status)
+		}
+
+		secondAttempt, err := svc.StartMockPaymentAttempt(context.Background(), CreatePaymentAttemptInput{
+			OrderID:        10,
+			IdempotencyKey: "pay-router-key-002",
+			Provider:       "mock_ecpay",
+			Method:         "credit_card",
+		})
+		if err != nil {
+			t.Fatalf("backup provider attempt should not fail: %v", err)
+		}
+		if secondAttempt.Provider != "mock_ecpay_backup" {
+			t.Fatalf("expected backup provider, got %s", secondAttempt.Provider)
+		}
+		if secondAttempt.Status != domain.PaymentAttemptStatusProcessing {
+			t.Fatalf("expected processing status, got %d", secondAttempt.Status)
+		}
+		if string(secondAttempt.ResponsePayload) != `{"status":"processing","provider":"backup"}` {
+			t.Fatalf("unexpected response payload: %s", string(secondAttempt.ResponsePayload))
+		}
+	})
 }
 
 type fakePaymentAttemptRepository struct {

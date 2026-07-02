@@ -25,6 +25,7 @@ session:
 payment:
   mock:
     baseURL: "http://host.k3d.internal:8081"
+    backupBaseURL: ""
     callbackURL: "http://host.k3d.internal:8080/payments/provider/ecpay/callback"
   breaker:
     enabled: true

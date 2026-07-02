@@ -23,6 +23,7 @@ data:
   REDIS_ADDR: {{ .Values.redis.addr | quote }}
   REDIS_DB: {{ .Values.redis.db | quote }}
   PAYMENT_MOCK_BASE_URL: {{ .Values.payment.mock.baseURL | quote }}
+  PAYMENT_MOCK_BACKUP_BASE_URL: {{ .Values.payment.mock.backupBaseURL | quote }}
   PAYMENT_MOCK_CALLBACK_URL: {{ .Values.payment.mock.callbackURL | quote }}
   PAYMENT_MOCK_TIMEOUT_SECONDS: {{ .Values.payment.mock.timeoutSeconds | quote }}
   PAYMENT_BREAKER_ENABLED: {{ .Values.payment.breaker.enabled | quote }}
