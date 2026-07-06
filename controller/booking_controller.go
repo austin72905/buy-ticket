@@ -833,9 +833,31 @@ func hashPaymentRequest(request PayOrderRequest) (string, error) {
 }
 
 func writeError(ctx *gin.Context, statusCode int, err error) {
-	ctx.JSON(statusCode, gin.H{
-		"error": err.Error(),
+	ctx.JSON(statusCode, ErrorResponse{
+		Code:    errorCodeForStatus(statusCode),
+		Message: err.Error(),
 	})
+}
+
+func errorCodeForStatus(statusCode int) string {
+	switch statusCode {
+	case http.StatusBadRequest:
+		return "BAD_REQUEST"
+	case http.StatusUnauthorized:
+		return "UNAUTHORIZED"
+	case http.StatusForbidden:
+		return "FORBIDDEN"
+	case http.StatusNotFound:
+		return "NOT_FOUND"
+	case http.StatusConflict:
+		return "CONFLICT"
+	case http.StatusTooManyRequests:
+		return "TOO_MANY_REQUESTS"
+	case http.StatusInternalServerError:
+		return "INTERNAL_SERVER_ERROR"
+	default:
+		return "ERROR"
+	}
 }
 
 func parseInt64Param(ctx *gin.Context, key string) (int64, bool) {
