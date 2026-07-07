@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import Button from 'primevue/button'
 
@@ -32,11 +32,6 @@ async function logout() {
   } catch {}
 }
 
-onMounted(async () => {
-  try {
-    await flow.loadMe()
-  } catch {}
-})
 </script>
 
 <template>

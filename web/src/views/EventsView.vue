@@ -48,9 +48,6 @@ function shortTitle(event: EventResponse) {
 
 async function reload() {
   try {
-    if (!flow.currentUser) {
-      await flow.loadMe()
-    }
     await flow.loadEvents()
     if (flow.currentUser) {
       await flow.loadActiveReservation()

@@ -64,6 +64,16 @@ function startPolling() {
 }
 
 async function enterQueue() {
+  if (!flow.currentUser) {
+    router.push({
+      name: 'login',
+      query: {
+        redirect: route.fullPath,
+      },
+    })
+    return
+  }
+
   try {
     await flow.joinQueueAction({
       clientId: `web-${flow.userId}`,

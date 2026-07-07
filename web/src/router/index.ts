@@ -109,7 +109,6 @@ const router = createRouter({
       path: '/events/:eventId/info',
       name: 'event-info',
       component: EventInfoView,
-      meta: { requiresAuth: true },
     },
     {
       path: '/events/:eventId/tickets',
