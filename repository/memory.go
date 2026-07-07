@@ -111,6 +111,8 @@ func (r *MemoryAdminUserRepository) Save(ctx context.Context, adminUser *domain.
 		cloned.ID = r.nextID
 		r.nextID++
 		adminUser.ID = cloned.ID
+	} else if existing, ok := r.adminUsers[cloned.ID]; ok && existing.Email != cloned.Email {
+		delete(r.emailIndex, existing.Email)
 	}
 
 	r.adminUsers[cloned.ID] = &cloned
@@ -428,6 +430,22 @@ func (r *MemoryEventRepository) CreateAdminEvent(ctx context.Context, event *dom
 	return nil
 }
 
+func (r *MemoryEventRepository) UpdateAdminEvent(ctx context.Context, event *domain.Event) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, ok := r.events[event.ID]
+	if !ok {
+		return ErrEventNotFound
+	}
+
+	cloned := *event
+	cloned.CreatedAt = existing.CreatedAt
+	r.events[event.ID] = &cloned
+	*event = cloned
+	return nil
+}
+
 func (r *MemoryEventRepository) AdvanceEventStatuses(ctx context.Context, now time.Time) (int64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -508,6 +526,34 @@ func (r *MemoryEventRepository) CreateAdminEventSection(ctx context.Context, eve
 	event.Sections = append(event.Sections, cloned)
 	*section = cloned
 	return nil
+}
+
+func (r *MemoryEventRepository) UpdateAdminEventSection(ctx context.Context, eventID int64, organizerID *int64, section *domain.Section) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	event, ok := r.events[eventID]
+	if !ok {
+		return ErrEventNotFound
+	}
+	if organizerID != nil && event.OrganizerID != *organizerID {
+		return ErrEventNotFound
+	}
+
+	for index := range event.Sections {
+		if event.Sections[index].ID != section.ID {
+			continue
+		}
+
+		cloned := *section
+		cloned.EventID = eventID
+		cloned.CreatedAt = event.Sections[index].CreatedAt
+		event.Sections[index] = cloned
+		*section = cloned
+		return nil
+	}
+
+	return ErrSectionNotFound
 }
 
 type MemorySectionRepository struct {

@@ -2802,6 +2802,150 @@ func (q *Queries) ReserveSectionInventory(ctx context.Context, arg ReserveSectio
 	return i, err
 }
 
+const updateAdminUser = `-- name: UpdateAdminUser :one
+UPDATE admin_users
+SET
+    organizer_id = $2,
+    name = $3,
+    email = $4,
+    password_hash = $5,
+    role = $6,
+    status = $7,
+    updated_at = $8
+WHERE id = $1
+RETURNING
+    id,
+    organizer_id,
+    name,
+    email,
+    password_hash,
+    role,
+    status,
+    created_at,
+    updated_at
+`
+
+type UpdateAdminUserParams struct {
+	ID           int64              `json:"id"`
+	OrganizerID  pgtype.Int8        `json:"organizer_id"`
+	Name         string             `json:"name"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	Role         string             `json:"role"`
+	Status       int16              `json:"status"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateAdminUser(ctx context.Context, arg UpdateAdminUserParams) (AdminUser, error) {
+	row := q.db.QueryRow(ctx, updateAdminUser,
+		arg.ID,
+		arg.OrganizerID,
+		arg.Name,
+		arg.Email,
+		arg.PasswordHash,
+		arg.Role,
+		arg.Status,
+		arg.UpdatedAt,
+	)
+	var i AdminUser
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizerID,
+		&i.Name,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateEvent = `-- name: UpdateEvent :one
+UPDATE events
+SET
+    organizer_id = $2,
+    name = $3,
+    venue = $4,
+    status = $5,
+    start_at = $6,
+    end_at = $7,
+    sale_start_at = $8,
+    sale_end_at = $9,
+    updated_at = $10
+WHERE id = $1
+RETURNING
+    id,
+    organizer_id,
+    name,
+    venue,
+    status,
+    start_at,
+    end_at,
+    sale_start_at,
+    sale_end_at,
+    created_at,
+    updated_at
+`
+
+type UpdateEventParams struct {
+	ID          int64              `json:"id"`
+	OrganizerID int64              `json:"organizer_id"`
+	Name        string             `json:"name"`
+	Venue       string             `json:"venue"`
+	Status      int16              `json:"status"`
+	StartAt     pgtype.Timestamptz `json:"start_at"`
+	EndAt       pgtype.Timestamptz `json:"end_at"`
+	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
+	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type UpdateEventRow struct {
+	ID          int64              `json:"id"`
+	OrganizerID int64              `json:"organizer_id"`
+	Name        string             `json:"name"`
+	Venue       string             `json:"venue"`
+	Status      int16              `json:"status"`
+	StartAt     pgtype.Timestamptz `json:"start_at"`
+	EndAt       pgtype.Timestamptz `json:"end_at"`
+	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
+	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (UpdateEventRow, error) {
+	row := q.db.QueryRow(ctx, updateEvent,
+		arg.ID,
+		arg.OrganizerID,
+		arg.Name,
+		arg.Venue,
+		arg.Status,
+		arg.StartAt,
+		arg.EndAt,
+		arg.SaleStartAt,
+		arg.SaleEndAt,
+		arg.UpdatedAt,
+	)
+	var i UpdateEventRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizerID,
+		&i.Name,
+		&i.Venue,
+		&i.Status,
+		&i.StartAt,
+		&i.EndAt,
+		&i.SaleStartAt,
+		&i.SaleEndAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateOrderStatus = `-- name: UpdateOrderStatus :exec
 UPDATE orders
 SET
@@ -2826,6 +2970,46 @@ func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusPa
 		arg.UpdatedAt,
 	)
 	return err
+}
+
+const updateOrganizer = `-- name: UpdateOrganizer :one
+UPDATE organizers
+SET
+    name = $2,
+    status = $3,
+    updated_at = $4
+WHERE id = $1
+RETURNING
+    id,
+    name,
+    status,
+    created_at,
+    updated_at
+`
+
+type UpdateOrganizerParams struct {
+	ID        int64              `json:"id"`
+	Name      string             `json:"name"`
+	Status    int16              `json:"status"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateOrganizer(ctx context.Context, arg UpdateOrganizerParams) (Organizer, error) {
+	row := q.db.QueryRow(ctx, updateOrganizer,
+		arg.ID,
+		arg.Name,
+		arg.Status,
+		arg.UpdatedAt,
+	)
+	var i Organizer
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updatePaymentAttemptStatus = `-- name: UpdatePaymentAttemptStatus :exec
@@ -2918,6 +3102,72 @@ type UpdateReservationStatusParams struct {
 func (q *Queries) UpdateReservationStatus(ctx context.Context, arg UpdateReservationStatusParams) error {
 	_, err := q.db.Exec(ctx, updateReservationStatus, arg.ID, arg.Status, arg.UpdatedAt)
 	return err
+}
+
+const updateSection = `-- name: UpdateSection :one
+UPDATE event_sections
+SET
+    section_name = $3,
+    price = $4,
+    total_quantity = $5,
+    purchase_limit = $6,
+    status = $7,
+    updated_at = $8
+WHERE event_id = $1
+  AND id = $2
+RETURNING
+    id,
+    event_id,
+    event_name,
+    section_name,
+    price,
+    total_quantity,
+    reserved_quantity,
+    sold_quantity,
+    purchase_limit,
+    status,
+    created_at,
+    updated_at
+`
+
+type UpdateSectionParams struct {
+	EventID       int64              `json:"event_id"`
+	ID            int64              `json:"id"`
+	SectionName   string             `json:"section_name"`
+	Price         int64              `json:"price"`
+	TotalQuantity int32              `json:"total_quantity"`
+	PurchaseLimit int32              `json:"purchase_limit"`
+	Status        int16              `json:"status"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateSection(ctx context.Context, arg UpdateSectionParams) (EventSection, error) {
+	row := q.db.QueryRow(ctx, updateSection,
+		arg.EventID,
+		arg.ID,
+		arg.SectionName,
+		arg.Price,
+		arg.TotalQuantity,
+		arg.PurchaseLimit,
+		arg.Status,
+		arg.UpdatedAt,
+	)
+	var i EventSection
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.EventName,
+		&i.SectionName,
+		&i.Price,
+		&i.TotalQuantity,
+		&i.ReservedQuantity,
+		&i.SoldQuantity,
+		&i.PurchaseLimit,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateSectionInventory = `-- name: UpdateSectionInventory :exec

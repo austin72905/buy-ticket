@@ -269,6 +269,69 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "patch": {
+                "description": "Patch an event for admin backoffice. EVENT_ADMIN is scoped to its organizer. ON_SALE is scheduler-derived and cannot be set manually.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-events"
+                ],
+                "summary": "Update admin event",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Event patch payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.UpdateAdminEventRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.AdminEventResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
             }
         },
         "/admin/events/{eventId}/sections": {
@@ -359,6 +422,78 @@ const docTemplate = `{
                 "responses": {
                     "201": {
                         "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/controller.AdminSectionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/events/{eventId}/sections/{sectionId}": {
+            "patch": {
+                "description": "Patch a section for an event. EVENT_ADMIN is scoped to its organizer.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-events"
+                ],
+                "summary": "Update admin event section",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Section ID",
+                        "name": "sectionId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Section patch payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.UpdateAdminSectionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/controller.AdminSectionResponse"
                         }
@@ -642,6 +777,71 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/organizers/{organizerId}": {
+            "patch": {
+                "description": "Patch an organizer. Only SUPER_ADMIN can use this endpoint.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-organizers"
+                ],
+                "summary": "Update organizer",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Organizer ID",
+                        "name": "organizerId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Organizer patch payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.UpdateOrganizerRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.OrganizerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/users": {
             "get": {
                 "description": "List backoffice admin users. Only SUPER_ADMIN can use this endpoint.",
@@ -720,6 +920,71 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/users/{adminUserId}": {
+            "patch": {
+                "description": "Patch a backoffice admin user. Only SUPER_ADMIN can use this endpoint.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-users"
+                ],
+                "summary": "Update admin user",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Admin User ID",
+                        "name": "adminUserId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Admin user patch payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.UpdateAdminUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.AdminUserResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/controller.ErrorResponse"
                         }
@@ -2469,6 +2734,89 @@ const docTemplate = `{
                 },
                 "provider": {
                     "type": "string"
+                }
+            }
+        },
+        "controller.UpdateAdminEventRequest": {
+            "type": "object",
+            "properties": {
+                "end_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "organizer_id": {
+                    "type": "integer"
+                },
+                "sale_end_at": {
+                    "type": "string"
+                },
+                "sale_start_at": {
+                    "type": "string"
+                },
+                "start_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "venue": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.UpdateAdminSectionRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "integer"
+                },
+                "purchase_limit": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "total_quantity": {
+                    "type": "integer"
+                }
+            }
+        },
+        "controller.UpdateAdminUserRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "organizer_id": {
+                    "type": "integer"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        },
+        "controller.UpdateOrganizerRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
                 }
             }
         }

@@ -22,6 +22,15 @@ export interface CreateAdminUserRequest {
   role: string
 }
 
+export interface UpdateAdminUserRequest {
+  organizer_id?: number
+  name?: string
+  email?: string
+  password?: string
+  role?: string
+  status?: number
+}
+
 export interface OrganizerResponse {
   id: number
   name: string
@@ -32,6 +41,11 @@ export interface OrganizerResponse {
 
 export interface CreateOrganizerRequest {
   name: string
+}
+
+export interface UpdateOrganizerRequest {
+  name?: string
+  status?: number
 }
 
 export interface AdminCursor {
@@ -117,6 +131,17 @@ export interface CreateAdminEventRequest {
   sale_end_at: string
 }
 
+export interface UpdateAdminEventRequest {
+  organizer_id?: number
+  name?: string
+  venue?: string
+  status?: number
+  start_at?: string
+  end_at?: string
+  sale_start_at?: string
+  sale_end_at?: string
+}
+
 export interface AdminSectionResponse {
   id: number
   event_id: number
@@ -137,6 +162,14 @@ export interface CreateAdminSectionRequest {
   price: number
   total_quantity: number
   purchase_limit: number
+  status?: number
+}
+
+export interface UpdateAdminSectionRequest {
+  name?: string
+  price?: number
+  total_quantity?: number
+  purchase_limit?: number
   status?: number
 }
 

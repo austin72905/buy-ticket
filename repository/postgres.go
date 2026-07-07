@@ -182,6 +182,30 @@ func (r *PostgresEventRepository) CreateAdminEvent(ctx context.Context, event *d
 	return nil
 }
 
+func (r *PostgresEventRepository) UpdateAdminEvent(ctx context.Context, event *domain.Event) error {
+	record, err := r.queries.UpdateEvent(ctx, db.UpdateEventParams{
+		ID:          event.ID,
+		OrganizerID: event.OrganizerID,
+		Name:        event.Name,
+		Venue:       event.Venue,
+		Status:      int16(event.Status),
+		StartAt:     toPgTimestamp(event.StartAt),
+		EndAt:       toPgTimestamp(event.EndAt),
+		SaleStartAt: toPgTimestamp(event.SaleStartAt),
+		SaleEndAt:   toPgTimestamp(event.SaleEndAt),
+		UpdatedAt:   toPgTimestamp(event.UpdatedAt),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrEventNotFound
+		}
+		return err
+	}
+
+	*event = *toDomainEventFromUpdateEvent(record)
+	return nil
+}
+
 func (r *PostgresEventRepository) AdvanceEventStatuses(ctx context.Context, now time.Time) (int64, error) {
 	return r.queries.AdvanceEventStatuses(ctx, toPgTimestamp(now))
 }
@@ -226,6 +250,32 @@ func (r *PostgresEventRepository) CreateAdminEventSection(ctx context.Context, e
 		Status:           int16(section.Status),
 	})
 	if err != nil {
+		return err
+	}
+
+	*section = *toDomainSection(record)
+	return nil
+}
+
+func (r *PostgresEventRepository) UpdateAdminEventSection(ctx context.Context, eventID int64, organizerID *int64, section *domain.Section) error {
+	if _, err := r.FindAdminEventByID(ctx, eventID, organizerID); err != nil {
+		return err
+	}
+
+	record, err := r.queries.UpdateSection(ctx, db.UpdateSectionParams{
+		EventID:       eventID,
+		ID:            section.ID,
+		SectionName:   section.Name,
+		Price:         section.Price,
+		TotalQuantity: int32(section.TotalQuantity),
+		PurchaseLimit: int32(section.PurchaseLimit),
+		Status:        int16(section.Status),
+		UpdatedAt:     toPgTimestamp(section.UpdatedAt),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrSectionNotFound
+		}
 		return err
 	}
 
@@ -837,6 +887,24 @@ func (r *PostgresAdminUserRepository) List(ctx context.Context) ([]domain.AdminU
 
 func (r *PostgresAdminUserRepository) Save(ctx context.Context, adminUser *domain.AdminUser) error {
 	if adminUser.ID != 0 {
+		record, err := r.queries.UpdateAdminUser(ctx, db.UpdateAdminUserParams{
+			ID:           adminUser.ID,
+			OrganizerID:  nullablePgInt8(adminUser.OrganizerID),
+			Name:         adminUser.Name,
+			Email:        adminUser.Email,
+			PasswordHash: adminUser.PasswordHash,
+			Role:         string(adminUser.Role),
+			Status:       int16(adminUser.Status),
+			UpdatedAt:    toPgTimestamp(adminUser.UpdatedAt),
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrAdminUserNotFound
+			}
+			return err
+		}
+
+		*adminUser = *toDomainAdminUser(record)
 		return nil
 	}
 
@@ -884,6 +952,20 @@ func (r *PostgresOrganizerRepository) List(ctx context.Context) ([]domain.Organi
 
 func (r *PostgresOrganizerRepository) Save(ctx context.Context, organizer *domain.Organizer) error {
 	if organizer.ID != 0 {
+		record, err := r.queries.UpdateOrganizer(ctx, db.UpdateOrganizerParams{
+			ID:        organizer.ID,
+			Name:      organizer.Name,
+			Status:    int16(organizer.Status),
+			UpdatedAt: toPgTimestamp(organizer.UpdatedAt),
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrOrganizerNotFound
+			}
+			return err
+		}
+
+		*organizer = *toDomainOrganizer(record)
 		return nil
 	}
 
@@ -1145,6 +1227,22 @@ func toDomainUserFromCreateUser(record db.CreateUserRow) *domain.User {
 		PasswordHash: record.PasswordHash,
 		CreatedAt:    record.CreatedAt.Time,
 		UpdatedAt:    record.UpdatedAt.Time,
+	}
+}
+
+func toDomainEventFromUpdateEvent(record db.UpdateEventRow) *domain.Event {
+	return &domain.Event{
+		ID:          record.ID,
+		OrganizerID: record.OrganizerID,
+		Name:        record.Name,
+		Venue:       record.Venue,
+		Status:      domain.EventStatus(record.Status),
+		StartAt:     record.StartAt.Time,
+		EndAt:       record.EndAt.Time,
+		SaleStartAt: record.SaleStartAt.Time,
+		SaleEndAt:   record.SaleEndAt.Time,
+		CreatedAt:   record.CreatedAt.Time,
+		UpdatedAt:   record.UpdatedAt.Time,
 	}
 }
 

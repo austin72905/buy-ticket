@@ -576,6 +576,60 @@ definitions:
       provider:
         type: string
     type: object
+  controller.UpdateAdminEventRequest:
+    properties:
+      end_at:
+        type: string
+      name:
+        type: string
+      organizer_id:
+        type: integer
+      sale_end_at:
+        type: string
+      sale_start_at:
+        type: string
+      start_at:
+        type: string
+      status:
+        type: integer
+      venue:
+        type: string
+    type: object
+  controller.UpdateAdminSectionRequest:
+    properties:
+      name:
+        type: string
+      price:
+        type: integer
+      purchase_limit:
+        type: integer
+      status:
+        type: integer
+      total_quantity:
+        type: integer
+    type: object
+  controller.UpdateAdminUserRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      organizer_id:
+        type: integer
+      password:
+        type: string
+      role:
+        type: string
+      status:
+        type: integer
+    type: object
+  controller.UpdateOrganizerRequest:
+    properties:
+      name:
+        type: string
+      status:
+        type: integer
+    type: object
 info:
   contact: {}
   description: 搶票系統 API
@@ -754,6 +808,49 @@ paths:
       summary: Get admin event
       tags:
       - admin-events
+    patch:
+      consumes:
+      - application/json
+      description: Patch an event for admin backoffice. EVENT_ADMIN is scoped to its
+        organizer. ON_SALE is scheduler-derived and cannot be set manually.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: integer
+      - description: Event patch payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.UpdateAdminEventRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.AdminEventResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Update admin event
+      tags:
+      - admin-events
   /admin/events/{eventId}/sections:
     get:
       description: List event sections with inventory quantities. EVENT_ADMIN is scoped
@@ -832,6 +929,54 @@ paths:
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
       summary: Create admin event section
+      tags:
+      - admin-events
+  /admin/events/{eventId}/sections/{sectionId}:
+    patch:
+      consumes:
+      - application/json
+      description: Patch a section for an event. EVENT_ADMIN is scoped to its organizer.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: integer
+      - description: Section ID
+        in: path
+        name: sectionId
+        required: true
+        type: integer
+      - description: Section patch payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.UpdateAdminSectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.AdminSectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Update admin event section
       tags:
       - admin-events
   /admin/me:
@@ -1002,6 +1147,49 @@ paths:
       summary: Create organizer
       tags:
       - admin-organizers
+  /admin/organizers/{organizerId}:
+    patch:
+      consumes:
+      - application/json
+      description: Patch an organizer. Only SUPER_ADMIN can use this endpoint.
+      parameters:
+      - description: Organizer ID
+        in: path
+        name: organizerId
+        required: true
+        type: integer
+      - description: Organizer patch payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.UpdateOrganizerRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.OrganizerResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Update organizer
+      tags:
+      - admin-organizers
   /admin/users:
     get:
       description: List backoffice admin users. Only SUPER_ADMIN can use this endpoint.
@@ -1056,6 +1244,49 @@ paths:
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
       summary: Create admin user
+      tags:
+      - admin-users
+  /admin/users/{adminUserId}:
+    patch:
+      consumes:
+      - application/json
+      description: Patch a backoffice admin user. Only SUPER_ADMIN can use this endpoint.
+      parameters:
+      - description: Admin User ID
+        in: path
+        name: adminUserId
+        required: true
+        type: integer
+      - description: Admin user patch payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.UpdateAdminUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.AdminUserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Update admin user
       tags:
       - admin-users
   /events:

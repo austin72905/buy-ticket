@@ -53,6 +53,15 @@ type CreateOrganizerInput struct {
 	Name      string
 }
 
+type UpdateOrganizerInput struct {
+	AdminUser *domain.AdminUser
+	ID        int64
+	Name      *string
+	Status    *domain.OrganizerStatus
+	IPAddress *string
+	UserAgent *string
+}
+
 type CreateAdminUserInput struct {
 	AdminUser   *domain.AdminUser
 	OrganizerID *int64
@@ -60,6 +69,19 @@ type CreateAdminUserInput struct {
 	Email       string
 	Password    string
 	Role        domain.AdminRole
+}
+
+type UpdateAdminUserInput struct {
+	AdminUser   *domain.AdminUser
+	ID          int64
+	OrganizerID *int64
+	Name        *string
+	Email       *string
+	Password    *string
+	Role        *domain.AdminRole
+	Status      *domain.AdminUserStatus
+	IPAddress   *string
+	UserAgent   *string
 }
 
 type CreateAdminEventInput struct {
@@ -74,6 +96,21 @@ type CreateAdminEventInput struct {
 	SaleEndAt   time.Time
 }
 
+type UpdateAdminEventInput struct {
+	AdminUser   *domain.AdminUser
+	EventID     int64
+	OrganizerID *int64
+	Name        *string
+	Venue       *string
+	Status      *domain.EventStatus
+	StartAt     *time.Time
+	EndAt       *time.Time
+	SaleStartAt *time.Time
+	SaleEndAt   *time.Time
+	IPAddress   *string
+	UserAgent   *string
+}
+
 type CreateAdminSectionInput struct {
 	AdminUser     *domain.AdminUser
 	EventID       int64
@@ -82,6 +119,19 @@ type CreateAdminSectionInput struct {
 	TotalQuantity int
 	PurchaseLimit int
 	Status        domain.SectionStatus
+}
+
+type UpdateAdminSectionInput struct {
+	AdminUser     *domain.AdminUser
+	EventID       int64
+	SectionID     int64
+	Name          *string
+	Price         *int64
+	TotalQuantity *int
+	PurchaseLimit *int
+	Status        *domain.SectionStatus
+	IPAddress     *string
+	UserAgent     *string
 }
 
 func NewAdminService(
@@ -164,6 +214,93 @@ func (s *AdminService) CreateAdminUser(ctx context.Context, input CreateAdminUse
 	return created, nil
 }
 
+func (s *AdminService) UpdateAdminUser(ctx context.Context, input UpdateAdminUserInput) (*domain.AdminUser, error) {
+	if input.AdminUser == nil {
+		return nil, ErrUnauthorized
+	}
+	if !input.AdminUser.IsSuperAdmin() {
+		return nil, ErrForbidden
+	}
+	if input.ID == 0 {
+		return nil, ErrInvalidAdminInput
+	}
+
+	adminUser, err := s.AdminUserRepo.FindByID(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+	if input.Name != nil {
+		name := strings.TrimSpace(*input.Name)
+		if name == "" {
+			return nil, ErrInvalidAdminInput
+		}
+		adminUser.Name = name
+	}
+	if input.Email != nil {
+		email := strings.TrimSpace(strings.ToLower(*input.Email))
+		if email == "" {
+			return nil, ErrInvalidAdminInput
+		}
+		existing, err := s.AdminUserRepo.FindByEmail(ctx, email)
+		if err == nil && existing.ID != adminUser.ID {
+			return nil, ErrInvalidAdminInput
+		}
+		if err != nil && !errors.Is(err, repository.ErrAdminUserNotFound) {
+			return nil, err
+		}
+		adminUser.Email = email
+	}
+	if input.Password != nil {
+		password := strings.TrimSpace(*input.Password)
+		if len(password) < 4 {
+			return nil, ErrInvalidAdminInput
+		}
+		passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, err
+		}
+		adminUser.PasswordHash = string(passwordHash)
+	}
+	if input.Role != nil {
+		if *input.Role != domain.AdminRoleSuperAdmin && *input.Role != domain.AdminRoleEventAdmin {
+			return nil, ErrInvalidAdminInput
+		}
+		adminUser.Role = *input.Role
+	}
+	if input.OrganizerID != nil || adminUser.IsSuperAdmin() {
+		adminUser.OrganizerID = input.OrganizerID
+	}
+	if input.Status != nil {
+		if *input.Status < domain.AdminUserStatusActive || *input.Status > domain.AdminUserStatusDisabled {
+			return nil, ErrInvalidAdminInput
+		}
+		if input.AdminUser.ID == adminUser.ID && *input.Status == domain.AdminUserStatusDisabled {
+			return nil, ErrInvalidAdminInput
+		}
+		adminUser.Status = *input.Status
+	}
+	if adminUser.IsSuperAdmin() {
+		adminUser.OrganizerID = nil
+	}
+	if adminUser.IsEventAdmin() {
+		if adminUser.OrganizerID == nil || *adminUser.OrganizerID == 0 {
+			return nil, ErrInvalidAdminInput
+		}
+		if _, err := s.OrganizerRepo.FindByID(ctx, *adminUser.OrganizerID); err != nil {
+			return nil, err
+		}
+	}
+
+	adminUser.UpdatedAt = time.Now()
+	if err := s.AdminUserRepo.Save(ctx, adminUser); err != nil {
+		return nil, err
+	}
+	if err := s.writeAdminAuditLog(ctx, input.AdminUser, "ADMIN_USER_UPDATE", "ADMIN_USER", adminUser.ID, "update admin user", input.IPAddress, input.UserAgent); err != nil {
+		return nil, err
+	}
+	return adminUser, nil
+}
+
 func (s *AdminService) ListOrganizers(ctx context.Context, adminUser *domain.AdminUser) ([]domain.Organizer, error) {
 	if adminUser == nil {
 		return nil, ErrUnauthorized
@@ -195,6 +332,45 @@ func (s *AdminService) CreateOrganizer(ctx context.Context, input CreateOrganize
 		UpdatedAt: now,
 	}
 	if err := s.OrganizerRepo.Save(ctx, organizer); err != nil {
+		return nil, err
+	}
+	return organizer, nil
+}
+
+func (s *AdminService) UpdateOrganizer(ctx context.Context, input UpdateOrganizerInput) (*domain.Organizer, error) {
+	if input.AdminUser == nil {
+		return nil, ErrUnauthorized
+	}
+	if !input.AdminUser.IsSuperAdmin() {
+		return nil, ErrForbidden
+	}
+	if input.ID == 0 {
+		return nil, ErrInvalidAdminInput
+	}
+
+	organizer, err := s.OrganizerRepo.FindByID(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+	if input.Name != nil {
+		name := strings.TrimSpace(*input.Name)
+		if name == "" {
+			return nil, ErrInvalidAdminInput
+		}
+		organizer.Name = name
+	}
+	if input.Status != nil {
+		if *input.Status < domain.OrganizerStatusActive || *input.Status > domain.OrganizerStatusDisabled {
+			return nil, ErrInvalidAdminInput
+		}
+		organizer.Status = *input.Status
+	}
+
+	organizer.UpdatedAt = time.Now()
+	if err := s.OrganizerRepo.Save(ctx, organizer); err != nil {
+		return nil, err
+	}
+	if err := s.writeAdminAuditLog(ctx, input.AdminUser, "ORGANIZER_UPDATE", "ORGANIZER", organizer.ID, "update organizer", input.IPAddress, input.UserAgent); err != nil {
 		return nil, err
 	}
 	return organizer, nil
@@ -280,6 +456,84 @@ func (s *AdminService) CreateEvent(ctx context.Context, input CreateAdminEventIn
 	return event, nil
 }
 
+func (s *AdminService) UpdateEvent(ctx context.Context, input UpdateAdminEventInput) (*domain.Event, error) {
+	organizerID, err := adminOrganizerScope(input.AdminUser)
+	if err != nil {
+		return nil, err
+	}
+	if input.EventID == 0 {
+		return nil, ErrInvalidAdminInput
+	}
+
+	event, err := s.AdminEventRepo.FindAdminEventByID(ctx, input.EventID, organizerID)
+	if err != nil {
+		return nil, err
+	}
+
+	if input.Name != nil {
+		name := strings.TrimSpace(*input.Name)
+		if name == "" {
+			return nil, ErrInvalidAdminInput
+		}
+		event.Name = name
+	}
+	if input.Venue != nil {
+		venue := strings.TrimSpace(*input.Venue)
+		if venue == "" {
+			return nil, ErrInvalidAdminInput
+		}
+		event.Venue = venue
+	}
+	if input.OrganizerID != nil {
+		if organizerID != nil {
+			if *input.OrganizerID != event.OrganizerID {
+				return nil, ErrForbidden
+			}
+		} else {
+			if _, err := s.OrganizerRepo.FindByID(ctx, *input.OrganizerID); err != nil {
+				return nil, err
+			}
+			event.OrganizerID = *input.OrganizerID
+		}
+	}
+	if input.Status != nil {
+		if *input.Status < domain.EventStatusDraft || *input.Status > domain.EventStatusEnded {
+			return nil, ErrInvalidAdminInput
+		}
+		if *input.Status == domain.EventStatusOnSale {
+			return nil, ErrInvalidAdminInput
+		}
+		event.Status = *input.Status
+	}
+	if input.StartAt != nil {
+		event.StartAt = *input.StartAt
+	}
+	if input.EndAt != nil {
+		event.EndAt = *input.EndAt
+	}
+	if input.SaleStartAt != nil {
+		event.SaleStartAt = *input.SaleStartAt
+	}
+	if input.SaleEndAt != nil {
+		event.SaleEndAt = *input.SaleEndAt
+	}
+	if event.Name == "" || event.Venue == "" || event.StartAt.IsZero() || event.EndAt.IsZero() || event.SaleStartAt.IsZero() || event.SaleEndAt.IsZero() {
+		return nil, ErrInvalidAdminInput
+	}
+	if !event.StartAt.Before(event.EndAt) || !event.SaleStartAt.Before(event.SaleEndAt) {
+		return nil, ErrInvalidAdminInput
+	}
+
+	event.UpdatedAt = time.Now()
+	if err := s.AdminEventRepo.UpdateAdminEvent(ctx, event); err != nil {
+		return nil, err
+	}
+	if err := s.writeAdminAuditLog(ctx, input.AdminUser, "EVENT_UPDATE", "EVENT", event.ID, "update event", input.IPAddress, input.UserAgent); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
 func (s *AdminService) GetEvent(ctx context.Context, adminUser *domain.AdminUser, eventID int64) (*domain.Event, error) {
 	organizerID, err := adminOrganizerScope(adminUser)
 	if err != nil {
@@ -321,6 +575,82 @@ func (s *AdminService) CreateEventSection(ctx context.Context, input CreateAdmin
 		UpdatedAt:     time.Now(),
 	}
 	if err := s.AdminEventRepo.CreateAdminEventSection(ctx, input.EventID, organizerID, section); err != nil {
+		return nil, err
+	}
+	return section, nil
+}
+
+func (s *AdminService) UpdateEventSection(ctx context.Context, input UpdateAdminSectionInput) (*domain.Section, error) {
+	organizerID, err := adminOrganizerScope(input.AdminUser)
+	if err != nil {
+		return nil, err
+	}
+	if input.EventID == 0 || input.SectionID == 0 {
+		return nil, ErrInvalidAdminInput
+	}
+
+	if _, err := s.AdminEventRepo.FindAdminEventByID(ctx, input.EventID, organizerID); err != nil {
+		return nil, err
+	}
+	sections, err := s.AdminEventRepo.ListAdminEventSections(ctx, input.EventID, organizerID)
+	if err != nil {
+		return nil, err
+	}
+
+	var section *domain.Section
+	for index := range sections {
+		if sections[index].ID == input.SectionID {
+			section = &sections[index]
+			break
+		}
+	}
+	if section == nil {
+		return nil, repository.ErrSectionNotFound
+	}
+
+	if input.Name != nil {
+		name := strings.TrimSpace(*input.Name)
+		if name == "" {
+			return nil, ErrInvalidAdminInput
+		}
+		section.Name = name
+	}
+	if input.Price != nil {
+		if *input.Price < 0 {
+			return nil, ErrInvalidAdminInput
+		}
+		section.Price = *input.Price
+	}
+	if input.TotalQuantity != nil {
+		if *input.TotalQuantity <= 0 {
+			return nil, ErrInvalidAdminInput
+		}
+		section.TotalQuantity = *input.TotalQuantity
+	}
+	if input.PurchaseLimit != nil {
+		if *input.PurchaseLimit <= 0 {
+			return nil, ErrInvalidAdminInput
+		}
+		section.PurchaseLimit = *input.PurchaseLimit
+	}
+	if input.Status != nil {
+		if *input.Status < domain.SectionStatusActive || *input.Status > domain.SectionStatusSoldOut {
+			return nil, ErrInvalidAdminInput
+		}
+		section.Status = *input.Status
+	}
+	if section.TotalQuantity < section.ReservedQuantity+section.SoldQuantity {
+		return nil, ErrInvalidAdminInput
+	}
+	if section.PurchaseLimit > section.TotalQuantity {
+		return nil, ErrInvalidAdminInput
+	}
+
+	section.UpdatedAt = time.Now()
+	if err := s.AdminEventRepo.UpdateAdminEventSection(ctx, input.EventID, organizerID, section); err != nil {
+		return nil, err
+	}
+	if err := s.writeAdminAuditLog(ctx, input.AdminUser, "SECTION_UPDATE", "SECTION", section.ID, "update section", input.IPAddress, input.UserAgent); err != nil {
 		return nil, err
 	}
 	return section, nil
@@ -387,6 +717,22 @@ func (s *AdminService) RevealOrderSensitive(ctx context.Context, input RevealOrd
 	}
 
 	return order, nil
+}
+
+func (s *AdminService) writeAdminAuditLog(ctx context.Context, adminUser *domain.AdminUser, action string, targetType string, targetID int64, reason string, ipAddress *string, userAgent *string) error {
+	if s.AdminAuditLogRepo == nil || adminUser == nil {
+		return nil
+	}
+
+	return s.AdminAuditLogRepo.Create(ctx, &domain.AdminAuditLog{
+		AdminUserID: adminUser.ID,
+		Action:      action,
+		TargetType:  targetType,
+		TargetID:    targetID,
+		Reason:      &reason,
+		IPAddress:   ipAddress,
+		UserAgent:   userAgent,
+	})
 }
 
 func normalizeAdminListLimit(limit int) int {

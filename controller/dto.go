@@ -51,8 +51,22 @@ type CreateAdminUserRequest struct {
 	Role        string `json:"role"`
 }
 
+type UpdateAdminUserRequest struct {
+	OrganizerID *int64  `json:"organizer_id,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Email       *string `json:"email,omitempty"`
+	Password    *string `json:"password,omitempty"`
+	Role        *string `json:"role,omitempty"`
+	Status      *int8   `json:"status,omitempty"`
+}
+
 type CreateOrganizerRequest struct {
 	Name string `json:"name"`
+}
+
+type UpdateOrganizerRequest struct {
+	Name   *string `json:"name,omitempty"`
+	Status *int8   `json:"status,omitempty"`
 }
 
 type CreateAdminEventRequest struct {
@@ -66,12 +80,31 @@ type CreateAdminEventRequest struct {
 	SaleEndAt   string `json:"sale_end_at"`
 }
 
+type UpdateAdminEventRequest struct {
+	OrganizerID *int64  `json:"organizer_id,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Venue       *string `json:"venue,omitempty"`
+	Status      *int8   `json:"status,omitempty"`
+	StartAt     *string `json:"start_at,omitempty"`
+	EndAt       *string `json:"end_at,omitempty"`
+	SaleStartAt *string `json:"sale_start_at,omitempty"`
+	SaleEndAt   *string `json:"sale_end_at,omitempty"`
+}
+
 type CreateAdminSectionRequest struct {
 	Name          string `json:"name"`
 	Price         int64  `json:"price"`
 	TotalQuantity int    `json:"total_quantity"`
 	PurchaseLimit int    `json:"purchase_limit"`
 	Status        int8   `json:"status,omitempty"`
+}
+
+type UpdateAdminSectionRequest struct {
+	Name          *string `json:"name,omitempty"`
+	Price         *int64  `json:"price,omitempty"`
+	TotalQuantity *int    `json:"total_quantity,omitempty"`
+	PurchaseLimit *int    `json:"purchase_limit,omitempty"`
+	Status        *int8   `json:"status,omitempty"`
 }
 
 type CreateOrderRequest struct {

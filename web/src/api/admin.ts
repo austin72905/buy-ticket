@@ -15,6 +15,10 @@ import type {
   CreateOrganizerRequest,
   OrganizerResponse,
   RevealSensitiveRequest,
+  UpdateAdminUserRequest,
+  UpdateAdminEventRequest,
+  UpdateAdminSectionRequest,
+  UpdateOrganizerRequest,
 } from '../types/admin'
 
 export async function adminLogin(payload: AdminLoginRequest) {
@@ -41,6 +45,11 @@ export async function createAdminUser(payload: CreateAdminUserRequest) {
   return data
 }
 
+export async function updateAdminUser(adminUserId: number, payload: UpdateAdminUserRequest) {
+  const { data } = await http.patch<AdminUserResponse>(`/admin/users/${adminUserId}`, payload)
+  return data
+}
+
 export async function listOrganizers() {
   const { data } = await http.get<OrganizerResponse[]>('/admin/organizers')
   return data
@@ -48,6 +57,11 @@ export async function listOrganizers() {
 
 export async function createOrganizer(payload: CreateOrganizerRequest) {
   const { data } = await http.post<OrganizerResponse>('/admin/organizers', payload)
+  return data
+}
+
+export async function updateOrganizer(organizerId: number, payload: UpdateOrganizerRequest) {
+  const { data } = await http.patch<OrganizerResponse>(`/admin/organizers/${organizerId}`, payload)
   return data
 }
 
@@ -79,6 +93,11 @@ export async function getAdminEvent(eventId: number) {
   return data
 }
 
+export async function updateAdminEvent(eventId: number, payload: UpdateAdminEventRequest) {
+  const { data } = await http.patch<AdminEventResponse>(`/admin/events/${eventId}`, payload)
+  return data
+}
+
 export async function listAdminEventSections(eventId: number) {
   const { data } = await http.get<AdminSectionResponse[]>(`/admin/events/${eventId}/sections`)
   return data
@@ -86,6 +105,14 @@ export async function listAdminEventSections(eventId: number) {
 
 export async function createAdminEventSection(eventId: number, payload: CreateAdminSectionRequest) {
   const { data } = await http.post<AdminSectionResponse>(`/admin/events/${eventId}/sections`, payload)
+  return data
+}
+
+export async function updateAdminEventSection(eventId: number, sectionId: number, payload: UpdateAdminSectionRequest) {
+  const { data } = await http.patch<AdminSectionResponse>(
+    `/admin/events/${eventId}/sections/${sectionId}`,
+    payload,
+  )
   return data
 }
 

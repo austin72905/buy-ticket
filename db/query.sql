@@ -111,6 +111,28 @@ RETURNING
     created_at,
     updated_at;
 
+-- name: UpdateAdminUser :one
+UPDATE admin_users
+SET
+    organizer_id = $2,
+    name = $3,
+    email = $4,
+    password_hash = $5,
+    role = $6,
+    status = $7,
+    updated_at = $8
+WHERE id = $1
+RETURNING
+    id,
+    organizer_id,
+    name,
+    email,
+    password_hash,
+    role,
+    status,
+    created_at,
+    updated_at;
+
 -- name: GetOrganizerByID :one
 SELECT
     id,
@@ -139,6 +161,20 @@ INSERT INTO organizers (
 ) VALUES (
     $1, $2
 )
+RETURNING
+    id,
+    name,
+    status,
+    created_at,
+    updated_at;
+
+-- name: UpdateOrganizer :one
+UPDATE organizers
+SET
+    name = $2,
+    status = $3,
+    updated_at = $4
+WHERE id = $1
 RETURNING
     id,
     name,
@@ -309,6 +345,32 @@ WHERE
     )
     OR (status = 3 AND sale_end_at < sqlc.arg(now)::timestamptz);
 
+-- name: UpdateEvent :one
+UPDATE events
+SET
+    organizer_id = $2,
+    name = $3,
+    venue = $4,
+    status = $5,
+    start_at = $6,
+    end_at = $7,
+    sale_start_at = $8,
+    sale_end_at = $9,
+    updated_at = $10
+WHERE id = $1
+RETURNING
+    id,
+    organizer_id,
+    name,
+    venue,
+    status,
+    start_at,
+    end_at,
+    sale_start_at,
+    sale_end_at,
+    created_at,
+    updated_at;
+
 -- name: GetSectionByEventAndID :one
 SELECT
     id,
@@ -383,6 +445,31 @@ INSERT INTO event_sections (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
+RETURNING
+    id,
+    event_id,
+    event_name,
+    section_name,
+    price,
+    total_quantity,
+    reserved_quantity,
+    sold_quantity,
+    purchase_limit,
+    status,
+    created_at,
+    updated_at;
+
+-- name: UpdateSection :one
+UPDATE event_sections
+SET
+    section_name = $3,
+    price = $4,
+    total_quantity = $5,
+    purchase_limit = $6,
+    status = $7,
+    updated_at = $8
+WHERE event_id = $1
+  AND id = $2
 RETURNING
     id,
     event_id,

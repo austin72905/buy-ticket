@@ -59,10 +59,14 @@ type Querier interface {
 	ListSectionsByEventID(ctx context.Context, eventID int64) ([]EventSection, error)
 	ReleaseSectionInventory(ctx context.Context, arg ReleaseSectionInventoryParams) (EventSection, error)
 	ReserveSectionInventory(ctx context.Context, arg ReserveSectionInventoryParams) (EventSection, error)
+	UpdateAdminUser(ctx context.Context, arg UpdateAdminUserParams) (AdminUser, error)
+	UpdateEvent(ctx context.Context, arg UpdateEventParams) (UpdateEventRow, error)
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) error
+	UpdateOrganizer(ctx context.Context, arg UpdateOrganizerParams) (Organizer, error)
 	UpdatePaymentAttemptStatus(ctx context.Context, arg UpdatePaymentAttemptStatusParams) error
 	UpdatePaymentStatus(ctx context.Context, arg UpdatePaymentStatusParams) error
 	UpdateReservationStatus(ctx context.Context, arg UpdateReservationStatusParams) error
+	UpdateSection(ctx context.Context, arg UpdateSectionParams) (EventSection, error)
 	UpdateSectionInventory(ctx context.Context, arg UpdateSectionInventoryParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 }

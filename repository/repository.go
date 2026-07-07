@@ -40,8 +40,10 @@ type AdminEventRepository interface {
 	ListAdminEvents(ctx context.Context, organizerID *int64) ([]domain.Event, error)
 	FindAdminEventByID(ctx context.Context, eventID int64, organizerID *int64) (*domain.Event, error)
 	CreateAdminEvent(ctx context.Context, event *domain.Event) error
+	UpdateAdminEvent(ctx context.Context, event *domain.Event) error
 	ListAdminEventSections(ctx context.Context, eventID int64, organizerID *int64) ([]domain.Section, error)
 	CreateAdminEventSection(ctx context.Context, eventID int64, organizerID *int64, section *domain.Section) error
+	UpdateAdminEventSection(ctx context.Context, eventID int64, organizerID *int64, section *domain.Section) error
 }
 
 type EventRepository interface {
