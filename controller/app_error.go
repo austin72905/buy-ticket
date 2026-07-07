@@ -12,6 +12,7 @@ type AppError struct {
 	Code       string
 	Message    string
 	HTTPStatus int
+	RequestID  string
 }
 
 func newAppError(fallbackStatus int, err error) AppError {

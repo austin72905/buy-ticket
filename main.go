@@ -200,6 +200,7 @@ func registerHTTPServer(
 	bookingController.QueueJoinRetryAfter = queueJoinRetryAfter(runtime)
 
 	router := runtime.Web.Router()
+	router.Use(controller.RecoveryMiddleware())
 	router.Use(controller.AttachCurrentUser(authService, sessionStore))
 	docs.SwaggerInfo.BasePath = "/"
 	router.GET("/healthz", func(ctx *gin.Context) {

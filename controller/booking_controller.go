@@ -834,9 +834,11 @@ func hashPaymentRequest(request PayOrderRequest) (string, error) {
 
 func writeError(ctx *gin.Context, statusCode int, err error) {
 	appErr := newAppError(statusCode, err)
+	appErr.RequestID = requestID(ctx)
 	ctx.JSON(appErr.HTTPStatus, ErrorResponse{
-		Code:    appErr.Code,
-		Message: appErr.Message,
+		Code:      appErr.Code,
+		Message:   appErr.Message,
+		RequestID: appErr.RequestID,
 	})
 }
 
