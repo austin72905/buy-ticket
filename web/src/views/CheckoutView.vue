@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import InputNumber from 'primevue/inputnumber'
@@ -24,12 +24,25 @@ const selectedAvailability = computed(
 const selectedSection = computed(
   () => flow.sections.find((section) => section.id === flow.selectedSectionId) ?? null,
 )
+const selectedPurchaseLimit = computed(() => selectedSection.value?.purchase_limit ?? 0)
+const selectedQuantityLimit = computed(() => {
+  if (!selectedAvailability.value || !selectedSection.value) return 0
+  return Math.min(selectedAvailability.value.available_quantity, selectedSection.value.purchase_limit)
+})
+const quantityInputMax = computed(() => Math.max(1, selectedQuantityLimit.value))
 const totalAmount = computed(() => (selectedSection.value ? selectedSection.value.price * quantity.value : 0))
 const selectedSectionActive = computed(() =>
   selectedAvailability.value ? isSectionSelectable(selectedAvailability.value) : false,
 )
 const canReserve = computed(() =>
-  Boolean(flow.purchaseToken && flow.selectedSectionId && selectedSectionActive.value && quantity.value > 0),
+  Boolean(
+    flow.purchaseToken &&
+      flow.selectedSectionId &&
+      selectedSectionActive.value &&
+      selectedQuantityLimit.value > 0 &&
+      quantity.value > 0 &&
+      quantity.value <= selectedQuantityLimit.value,
+  ),
 )
 
 function formatDateTime(value?: string) {
@@ -79,6 +92,8 @@ async function load() {
 }
 
 async function reserve() {
+  if (!canReserve.value) return
+
   try {
     await flow.reserveTicketAction({
       quantity: quantity.value,
@@ -93,6 +108,21 @@ async function reserve() {
 function backToQueue() {
   router.push(`/events/${eventId.value}/info`)
 }
+
+watch([selectedQuantityLimit, selectedSectionActive], () => {
+  if (!selectedSectionActive.value || selectedQuantityLimit.value <= 0) {
+    quantity.value = 1
+    return
+  }
+
+  if (quantity.value > selectedQuantityLimit.value) {
+    quantity.value = selectedQuantityLimit.value
+  }
+
+  if (quantity.value < 1) {
+    quantity.value = 1
+  }
+})
 
 onMounted(load)
 </script>
@@ -204,10 +234,17 @@ onMounted(load)
               <InputNumber
                 v-model="quantity"
                 :min="1"
-                :max="Math.max(1, selectedAvailability?.available_quantity ?? 1)"
+                :max="quantityInputMax"
+                :disabled="!selectedSectionActive || selectedQuantityLimit <= 0"
                 show-buttons
                 button-layout="horizontal"
               />
+            </div>
+            <div class="order-line">
+              <span>Limit</span>
+              <strong>
+                {{ selectedPurchaseLimit > 0 ? `每人限購 ${selectedPurchaseLimit} 張` : '-' }}
+              </strong>
             </div>
             <div class="order-line">
               <span>Total</span>
@@ -225,6 +262,10 @@ onMounted(load)
           <p class="small-muted">
             Backend connected: queue token, purchase token, and reservation hold.
             Available left: {{ selectedAvailability ? availableBySection(selectedAvailability.section_id) : '-' }}
+          </p>
+          <p v-if="selectedAvailability" class="small-muted">
+            Max selectable quantity:
+            {{ selectedQuantityLimit > 0 ? selectedQuantityLimit : '-' }}
           </p>
         </aside>
       </div>
