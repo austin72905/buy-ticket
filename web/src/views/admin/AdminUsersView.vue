@@ -6,17 +6,21 @@ import AdminDataTable from '../../components/admin/AdminDataTable.vue'
 import AdminShell from '../../layouts/AdminShell.vue'
 import AdminStateBanner from '../../components/admin/AdminStateBanner.vue'
 import AdminStatusTag from '../../components/admin/AdminStatusTag.vue'
+import { AdminStatus, normalizeAdminStatus } from '../../lib/statusValues'
 import { useAdminBackofficeStore } from '../../stores/adminBackoffice'
+import type { AdminUserResponse } from '../../types/admin'
 
 const backoffice = useAdminBackofficeStore()
-const columns = ['ID', 'Name', 'Email', 'Role', 'Status', 'Organizer', 'Created']
+const columns = ['ID', 'Name', 'Email', 'Role', 'Status', 'Organizer', 'Created', 'Actions']
 const showCreate = ref(false)
+const editingUser = ref<AdminUserResponse | null>(null)
 const form = ref({
   name: '',
   email: '',
   password: '',
   role: 'EVENT_ADMIN',
   organizerId: '',
+  status: 1,
 })
 
 function formatDateTime(value?: string) {
@@ -37,13 +41,37 @@ function optionalNumber(value: string) {
 }
 
 function resetForm() {
+  editingUser.value = null
   form.value = {
     name: '',
     email: '',
     password: '',
     role: 'EVENT_ADMIN',
     organizerId: '',
+    status: 1,
   }
+}
+
+function adminStatusToNumber(status: string) {
+  return normalizeAdminStatus(status) === AdminStatus.Disabled ? 2 : 1
+}
+
+function openCreate() {
+  resetForm()
+  showCreate.value = true
+}
+
+function openEdit(user: AdminUserResponse) {
+  editingUser.value = user
+  form.value = {
+    name: user.name,
+    email: user.email,
+    password: '',
+    role: user.role,
+    organizerId: user.organizer_id ? String(user.organizer_id) : '',
+    status: adminStatusToNumber(user.status),
+  }
+  showCreate.value = true
 }
 
 async function load() {
@@ -52,15 +80,28 @@ async function load() {
   } catch {}
 }
 
-async function createUser() {
+async function submitUser() {
   try {
-    await backoffice.saveAdminUser({
+    const payload = {
       name: form.value.name,
       email: form.value.email,
-      password: form.value.password,
       role: form.value.role,
       organizer_id: optionalNumber(form.value.organizerId),
-    })
+      status: form.value.status,
+    }
+
+    if (editingUser.value) {
+      await backoffice.editAdminUser(editingUser.value.id, {
+        ...payload,
+        password: form.value.password.trim() ? form.value.password : undefined,
+      })
+    } else {
+      await backoffice.saveAdminUser({
+        ...payload,
+        password: form.value.password,
+      })
+    }
+
     showCreate.value = false
     resetForm()
   } catch {}
@@ -79,7 +120,7 @@ onMounted(load)
           <p class="small-muted">Manage backoffice accounts. This page uses the Swagger admin-users API.</p>
         </div>
         <div class="admin-actions">
-          <Button label="New User" severity="danger" @click="showCreate = true" />
+          <Button label="New User" severity="danger" @click="openCreate" />
           <Button
             label="Refresh"
             icon="pi pi-refresh"
@@ -107,18 +148,21 @@ onMounted(load)
           <td><AdminStatusTag :status="user.status" kind="admin" /></td>
           <td>{{ user.organizer_id ?? '-' }}</td>
           <td>{{ formatDateTime(user.created_at) }}</td>
+          <td>
+            <Button label="Edit" severity="secondary" size="small" outlined @click="openEdit(user)" />
+          </td>
         </tr>
       </AdminDataTable>
     </section>
 
     <div v-if="showCreate" class="admin-modal-backdrop">
-      <form class="admin-modal" @submit.prevent="createUser">
+      <form class="admin-modal" @submit.prevent="submitUser">
         <header class="admin-modal-header">
           <div>
-            <h2>New Admin User</h2>
-            <p class="small-muted">SUPER_ADMIN can create SUPER_ADMIN or EVENT_ADMIN accounts.</p>
+            <h2>{{ editingUser ? 'Edit Admin User' : 'New Admin User' }}</h2>
+            <p class="small-muted">Leave password blank when editing to keep the current password.</p>
           </div>
-          <Button label="Close" severity="secondary" outlined type="button" @click="showCreate = false" />
+          <Button label="Close" severity="secondary" outlined type="button" @click="showCreate = false; resetForm()" />
         </header>
 
         <div class="admin-modal-body">
@@ -132,7 +176,7 @@ onMounted(load)
           </label>
           <label class="admin-field">
             <span>Password</span>
-            <input v-model="form.password" class="plain-input" type="password" required />
+            <input v-model="form.password" class="plain-input" type="password" :required="!editingUser" />
           </label>
           <label class="admin-field">
             <span>Role</span>
@@ -150,12 +194,24 @@ onMounted(load)
               </option>
             </select>
           </label>
+          <label v-if="editingUser" class="admin-field">
+            <span>Status</span>
+            <select v-model.number="form.status" class="plain-input">
+              <option :value="1">Active</option>
+              <option :value="2">Disabled</option>
+            </select>
+          </label>
           <p v-if="backoffice.getError('saveUser')" class="admin-error">{{ backoffice.getError('saveUser') }}</p>
         </div>
 
         <footer class="admin-modal-actions">
-          <Button label="Cancel" severity="secondary" outlined type="button" @click="showCreate = false" />
-          <Button label="Create" severity="danger" type="submit" :loading="backoffice.isPending('saveUser')" />
+          <Button label="Cancel" severity="secondary" outlined type="button" @click="showCreate = false; resetForm()" />
+          <Button
+            :label="editingUser ? 'Save' : 'Create'"
+            severity="danger"
+            type="submit"
+            :loading="backoffice.isPending('saveUser')"
+          />
         </footer>
       </form>
     </div>

@@ -7,8 +7,10 @@ import AdminDataTable from '../../components/admin/AdminDataTable.vue'
 import AdminShell from '../../layouts/AdminShell.vue'
 import AdminStateBanner from '../../components/admin/AdminStateBanner.vue'
 import AdminStatusTag from '../../components/admin/AdminStatusTag.vue'
+import { EventStatus, normalizeEventStatus } from '../../lib/statusValues'
 import { useAdminAuthStore } from '../../stores/adminAuth'
 import { useAdminBackofficeStore } from '../../stores/adminBackoffice'
+import type { AdminEventResponse } from '../../types/admin'
 
 const router = useRouter()
 const backoffice = useAdminBackofficeStore()
@@ -16,6 +18,7 @@ const adminAuth = useAdminAuthStore()
 
 const columns = ['ID', 'Name', 'Venue', 'Status', 'Organizer', 'Start', 'Sale Start', 'Sale End', 'Actions']
 const showCreate = ref(false)
+const editingEvent = ref<AdminEventResponse | null>(null)
 const form = ref({
   name: '',
   venue: '',
@@ -48,7 +51,23 @@ function optionalNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
+function toDateTimeInput(value: string) {
+  if (!value) return ''
+  const date = new Date(value)
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16)
+}
+
+function eventStatusToNumber(status: string) {
+  const normalized = normalizeEventStatus(status)
+  if (normalized === EventStatus.Published) return 2
+  if (normalized === EventStatus.OnSale) return 3
+  if (normalized === EventStatus.Ended) return 4
+  return 1
+}
+
 function resetForm() {
+  editingEvent.value = null
   form.value = {
     name: '',
     venue: '',
@@ -61,6 +80,26 @@ function resetForm() {
   }
 }
 
+function openCreate() {
+  resetForm()
+  showCreate.value = true
+}
+
+function openEdit(event: AdminEventResponse) {
+  editingEvent.value = event
+  form.value = {
+    name: event.name,
+    venue: event.venue,
+    organizerId: String(event.organizer_id),
+    status: eventStatusToNumber(event.status),
+    startAt: toDateTimeInput(event.start_at),
+    endAt: toDateTimeInput(event.end_at),
+    saleStartAt: toDateTimeInput(event.sale_start_at),
+    saleEndAt: toDateTimeInput(event.sale_end_at),
+  }
+  showCreate.value = true
+}
+
 async function load() {
   try {
     await Promise.all([
@@ -70,9 +109,9 @@ async function load() {
   } catch {}
 }
 
-async function createEvent() {
+async function submitEvent() {
   try {
-    await backoffice.saveEvent({
+    const payload = {
       name: form.value.name,
       venue: form.value.venue,
       organizer_id: optionalNumber(form.value.organizerId),
@@ -81,7 +120,14 @@ async function createEvent() {
       end_at: toRFC3339(form.value.endAt),
       sale_start_at: toRFC3339(form.value.saleStartAt),
       sale_end_at: toRFC3339(form.value.saleEndAt),
-    })
+    }
+
+    if (editingEvent.value) {
+      await backoffice.editEvent(editingEvent.value.id, payload)
+    } else {
+      await backoffice.saveEvent(payload)
+    }
+
     showCreate.value = false
     resetForm()
   } catch {}
@@ -100,7 +146,7 @@ onMounted(load)
           <p class="small-muted">View and create events from the admin-events API.</p>
         </div>
         <div class="admin-actions">
-          <Button label="New Event" severity="danger" @click="showCreate = true" />
+          <Button label="New Event" severity="danger" @click="openCreate" />
           <Button
             label="Refresh"
             icon="pi pi-refresh"
@@ -130,20 +176,23 @@ onMounted(load)
           <td>{{ formatDateTime(event.sale_start_at) }}</td>
           <td>{{ formatDateTime(event.sale_end_at) }}</td>
           <td>
-            <Button label="Sections" severity="danger" size="small" @click="router.push(`/admin/events/${event.id}`)" />
+            <div class="admin-actions">
+              <Button label="Edit" severity="secondary" size="small" outlined @click="openEdit(event)" />
+              <Button label="Sections" severity="danger" size="small" @click="router.push(`/admin/events/${event.id}`)" />
+            </div>
           </td>
         </tr>
       </AdminDataTable>
     </section>
 
     <div v-if="showCreate" class="admin-modal-backdrop">
-      <form class="admin-modal" @submit.prevent="createEvent">
+      <form class="admin-modal" @submit.prevent="submitEvent">
         <header class="admin-modal-header">
           <div>
-            <h2>New Event</h2>
+            <h2>{{ editingEvent ? 'Edit Event' : 'New Event' }}</h2>
             <p class="small-muted">Datetime fields are submitted as RFC3339 timestamps.</p>
           </div>
-          <Button label="Close" severity="secondary" outlined type="button" @click="showCreate = false" />
+          <Button label="Close" severity="secondary" outlined type="button" @click="showCreate = false; resetForm()" />
         </header>
 
         <div class="admin-modal-body">
@@ -193,8 +242,13 @@ onMounted(load)
         </div>
 
         <footer class="admin-modal-actions">
-          <Button label="Cancel" severity="secondary" outlined type="button" @click="showCreate = false" />
-          <Button label="Create" severity="danger" type="submit" :loading="backoffice.isPending('saveEvent')" />
+          <Button label="Cancel" severity="secondary" outlined type="button" @click="showCreate = false; resetForm()" />
+          <Button
+            :label="editingEvent ? 'Save' : 'Create'"
+            severity="danger"
+            type="submit"
+            :loading="backoffice.isPending('saveEvent')"
+          />
         </footer>
       </form>
     </div>

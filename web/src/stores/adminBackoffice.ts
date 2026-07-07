@@ -14,6 +14,10 @@ import {
   listOrganizers,
   listAdminOrders,
   revealAdminOrderSensitive,
+  updateAdminEvent,
+  updateAdminEventSection,
+  updateAdminUser,
+  updateOrganizer,
 } from '../api/admin'
 import type {
   AdminAuditLogResponse,
@@ -29,6 +33,10 @@ import type {
   CreateAdminUserRequest,
   CreateOrganizerRequest,
   OrganizerResponse,
+  UpdateAdminEventRequest,
+  UpdateAdminSectionRequest,
+  UpdateAdminUserRequest,
+  UpdateOrganizerRequest,
 } from '../types/admin'
 
 type AdminTaskKey =
@@ -180,6 +188,15 @@ export const useAdminBackofficeStore = defineStore('adminBackoffice', () => {
     return created
   }
 
+  async function editEvent(eventId: number, payload: UpdateAdminEventRequest) {
+    const updated = await runTask('saveEvent', () => updateAdminEvent(eventId, payload))
+    events.value = events.value.map((event) => (event.id === eventId ? updated : event))
+    if (selectedEvent.value?.id === eventId) {
+      selectedEvent.value = updated
+    }
+    return updated
+  }
+
   async function loadEventDetail(eventId: number) {
     const [event, sections] = await runTask('eventDetail', () =>
       Promise.all([getAdminEvent(eventId), listAdminEventSections(eventId)]),
@@ -194,6 +211,12 @@ export const useAdminBackofficeStore = defineStore('adminBackoffice', () => {
     return created
   }
 
+  async function editSection(eventId: number, sectionId: number, payload: UpdateAdminSectionRequest) {
+    const updated = await runTask('saveSection', () => updateAdminEventSection(eventId, sectionId, payload))
+    selectedSections.value = selectedSections.value.map((section) => (section.id === sectionId ? updated : section))
+    return updated
+  }
+
   async function loadAdminUsers() {
     adminUsers.value = await runTask('users', listAdminUsers)
   }
@@ -204,6 +227,12 @@ export const useAdminBackofficeStore = defineStore('adminBackoffice', () => {
     return created
   }
 
+  async function editAdminUser(adminUserId: number, payload: UpdateAdminUserRequest) {
+    const updated = await runTask('saveUser', () => updateAdminUser(adminUserId, payload))
+    adminUsers.value = adminUsers.value.map((adminUser) => (adminUser.id === adminUserId ? updated : adminUser))
+    return updated
+  }
+
   async function loadOrganizers() {
     organizers.value = await runTask('organizers', listOrganizers)
   }
@@ -212,6 +241,12 @@ export const useAdminBackofficeStore = defineStore('adminBackoffice', () => {
     const created = await runTask('saveOrganizer', () => createOrganizer(payload))
     organizers.value = [created, ...organizers.value]
     return created
+  }
+
+  async function editOrganizer(organizerId: number, payload: UpdateOrganizerRequest) {
+    const updated = await runTask('saveOrganizer', () => updateOrganizer(organizerId, payload))
+    organizers.value = organizers.value.map((organizer) => (organizer.id === organizerId ? updated : organizer))
+    return updated
   }
 
   async function loadAuditLogs() {
@@ -254,6 +289,10 @@ export const useAdminBackofficeStore = defineStore('adminBackoffice', () => {
     clearError,
     clearReveal,
     errors,
+    editAdminUser,
+    editEvent,
+    editOrganizer,
+    editSection,
     events,
     getError,
     isPending,

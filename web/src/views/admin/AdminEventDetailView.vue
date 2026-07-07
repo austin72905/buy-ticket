@@ -7,7 +7,9 @@ import AdminDataTable from '../../components/admin/AdminDataTable.vue'
 import AdminShell from '../../layouts/AdminShell.vue'
 import AdminStateBanner from '../../components/admin/AdminStateBanner.vue'
 import AdminStatusTag from '../../components/admin/AdminStatusTag.vue'
+import { SectionStatus, normalizeSectionStatus } from '../../lib/statusValues'
 import { useAdminBackofficeStore } from '../../stores/adminBackoffice'
+import type { AdminSectionResponse } from '../../types/admin'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,6 +17,7 @@ const backoffice = useAdminBackofficeStore()
 
 const eventId = computed(() => Number(route.params.eventId))
 const showCreate = ref(false)
+const editingSection = ref<AdminSectionResponse | null>(null)
 const form = ref({
   name: '',
   price: 1,
@@ -32,6 +35,7 @@ const columns = [
   'Available',
   'Limit',
   'Status',
+  'Actions',
 ]
 
 function formatCurrency(value?: number) {
@@ -43,6 +47,7 @@ function formatCurrency(value?: number) {
 }
 
 function resetForm() {
+  editingSection.value = null
   form.value = {
     name: '',
     price: 1,
@@ -52,21 +57,52 @@ function resetForm() {
   }
 }
 
+function sectionStatusToNumber(status: string) {
+  const normalized = normalizeSectionStatus(status)
+  if (normalized === SectionStatus.Inactive) return 2
+  if (normalized === SectionStatus.SoldOut) return 3
+  return 1
+}
+
+function openCreate() {
+  resetForm()
+  showCreate.value = true
+}
+
+function openEdit(section: AdminSectionResponse) {
+  editingSection.value = section
+  form.value = {
+    name: section.name,
+    price: section.price,
+    totalQuantity: section.total_quantity,
+    purchaseLimit: section.purchase_limit,
+    status: sectionStatusToNumber(section.status),
+  }
+  showCreate.value = true
+}
+
 async function load() {
   try {
     await backoffice.loadEventDetail(eventId.value)
   } catch {}
 }
 
-async function createSection() {
+async function submitSection() {
   try {
-    await backoffice.saveSection(eventId.value, {
+    const payload = {
       name: form.value.name,
       price: Number(form.value.price),
       total_quantity: Number(form.value.totalQuantity),
       purchase_limit: Number(form.value.purchaseLimit),
       status: form.value.status,
-    })
+    }
+
+    if (editingSection.value) {
+      await backoffice.editSection(eventId.value, editingSection.value.id, payload)
+    } else {
+      await backoffice.saveSection(eventId.value, payload)
+    }
+
     showCreate.value = false
     resetForm()
   } catch {}
@@ -86,7 +122,7 @@ onMounted(load)
         </div>
         <div class="admin-actions">
           <Button label="Back" severity="secondary" outlined @click="router.push('/admin/events')" />
-          <Button label="New Section" severity="danger" @click="showCreate = true" />
+          <Button label="New Section" severity="danger" @click="openCreate" />
           <Button label="Refresh" severity="secondary" icon="pi pi-refresh" :loading="backoffice.isPending('eventDetail')" @click="load" />
         </div>
       </header>
@@ -114,18 +150,21 @@ onMounted(load)
           <td>{{ section.available_quantity }}</td>
           <td>{{ section.purchase_limit }}</td>
           <td><AdminStatusTag :status="section.status" kind="section" /></td>
+          <td>
+            <Button label="Edit" severity="secondary" size="small" outlined @click="openEdit(section)" />
+          </td>
         </tr>
       </AdminDataTable>
     </section>
 
     <div v-if="showCreate" class="admin-modal-backdrop">
-      <form class="admin-modal" @submit.prevent="createSection">
+      <form class="admin-modal" @submit.prevent="submitSection">
         <header class="admin-modal-header">
           <div>
-            <h2>New Section</h2>
+            <h2>{{ editingSection ? 'Edit Section' : 'New Section' }}</h2>
             <p class="small-muted">Create a section under this event.</p>
           </div>
-          <Button label="Close" severity="secondary" outlined type="button" @click="showCreate = false" />
+          <Button label="Close" severity="secondary" outlined type="button" @click="showCreate = false; resetForm()" />
         </header>
 
         <div class="admin-modal-body">
@@ -159,8 +198,13 @@ onMounted(load)
         </div>
 
         <footer class="admin-modal-actions">
-          <Button label="Cancel" severity="secondary" outlined type="button" @click="showCreate = false" />
-          <Button label="Create" severity="danger" type="submit" :loading="backoffice.isPending('saveSection')" />
+          <Button label="Cancel" severity="secondary" outlined type="button" @click="showCreate = false; resetForm()" />
+          <Button
+            :label="editingSection ? 'Save' : 'Create'"
+            severity="danger"
+            type="submit"
+            :loading="backoffice.isPending('saveSection')"
+          />
         </footer>
       </form>
     </div>
