@@ -85,6 +85,23 @@ func (r *MemoryAdminUserRepository) FindByEmail(ctx context.Context, email strin
 	return &cloned, nil
 }
 
+func (r *MemoryAdminUserRepository) List(ctx context.Context) ([]domain.AdminUser, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	adminUsers := make([]domain.AdminUser, 0, len(r.adminUsers))
+	for _, adminUser := range r.adminUsers {
+		cloned := *adminUser
+		adminUsers = append(adminUsers, cloned)
+	}
+
+	sort.SliceStable(adminUsers, func(i, j int) bool {
+		return adminUsers[i].ID < adminUsers[j].ID
+	})
+
+	return adminUsers, nil
+}
+
 func (r *MemoryAdminUserRepository) Save(ctx context.Context, adminUser *domain.AdminUser) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -98,6 +115,76 @@ func (r *MemoryAdminUserRepository) Save(ctx context.Context, adminUser *domain.
 
 	r.adminUsers[cloned.ID] = &cloned
 	r.emailIndex[cloned.Email] = cloned.ID
+	return nil
+}
+
+type MemoryOrganizerRepository struct {
+	mu         sync.RWMutex
+	organizers map[int64]*domain.Organizer
+	nextID     int64
+}
+
+func NewMemoryOrganizerRepository(organizers []*domain.Organizer) *MemoryOrganizerRepository {
+	repo := &MemoryOrganizerRepository{
+		organizers: make(map[int64]*domain.Organizer, len(organizers)),
+		nextID:     1,
+	}
+
+	var maxID int64
+	for _, organizer := range organizers {
+		cloned := *organizer
+		repo.organizers[organizer.ID] = &cloned
+		if organizer.ID > maxID {
+			maxID = organizer.ID
+		}
+	}
+
+	repo.nextID = maxID + 1
+	return repo
+}
+
+func (r *MemoryOrganizerRepository) FindByID(ctx context.Context, organizerID int64) (*domain.Organizer, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	organizer, ok := r.organizers[organizerID]
+	if !ok {
+		return nil, ErrOrganizerNotFound
+	}
+
+	cloned := *organizer
+	return &cloned, nil
+}
+
+func (r *MemoryOrganizerRepository) List(ctx context.Context) ([]domain.Organizer, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	organizers := make([]domain.Organizer, 0, len(r.organizers))
+	for _, organizer := range r.organizers {
+		cloned := *organizer
+		organizers = append(organizers, cloned)
+	}
+
+	sort.SliceStable(organizers, func(i, j int) bool {
+		return organizers[i].ID < organizers[j].ID
+	})
+
+	return organizers, nil
+}
+
+func (r *MemoryOrganizerRepository) Save(ctx context.Context, organizer *domain.Organizer) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cloned := *organizer
+	if cloned.ID == 0 {
+		cloned.ID = r.nextID
+		r.nextID++
+		organizer.ID = cloned.ID
+	}
+
+	r.organizers[cloned.ID] = &cloned
 	return nil
 }
 
@@ -238,18 +325,25 @@ func (r *MemoryUserRepository) Save(ctx context.Context, user *domain.User) erro
 type MemoryEventRepository struct {
 	mu     sync.RWMutex
 	events map[int64]*domain.Event
+	nextID int64
 }
 
 func NewMemoryEventRepository(events []*domain.Event) *MemoryEventRepository {
 	repo := &MemoryEventRepository{
 		events: make(map[int64]*domain.Event, len(events)),
+		nextID: 1,
 	}
 
+	var maxID int64
 	for _, event := range events {
 		cloned := *event
 		repo.events[event.ID] = &cloned
+		if event.ID > maxID {
+			maxID = event.ID
+		}
 	}
 
+	repo.nextID = maxID + 1
 	return repo
 }
 
@@ -312,6 +406,28 @@ func (r *MemoryEventRepository) FindAdminEventByID(ctx context.Context, eventID 
 	return &cloned, nil
 }
 
+func (r *MemoryEventRepository) CreateAdminEvent(ctx context.Context, event *domain.Event) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cloned := *event
+	if cloned.ID == 0 {
+		cloned.ID = r.nextID
+		r.nextID++
+		event.ID = cloned.ID
+	}
+	if cloned.CreatedAt.IsZero() {
+		cloned.CreatedAt = time.Now()
+	}
+	if cloned.UpdatedAt.IsZero() {
+		cloned.UpdatedAt = cloned.CreatedAt
+	}
+
+	r.events[cloned.ID] = &cloned
+	*event = cloned
+	return nil
+}
+
 func (r *MemoryEventRepository) ListAdminEventSections(ctx context.Context, eventID int64, organizerID *int64) ([]domain.Section, error) {
 	event, err := r.FindAdminEventByID(ctx, eventID, organizerID)
 	if err != nil {
@@ -325,6 +441,45 @@ func (r *MemoryEventRepository) ListAdminEventSections(ctx context.Context, even
 	}
 
 	return sections, nil
+}
+
+func (r *MemoryEventRepository) CreateAdminEventSection(ctx context.Context, eventID int64, organizerID *int64, section *domain.Section) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	event, ok := r.events[eventID]
+	if !ok {
+		return ErrEventNotFound
+	}
+	if organizerID != nil && event.OrganizerID != *organizerID {
+		return ErrEventNotFound
+	}
+
+	var maxID int64
+	for _, existingEvent := range r.events {
+		for _, existingSection := range existingEvent.Sections {
+			if existingSection.ID > maxID {
+				maxID = existingSection.ID
+			}
+		}
+	}
+
+	cloned := *section
+	cloned.EventID = eventID
+	if cloned.ID == 0 {
+		cloned.ID = maxID + 1
+		section.ID = cloned.ID
+	}
+	if cloned.CreatedAt.IsZero() {
+		cloned.CreatedAt = time.Now()
+	}
+	if cloned.UpdatedAt.IsZero() {
+		cloned.UpdatedAt = cloned.CreatedAt
+	}
+
+	event.Sections = append(event.Sections, cloned)
+	*section = cloned
+	return nil
 }
 
 type MemorySectionRepository struct {
@@ -832,7 +987,7 @@ func (r *MemoryPaymentAttemptRepository) Save(ctx context.Context, attempt *doma
 	return nil
 }
 
-func SeedSampleData() ([]*domain.User, []*domain.AdminUser, []*domain.Event, []*domain.Section) {
+func SeedSampleData() ([]*domain.User, []*domain.AdminUser, []*domain.Organizer, []*domain.Event, []*domain.Section) {
 	now := time.Now()
 
 	users := []*domain.User{
@@ -856,6 +1011,16 @@ func SeedSampleData() ([]*domain.User, []*domain.AdminUser, []*domain.Event, []*
 			Status:       domain.AdminUserStatusActive,
 			CreatedAt:    now,
 			UpdatedAt:    now,
+		},
+	}
+
+	organizers := []*domain.Organizer{
+		{
+			ID:        1,
+			Name:      "Default Organizer",
+			Status:    domain.OrganizerStatusActive,
+			CreatedAt: now,
+			UpdatedAt: now,
 		},
 	}
 
@@ -901,5 +1066,5 @@ func SeedSampleData() ([]*domain.User, []*domain.AdminUser, []*domain.Event, []*
 		},
 	}
 
-	return users, adminUsers, events, sections
+	return users, adminUsers, organizers, events, sections
 }

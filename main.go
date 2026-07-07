@@ -116,7 +116,7 @@ func (app *BuyTicketApp) Initialize() {
 	}
 	applyEnvOverrides(app.Runtime)
 
-	userRepo, adminUserRepo, adminAuditLogRepo, eventRepo, adminEventRepo, sectionRepo, reservationRepo, orderRepo, adminOrderRepo, paymentRepo, dbPool := buildRepositories(app.Runtime)
+	userRepo, adminUserRepo, organizerRepo, adminAuditLogRepo, eventRepo, adminEventRepo, sectionRepo, reservationRepo, orderRepo, adminOrderRepo, paymentRepo, dbPool := buildRepositories(app.Runtime)
 
 	bookingService := service.NewBookingService(
 		eventRepo,
@@ -156,7 +156,7 @@ func (app *BuyTicketApp) Initialize() {
 	}
 
 	if role == appRoleAll || role == appRoleAPI {
-		registerHTTPServer(app.Runtime, userRepo, adminUserRepo, adminAuditLogRepo, adminOrderRepo, adminEventRepo, bookingService, sessionStore, sessionTTL)
+		registerHTTPServer(app.Runtime, userRepo, adminUserRepo, organizerRepo, adminAuditLogRepo, adminOrderRepo, adminEventRepo, bookingService, sessionStore, sessionTTL)
 	}
 
 	log.Printf("app role configured: %s", role)
@@ -182,6 +182,7 @@ func registerHTTPServer(
 	runtime *infraapp.Runtime,
 	userRepo repository.UserRepository,
 	adminUserRepo repository.AdminUserRepository,
+	organizerRepo repository.OrganizerRepository,
 	adminAuditLogRepo repository.AdminAuditLogRepository,
 	adminOrderRepo repository.AdminOrderRepository,
 	adminEventRepo repository.AdminEventRepository,
@@ -191,7 +192,7 @@ func registerHTTPServer(
 ) {
 	authService := service.NewAuthService(userRepo)
 	adminAuthService := service.NewAdminAuthService(adminUserRepo)
-	adminService := service.NewAdminService(adminOrderRepo, adminEventRepo, adminAuditLogRepo)
+	adminService := service.NewAdminService(adminUserRepo, organizerRepo, adminOrderRepo, adminEventRepo, adminAuditLogRepo)
 	authController := controller.NewAuthController(authService, sessionStore, sessionTTL)
 	adminAuthController := controller.NewAdminAuthController(adminAuthService, sessionStore, sessionTTL)
 	adminController := controller.NewAdminController(adminAuthService, adminService, sessionStore)
@@ -545,6 +546,7 @@ func secondsProperty(runtime *infraapp.Runtime, key string, fallbackSeconds int)
 func buildRepositories(runtime *infraapp.Runtime) (
 	repository.UserRepository,
 	repository.AdminUserRepository,
+	repository.OrganizerRepository,
 	repository.AdminAuditLogRepository,
 	repository.EventRepository,
 	repository.AdminEventRepository,
@@ -564,6 +566,7 @@ func buildRepositories(runtime *infraapp.Runtime) (
 		orderRepo := repository.NewPostgresOrderRepository(queries)
 		return repository.NewPostgresUserRepository(queries),
 			repository.NewPostgresAdminUserRepository(queries),
+			repository.NewPostgresOrganizerRepository(queries),
 			repository.NewPostgresAdminAuditLogRepository(queries),
 			eventRepo,
 			eventRepo,
@@ -575,11 +578,12 @@ func buildRepositories(runtime *infraapp.Runtime) (
 			pool
 	}
 
-	users, adminUsers, events, sections := repository.SeedSampleData()
+	users, adminUsers, organizers, events, sections := repository.SeedSampleData()
 	eventRepo := repository.NewMemoryEventRepository(events)
 	orderRepo := repository.NewMemoryOrderRepository()
 	return repository.NewMemoryUserRepository(users),
 		repository.NewMemoryAdminUserRepository(adminUsers),
+		repository.NewMemoryOrganizerRepository(organizers),
 		repository.NewMemoryAdminAuditLogRepository(),
 		eventRepo,
 		eventRepo,

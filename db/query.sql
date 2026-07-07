@@ -75,6 +75,20 @@ FROM admin_users
 WHERE email = $1
 LIMIT 1;
 
+-- name: ListAdminUsers :many
+SELECT
+    id,
+    organizer_id,
+    name,
+    email,
+    password_hash,
+    role,
+    status,
+    created_at,
+    updated_at
+FROM admin_users
+ORDER BY id;
+
 -- name: CreateAdminUser :one
 INSERT INTO admin_users (
     organizer_id,
@@ -93,6 +107,41 @@ RETURNING
     email,
     password_hash,
     role,
+    status,
+    created_at,
+    updated_at;
+
+-- name: GetOrganizerByID :one
+SELECT
+    id,
+    name,
+    status,
+    created_at,
+    updated_at
+FROM organizers
+WHERE id = $1
+LIMIT 1;
+
+-- name: ListOrganizers :many
+SELECT
+    id,
+    name,
+    status,
+    created_at,
+    updated_at
+FROM organizers
+ORDER BY id;
+
+-- name: CreateOrganizer :one
+INSERT INTO organizers (
+    name,
+    status
+) VALUES (
+    $1, $2
+)
+RETURNING
+    id,
+    name,
     status,
     created_at,
     updated_at;

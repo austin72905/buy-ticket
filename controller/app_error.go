@@ -81,6 +81,8 @@ func errorCodeForError(fallbackStatus int, err error) string {
 		return "ADMIN_DISABLED"
 	case errors.Is(err, service.ErrInvalidAdminRevealReason):
 		return "INVALID_ADMIN_REVEAL_REASON"
+	case errors.Is(err, service.ErrInvalidAdminInput):
+		return "INVALID_ADMIN_INPUT"
 	case errors.Is(err, service.ErrIdempotencyConflict):
 		return "IDEMPOTENCY_CONFLICT"
 	case errors.Is(err, service.ErrIdempotencyInProgress):
@@ -119,6 +121,8 @@ func errorCodeForError(fallbackStatus int, err error) string {
 		return "IDEMPOTENCY_KEY_NOT_FOUND"
 	case errors.Is(err, repository.ErrAdminUserNotFound):
 		return "ADMIN_USER_NOT_FOUND"
+	case errors.Is(err, repository.ErrOrganizerNotFound):
+		return "ORGANIZER_NOT_FOUND"
 	default:
 		return errorCodeForStatus(fallbackStatus)
 	}

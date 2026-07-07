@@ -43,6 +43,37 @@ type RevealSensitiveRequest struct {
 	Reason string `json:"reason"`
 }
 
+type CreateAdminUserRequest struct {
+	OrganizerID *int64 `json:"organizer_id,omitempty"`
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	Role        string `json:"role"`
+}
+
+type CreateOrganizerRequest struct {
+	Name string `json:"name"`
+}
+
+type CreateAdminEventRequest struct {
+	OrganizerID int64  `json:"organizer_id,omitempty"`
+	Name        string `json:"name"`
+	Venue       string `json:"venue"`
+	Status      int8   `json:"status,omitempty"`
+	StartAt     string `json:"start_at"`
+	EndAt       string `json:"end_at"`
+	SaleStartAt string `json:"sale_start_at"`
+	SaleEndAt   string `json:"sale_end_at"`
+}
+
+type CreateAdminSectionRequest struct {
+	Name          string `json:"name"`
+	Price         int64  `json:"price"`
+	TotalQuantity int    `json:"total_quantity"`
+	PurchaseLimit int    `json:"purchase_limit"`
+	Status        int8   `json:"status,omitempty"`
+}
+
 type CreateOrderRequest struct {
 	ReservationID int64  `json:"reservation_id"`
 	OrderNo       string `json:"order_no"`
@@ -134,6 +165,14 @@ type AdminUserResponse struct {
 	Status      int8   `json:"status"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
+}
+
+type OrganizerResponse struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Status    int8   `json:"status"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 type AdminEventResponse struct {
@@ -562,6 +601,34 @@ func newAdminUserResponse(adminUser *domain.AdminUser) AdminUserResponse {
 		CreatedAt:   adminUser.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:   adminUser.UpdatedAt.Format(time.RFC3339),
 	}
+}
+
+func newAdminUserResponses(adminUsers []domain.AdminUser) []AdminUserResponse {
+	response := make([]AdminUserResponse, 0, len(adminUsers))
+	for _, adminUser := range adminUsers {
+		adminUser := adminUser
+		response = append(response, newAdminUserResponse(&adminUser))
+	}
+	return response
+}
+
+func newOrganizerResponse(organizer *domain.Organizer) OrganizerResponse {
+	return OrganizerResponse{
+		ID:        organizer.ID,
+		Name:      organizer.Name,
+		Status:    int8(organizer.Status),
+		CreatedAt: organizer.CreatedAt.Format(time.RFC3339),
+		UpdatedAt: organizer.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func newOrganizerResponses(organizers []domain.Organizer) []OrganizerResponse {
+	response := make([]OrganizerResponse, 0, len(organizers))
+	for _, organizer := range organizers {
+		organizer := organizer
+		response = append(response, newOrganizerResponse(&organizer))
+	}
+	return response
 }
 
 func newAdminEventResponse(event domain.Event) AdminEventResponse {

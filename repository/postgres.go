@@ -25,6 +25,10 @@ type PostgresAdminUserRepository struct {
 	queries *db.Queries
 }
 
+type PostgresOrganizerRepository struct {
+	queries *db.Queries
+}
+
 type PostgresAdminAuditLogRepository struct {
 	queries *db.Queries
 }
@@ -63,6 +67,10 @@ func NewPostgresUserRepository(queries *db.Queries) *PostgresUserRepository {
 
 func NewPostgresAdminUserRepository(queries *db.Queries) *PostgresAdminUserRepository {
 	return &PostgresAdminUserRepository{queries: queries}
+}
+
+func NewPostgresOrganizerRepository(queries *db.Queries) *PostgresOrganizerRepository {
+	return &PostgresOrganizerRepository{queries: queries}
 }
 
 func NewPostgresAdminAuditLogRepository(queries *db.Queries) *PostgresAdminAuditLogRepository {
@@ -155,6 +163,25 @@ func (r *PostgresEventRepository) FindAdminEventByID(ctx context.Context, eventI
 	return toDomainEventFromGetAdminEventByID(record), nil
 }
 
+func (r *PostgresEventRepository) CreateAdminEvent(ctx context.Context, event *domain.Event) error {
+	record, err := r.queries.CreateEvent(ctx, db.CreateEventParams{
+		OrganizerID: event.OrganizerID,
+		Name:        event.Name,
+		Venue:       event.Venue,
+		Status:      int16(event.Status),
+		StartAt:     toPgTimestamp(event.StartAt),
+		EndAt:       toPgTimestamp(event.EndAt),
+		SaleStartAt: toPgTimestamp(event.SaleStartAt),
+		SaleEndAt:   toPgTimestamp(event.SaleEndAt),
+	})
+	if err != nil {
+		return err
+	}
+
+	*event = *toDomainEventFromCreateEvent(record)
+	return nil
+}
+
 func (r *PostgresEventRepository) ListAdminEventSections(ctx context.Context, eventID int64, organizerID *int64) ([]domain.Section, error) {
 	organizerIDValue := int64(0)
 	if organizerID != nil {
@@ -175,6 +202,31 @@ func (r *PostgresEventRepository) ListAdminEventSections(ctx context.Context, ev
 	}
 
 	return sections, nil
+}
+
+func (r *PostgresEventRepository) CreateAdminEventSection(ctx context.Context, eventID int64, organizerID *int64, section *domain.Section) error {
+	event, err := r.FindAdminEventByID(ctx, eventID, organizerID)
+	if err != nil {
+		return err
+	}
+
+	record, err := r.queries.CreateSection(ctx, db.CreateSectionParams{
+		EventID:          eventID,
+		EventName:        event.Name,
+		SectionName:      section.Name,
+		Price:            section.Price,
+		TotalQuantity:    int32(section.TotalQuantity),
+		ReservedQuantity: int32(section.ReservedQuantity),
+		SoldQuantity:     int32(section.SoldQuantity),
+		PurchaseLimit:    int32(section.PurchaseLimit),
+		Status:           int16(section.Status),
+	})
+	if err != nil {
+		return err
+	}
+
+	*section = *toDomainSection(record)
+	return nil
 }
 
 func (r *PostgresUserRepository) FindByID(ctx context.Context, userID int64) (*domain.User, error) {
@@ -765,6 +817,20 @@ func (r *PostgresAdminUserRepository) FindByEmail(ctx context.Context, email str
 	return toDomainAdminUser(record), nil
 }
 
+func (r *PostgresAdminUserRepository) List(ctx context.Context) ([]domain.AdminUser, error) {
+	records, err := r.queries.ListAdminUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	adminUsers := make([]domain.AdminUser, 0, len(records))
+	for _, record := range records {
+		adminUsers = append(adminUsers, *toDomainAdminUser(record))
+	}
+
+	return adminUsers, nil
+}
+
 func (r *PostgresAdminUserRepository) Save(ctx context.Context, adminUser *domain.AdminUser) error {
 	if adminUser.ID != 0 {
 		return nil
@@ -783,6 +849,49 @@ func (r *PostgresAdminUserRepository) Save(ctx context.Context, adminUser *domai
 	}
 
 	*adminUser = *toDomainAdminUser(record)
+	return nil
+}
+
+func (r *PostgresOrganizerRepository) FindByID(ctx context.Context, organizerID int64) (*domain.Organizer, error) {
+	record, err := r.queries.GetOrganizerByID(ctx, organizerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrOrganizerNotFound
+		}
+		return nil, err
+	}
+
+	return toDomainOrganizer(record), nil
+}
+
+func (r *PostgresOrganizerRepository) List(ctx context.Context) ([]domain.Organizer, error) {
+	records, err := r.queries.ListOrganizers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	organizers := make([]domain.Organizer, 0, len(records))
+	for _, record := range records {
+		organizers = append(organizers, *toDomainOrganizer(record))
+	}
+
+	return organizers, nil
+}
+
+func (r *PostgresOrganizerRepository) Save(ctx context.Context, organizer *domain.Organizer) error {
+	if organizer.ID != 0 {
+		return nil
+	}
+
+	record, err := r.queries.CreateOrganizer(ctx, db.CreateOrganizerParams{
+		Name:   organizer.Name,
+		Status: int16(organizer.Status),
+	})
+	if err != nil {
+		return err
+	}
+
+	*organizer = *toDomainOrganizer(record)
 	return nil
 }
 
@@ -916,6 +1025,32 @@ func toDomainEventFromGetAdminEventByID(record db.GetAdminEventByIDRow) *domain.
 		Status:      domain.EventStatus(record.Status),
 		CreatedAt:   record.CreatedAt.Time,
 		UpdatedAt:   record.UpdatedAt.Time,
+	}
+}
+
+func toDomainEventFromCreateEvent(record db.CreateEventRow) *domain.Event {
+	return &domain.Event{
+		ID:          record.ID,
+		OrganizerID: record.OrganizerID,
+		Name:        record.Name,
+		StartAt:     record.StartAt.Time,
+		EndAt:       record.EndAt.Time,
+		SaleStartAt: record.SaleStartAt.Time,
+		SaleEndAt:   record.SaleEndAt.Time,
+		Venue:       record.Venue,
+		Status:      domain.EventStatus(record.Status),
+		CreatedAt:   record.CreatedAt.Time,
+		UpdatedAt:   record.UpdatedAt.Time,
+	}
+}
+
+func toDomainOrganizer(record db.Organizer) *domain.Organizer {
+	return &domain.Organizer{
+		ID:        record.ID,
+		Name:      record.Name,
+		Status:    domain.OrganizerStatus(record.Status),
+		CreatedAt: record.CreatedAt.Time,
+		UpdatedAt: record.UpdatedAt.Time,
 	}
 }
 

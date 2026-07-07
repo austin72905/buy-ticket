@@ -30,12 +30,126 @@ func NewAdminController(adminAuthService *service.AdminAuthService, adminService
 func (c *AdminController) RegisterRoutes(router gin.IRouter) {
 	admin := router.Group("/admin")
 	admin.Use(AttachCurrentAdmin(c.AdminAuthService, c.SessionStore), RequireAdmin())
+	admin.GET("/users", RequireAdminRole(domain.AdminRoleSuperAdmin), c.ListAdminUsers)
+	admin.POST("/users", RequireAdminRole(domain.AdminRoleSuperAdmin), c.CreateAdminUser)
+	admin.GET("/organizers", RequireAdminRole(domain.AdminRoleSuperAdmin), c.ListOrganizers)
+	admin.POST("/organizers", RequireAdminRole(domain.AdminRoleSuperAdmin), c.CreateOrganizer)
 	admin.GET("/orders", c.ListOrders)
 	admin.POST("/orders/:orderId/reveal-sensitive", RequireAdminRole(domain.AdminRoleSuperAdmin), c.RevealOrderSensitive)
 	admin.GET("/events", c.ListEvents)
+	admin.POST("/events", c.CreateEvent)
 	admin.GET("/events/:eventId", c.GetEvent)
 	admin.GET("/events/:eventId/sections", c.ListEventSections)
+	admin.POST("/events/:eventId/sections", c.CreateEventSection)
 	admin.GET("/audit-logs", c.ListAuditLogs)
+}
+
+// AdminListUsers godoc
+// @Summary List admin users
+// @Description List backoffice admin users. Only SUPER_ADMIN can use this endpoint.
+// @Tags admin-users
+// @Produce json
+// @Success 200 {array} AdminUserResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Router /admin/users [get]
+func (c *AdminController) ListAdminUsers(ctx *gin.Context) {
+	adminUser, _ := CurrentAdmin(ctx)
+	adminUsers, err := c.AdminService.ListAdminUsers(ctx.Request.Context(), adminUser)
+	if err != nil {
+		writeAdminError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newAdminUserResponses(adminUsers))
+}
+
+// AdminCreateUser godoc
+// @Summary Create admin user
+// @Description Create a backoffice admin user. Only SUPER_ADMIN can use this endpoint.
+// @Tags admin-users
+// @Accept json
+// @Produce json
+// @Param request body CreateAdminUserRequest true "Admin user payload"
+// @Success 201 {object} AdminUserResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Router /admin/users [post]
+func (c *AdminController) CreateAdminUser(ctx *gin.Context) {
+	var request CreateAdminUserRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	adminUser, _ := CurrentAdmin(ctx)
+	created, err := c.AdminService.CreateAdminUser(ctx.Request.Context(), service.CreateAdminUserInput{
+		AdminUser:   adminUser,
+		OrganizerID: request.OrganizerID,
+		Name:        request.Name,
+		Email:       request.Email,
+		Password:    request.Password,
+		Role:        domain.AdminRole(request.Role),
+	})
+	if err != nil {
+		writeAdminError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, newAdminUserResponse(created))
+}
+
+// AdminListOrganizers godoc
+// @Summary List organizers
+// @Description List organizers. Only SUPER_ADMIN can use this endpoint.
+// @Tags admin-organizers
+// @Produce json
+// @Success 200 {array} OrganizerResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Router /admin/organizers [get]
+func (c *AdminController) ListOrganizers(ctx *gin.Context) {
+	adminUser, _ := CurrentAdmin(ctx)
+	organizers, err := c.AdminService.ListOrganizers(ctx.Request.Context(), adminUser)
+	if err != nil {
+		writeAdminError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newOrganizerResponses(organizers))
+}
+
+// AdminCreateOrganizer godoc
+// @Summary Create organizer
+// @Description Create an organizer. Only SUPER_ADMIN can use this endpoint.
+// @Tags admin-organizers
+// @Accept json
+// @Produce json
+// @Param request body CreateOrganizerRequest true "Organizer payload"
+// @Success 201 {object} OrganizerResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Router /admin/organizers [post]
+func (c *AdminController) CreateOrganizer(ctx *gin.Context) {
+	var request CreateOrganizerRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	adminUser, _ := CurrentAdmin(ctx)
+	organizer, err := c.AdminService.CreateOrganizer(ctx.Request.Context(), service.CreateOrganizerInput{
+		AdminUser: adminUser,
+		Name:      request.Name,
+	})
+	if err != nil {
+		writeAdminError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, newOrganizerResponse(organizer))
 }
 
 // AdminListOrders godoc
@@ -196,6 +310,66 @@ func (c *AdminController) ListEvents(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newAdminEventResponses(events))
 }
 
+// AdminCreateEvent godoc
+// @Summary Create admin event
+// @Description Create event for admin backoffice. SUPER_ADMIN must provide organizer_id; EVENT_ADMIN uses its own organizer.
+// @Tags admin-events
+// @Accept json
+// @Produce json
+// @Param request body CreateAdminEventRequest true "Event payload"
+// @Success 201 {object} AdminEventResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Router /admin/events [post]
+func (c *AdminController) CreateEvent(ctx *gin.Context) {
+	var request CreateAdminEventRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	startAt, err := parseRequiredRFC3339(request.StartAt)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+	endAt, err := parseRequiredRFC3339(request.EndAt)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+	saleStartAt, err := parseRequiredRFC3339(request.SaleStartAt)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+	saleEndAt, err := parseRequiredRFC3339(request.SaleEndAt)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	adminUser, _ := CurrentAdmin(ctx)
+	event, err := c.AdminService.CreateEvent(ctx.Request.Context(), service.CreateAdminEventInput{
+		AdminUser:   adminUser,
+		OrganizerID: request.OrganizerID,
+		Name:        request.Name,
+		Venue:       request.Venue,
+		Status:      domain.EventStatus(request.Status),
+		StartAt:     startAt,
+		EndAt:       endAt,
+		SaleStartAt: saleStartAt,
+		SaleEndAt:   saleEndAt,
+	})
+	if err != nil {
+		writeAdminError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, newAdminEventResponse(*event))
+}
+
 // AdminGetEvent godoc
 // @Summary Get admin event
 // @Description Get an event for admin backoffice. EVENT_ADMIN is scoped to its organizer.
@@ -266,6 +440,51 @@ func (c *AdminController) ListEventSections(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, newAdminSectionResponses(sections))
+}
+
+// AdminCreateEventSection godoc
+// @Summary Create admin event section
+// @Description Create section for an event. EVENT_ADMIN is scoped to its organizer.
+// @Tags admin-events
+// @Accept json
+// @Produce json
+// @Param eventId path int true "Event ID"
+// @Param request body CreateAdminSectionRequest true "Section payload"
+// @Success 201 {object} AdminSectionResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /admin/events/{eventId}/sections [post]
+func (c *AdminController) CreateEventSection(ctx *gin.Context) {
+	eventID, err := strconv.ParseInt(ctx.Param("eventId"), 10, 64)
+	if err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	var request CreateAdminSectionRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	adminUser, _ := CurrentAdmin(ctx)
+	section, err := c.AdminService.CreateEventSection(ctx.Request.Context(), service.CreateAdminSectionInput{
+		AdminUser:     adminUser,
+		EventID:       eventID,
+		Name:          request.Name,
+		Price:         request.Price,
+		TotalQuantity: request.TotalQuantity,
+		PurchaseLimit: request.PurchaseLimit,
+		Status:        domain.SectionStatus(request.Status),
+	})
+	if err != nil {
+		writeAdminError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, newAdminSectionResponse(*section))
 }
 
 // AdminListAuditLogs godoc
@@ -349,6 +568,30 @@ func parseOptionalTimeQuery(ctx *gin.Context, name string) (*time.Time, error) {
 		return nil, err
 	}
 	return &parsed, nil
+}
+
+func parseRequiredRFC3339(value string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, errors.New("time is required")
+	}
+	return time.Parse(time.RFC3339, value)
+}
+
+func writeAdminError(ctx *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrInvalidAdminInput):
+		writeError(ctx, http.StatusBadRequest, err)
+	case errors.Is(err, service.ErrUnauthorized):
+		writeError(ctx, http.StatusUnauthorized, err)
+	case errors.Is(err, service.ErrForbidden):
+		writeError(ctx, http.StatusForbidden, err)
+	case errors.Is(err, repository.ErrEventNotFound),
+		errors.Is(err, repository.ErrOrganizerNotFound),
+		errors.Is(err, repository.ErrAdminUserNotFound):
+		writeError(ctx, http.StatusNotFound, err)
+	default:
+		writeError(ctx, http.StatusInternalServerError, err)
+	}
 }
 
 func normalizeAdminResponseLimit(limit int) int {

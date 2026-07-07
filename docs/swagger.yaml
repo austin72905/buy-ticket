@@ -190,6 +190,51 @@ definitions:
       reservation_id:
         type: integer
     type: object
+  controller.CreateAdminEventRequest:
+    properties:
+      end_at:
+        type: string
+      name:
+        type: string
+      organizer_id:
+        type: integer
+      sale_end_at:
+        type: string
+      sale_start_at:
+        type: string
+      start_at:
+        type: string
+      status:
+        type: integer
+      venue:
+        type: string
+    type: object
+  controller.CreateAdminSectionRequest:
+    properties:
+      name:
+        type: string
+      price:
+        type: integer
+      purchase_limit:
+        type: integer
+      status:
+        type: integer
+      total_quantity:
+        type: integer
+    type: object
+  controller.CreateAdminUserRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      organizer_id:
+        type: integer
+      password:
+        type: string
+      role:
+        type: string
+    type: object
   controller.CreateOrderRequest:
     properties:
       order_no:
@@ -199,9 +244,18 @@ definitions:
       reservation_id:
         type: integer
     type: object
+  controller.CreateOrganizerRequest:
+    properties:
+      name:
+        type: string
+    type: object
   controller.ErrorResponse:
     properties:
-      error:
+      code:
+        type: string
+      message:
+        type: string
+      request_id:
         type: string
     type: object
   controller.EventResponse:
@@ -300,6 +354,19 @@ definitions:
         type: string
       user_id:
         type: integer
+    type: object
+  controller.OrganizerResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      status:
+        type: integer
+      updated_at:
+        type: string
     type: object
   controller.PayOrderRequest:
     properties:
@@ -617,6 +684,40 @@ paths:
       summary: List admin events
       tags:
       - admin-events
+    post:
+      consumes:
+      - application/json
+      description: Create event for admin backoffice. SUPER_ADMIN must provide organizer_id;
+        EVENT_ADMIN uses its own organizer.
+      parameters:
+      - description: Event payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.CreateAdminEventRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/controller.AdminEventResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Create admin event
+      tags:
+      - admin-events
   /admin/events/{eventId}:
     get:
       description: Get an event for admin backoffice. EVENT_ADMIN is scoped to its
@@ -689,6 +790,48 @@ paths:
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
       summary: List admin event sections
+      tags:
+      - admin-events
+    post:
+      consumes:
+      - application/json
+      description: Create section for an event. EVENT_ADMIN is scoped to its organizer.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: integer
+      - description: Section payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.CreateAdminSectionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/controller.AdminSectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Create admin event section
       tags:
       - admin-events
   /admin/me:
@@ -803,6 +946,118 @@ paths:
       summary: Reveal order sensitive data
       tags:
       - admin-orders
+  /admin/organizers:
+    get:
+      description: List organizers. Only SUPER_ADMIN can use this endpoint.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.OrganizerResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: List organizers
+      tags:
+      - admin-organizers
+    post:
+      consumes:
+      - application/json
+      description: Create an organizer. Only SUPER_ADMIN can use this endpoint.
+      parameters:
+      - description: Organizer payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.CreateOrganizerRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/controller.OrganizerResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Create organizer
+      tags:
+      - admin-organizers
+  /admin/users:
+    get:
+      description: List backoffice admin users. Only SUPER_ADMIN can use this endpoint.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/controller.AdminUserResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: List admin users
+      tags:
+      - admin-users
+    post:
+      consumes:
+      - application/json
+      description: Create a backoffice admin user. Only SUPER_ADMIN can use this endpoint.
+      parameters:
+      - description: Admin user payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.CreateAdminUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/controller.AdminUserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+      summary: Create admin user
+      tags:
+      - admin-users
   /events:
     get:
       description: 取得目前系統中的活動列表

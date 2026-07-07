@@ -11,11 +11,19 @@ import (
 var ErrIdempotencyKeyNotFound = errors.New("idempotency key not found")
 var ErrPaymentAttemptNotFound = errors.New("payment attempt not found")
 var ErrAdminUserNotFound = errors.New("admin user not found")
+var ErrOrganizerNotFound = errors.New("organizer not found")
 
 type AdminUserRepository interface {
 	FindByID(ctx context.Context, adminUserID int64) (*domain.AdminUser, error)
 	FindByEmail(ctx context.Context, email string) (*domain.AdminUser, error)
+	List(ctx context.Context) ([]domain.AdminUser, error)
 	Save(ctx context.Context, adminUser *domain.AdminUser) error
+}
+
+type OrganizerRepository interface {
+	FindByID(ctx context.Context, organizerID int64) (*domain.Organizer, error)
+	List(ctx context.Context) ([]domain.Organizer, error)
+	Save(ctx context.Context, organizer *domain.Organizer) error
 }
 
 type AdminAuditLogRepository interface {
@@ -31,7 +39,9 @@ type AdminOrderRepository interface {
 type AdminEventRepository interface {
 	ListAdminEvents(ctx context.Context, organizerID *int64) ([]domain.Event, error)
 	FindAdminEventByID(ctx context.Context, eventID int64, organizerID *int64) (*domain.Event, error)
+	CreateAdminEvent(ctx context.Context, event *domain.Event) error
 	ListAdminEventSections(ctx context.Context, eventID int64, organizerID *int64) ([]domain.Section, error)
+	CreateAdminEventSection(ctx context.Context, eventID int64, organizerID *int64, section *domain.Section) error
 }
 
 type EventRepository interface {

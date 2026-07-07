@@ -476,6 +476,39 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 	return i, err
 }
 
+const createOrganizer = `-- name: CreateOrganizer :one
+INSERT INTO organizers (
+    name,
+    status
+) VALUES (
+    $1, $2
+)
+RETURNING
+    id,
+    name,
+    status,
+    created_at,
+    updated_at
+`
+
+type CreateOrganizerParams struct {
+	Name   string `json:"name"`
+	Status int16  `json:"status"`
+}
+
+func (q *Queries) CreateOrganizer(ctx context.Context, arg CreateOrganizerParams) (Organizer, error) {
+	row := q.db.QueryRow(ctx, createOrganizer, arg.Name, arg.Status)
+	var i Organizer
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createPayment = `-- name: CreatePayment :one
 INSERT INTO payments (
     payment_no,
@@ -1347,6 +1380,31 @@ func (q *Queries) GetOrderByOrderNo(ctx context.Context, orderNo string) (Order,
 	return i, err
 }
 
+const getOrganizerByID = `-- name: GetOrganizerByID :one
+SELECT
+    id,
+    name,
+    status,
+    created_at,
+    updated_at
+FROM organizers
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetOrganizerByID(ctx context.Context, id int64) (Organizer, error) {
+	row := q.db.QueryRow(ctx, getOrganizerByID, id)
+	var i Organizer
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getPaymentAttemptByIdempotencyKey = `-- name: GetPaymentAttemptByIdempotencyKey :one
 SELECT
     id,
@@ -2015,6 +2073,51 @@ func (q *Queries) ListAdminOrders(ctx context.Context, arg ListAdminOrdersParams
 	return items, nil
 }
 
+const listAdminUsers = `-- name: ListAdminUsers :many
+SELECT
+    id,
+    organizer_id,
+    name,
+    email,
+    password_hash,
+    role,
+    status,
+    created_at,
+    updated_at
+FROM admin_users
+ORDER BY id
+`
+
+func (q *Queries) ListAdminUsers(ctx context.Context) ([]AdminUser, error) {
+	rows, err := q.db.Query(ctx, listAdminUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AdminUser{}
+	for rows.Next() {
+		var i AdminUser
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizerID,
+			&i.Name,
+			&i.Email,
+			&i.PasswordHash,
+			&i.Role,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEvents = `-- name: ListEvents :many
 SELECT
     id,
@@ -2265,6 +2368,43 @@ func (q *Queries) ListOrdersByUserID(ctx context.Context, userID int64) ([]Order
 			&i.Status,
 			&i.ExpiresAt,
 			&i.PaidAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizers = `-- name: ListOrganizers :many
+SELECT
+    id,
+    name,
+    status,
+    created_at,
+    updated_at
+FROM organizers
+ORDER BY id
+`
+
+func (q *Queries) ListOrganizers(ctx context.Context) ([]Organizer, error) {
+	rows, err := q.db.Query(ctx, listOrganizers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Organizer{}
+	for rows.Next() {
+		var i Organizer
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
