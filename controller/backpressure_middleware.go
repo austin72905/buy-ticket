@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -28,9 +29,10 @@ func QueueJoinBackpressure(maxInFlight int, retryAfter time.Duration) gin.Handle
 			ctx.Next()
 		default:
 			ctx.Header("Retry-After", strconv.Itoa(retryAfterSeconds))
-			ctx.JSON(http.StatusTooManyRequests, ErrorResponse{
-				Code:    errorCodeForStatus(http.StatusTooManyRequests),
-				Message: "queue join is busy, retry later",
+			appErr := newAppError(http.StatusTooManyRequests, errors.New("queue join is busy, retry later"))
+			ctx.JSON(appErr.HTTPStatus, ErrorResponse{
+				Code:    appErr.Code,
+				Message: appErr.Message,
 			})
 			ctx.Abort()
 		}
