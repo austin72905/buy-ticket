@@ -2,7 +2,7 @@ export interface EventResponse {
   id: number
   name: string
   venue: string
-  status: number
+  status: string
   start_at: string
   end_at: string
   sale_start_at: string
@@ -20,7 +20,7 @@ export interface SectionResponse {
   reserved_quantity: number
   sold_quantity: number
   purchase_limit: number
-  status: number
+  status: string
   created_at: string
   updated_at: string
 }
@@ -32,12 +32,12 @@ export interface SectionAvailabilityResponse {
   available_quantity: number
   reserved_quantity: number
   sold_quantity: number
-  status: number
+  status: string
 }
 
 export interface SaleStatusResponse {
   event_id: number
-  event_status: number
+  event_status: string
   is_on_sale: boolean
   queue_enabled: boolean
   can_join_queue: boolean
@@ -57,7 +57,7 @@ export interface JoinQueueRequest {
 
 export interface QueueStatusResponse {
   queue_token: string
-  status: number
+  status: string
   event_id: number
   user_id: number
   queue_position: number
@@ -96,7 +96,7 @@ export interface ReservationResponse {
   quantity: number
   unit_price: number
   total_amount: number
-  status: number
+  status: string
   expires_at: string
   created_at: string
   updated_at: string
@@ -118,7 +118,7 @@ export interface OrderResponse {
   quantity: number
   unit_price: number
   total_amount: number
-  status: number
+  status: string
   expires_at: string
   created_at: string
   updated_at: string
@@ -141,7 +141,7 @@ export interface PaymentResponse {
   payment_no: string
   method: string
   amount: number
-  status: number
+  status: string
   paid_at?: string
   failed_at?: string
   created_at: string
@@ -158,7 +158,7 @@ export interface PaymentAttemptResponse {
   provider_trade_no?: string
   method: string
   amount: number
-  status: number
+  status: string
   failure_reason?: string
   succeeded_at?: string
   failed_at?: string

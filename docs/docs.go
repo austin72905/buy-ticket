@@ -1678,7 +1678,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -1761,7 +1761,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "total_amount": {
                     "type": "integer"
@@ -1834,7 +1834,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "total_quantity": {
                     "type": "integer"
@@ -1866,7 +1866,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -2014,7 +2014,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -2086,7 +2086,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "user_id": {
                     "type": "integer"
@@ -2121,7 +2121,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "total_amount": {
                     "type": "integer"
@@ -2150,7 +2150,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -2205,7 +2205,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "succeeded_at": {
                     "type": "string"
@@ -2243,7 +2243,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -2281,7 +2281,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -2313,7 +2313,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "total_amount": {
                     "type": "integer"
@@ -2375,7 +2375,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "event_status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "is_on_sale": {
                     "type": "boolean"
@@ -2416,7 +2416,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 }
             }
         },
@@ -2448,7 +2448,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "total_quantity": {
                     "type": "integer"

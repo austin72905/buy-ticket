@@ -1,27 +1,26 @@
-export const OrderStatus = {
-  PendingPayment: 1,
-  Paid: 2,
-  Expired: 3,
-  Cancelled: 4,
-} as const
+import { OrderStatus, normalizeOrderStatus } from './statusValues'
 
-const labels: Record<number, string> = {
+export { OrderStatus }
+
+const labels: Record<string, string> = {
   [OrderStatus.PendingPayment]: 'Pending Payment',
   [OrderStatus.Paid]: 'Paid',
   [OrderStatus.Expired]: 'Expired',
   [OrderStatus.Cancelled]: 'Cancelled',
 }
 
-export function orderStatusLabel(status: number) {
-  return labels[status] ?? `Unknown (${status})`
+export function orderStatusLabel(status: string | number) {
+  const normalized = normalizeOrderStatus(status)
+  return labels[normalized] ?? `Unknown (${normalized})`
 }
 
-export function canPayOrder(status: number) {
-  return status === OrderStatus.PendingPayment
+export function canPayOrder(status: string | number) {
+  return normalizeOrderStatus(status) === OrderStatus.PendingPayment
 }
 
-export function orderStatusSeverity(status: number) {
-  if (status === OrderStatus.Paid) return 'success'
-  if (status === OrderStatus.Expired || status === OrderStatus.Cancelled) return 'danger'
+export function orderStatusSeverity(status: string | number) {
+  const normalized = normalizeOrderStatus(status)
+  if (normalized === OrderStatus.Paid) return 'success'
+  if (normalized === OrderStatus.Expired || normalized === OrderStatus.Cancelled) return 'danger'
   return 'warning'
 }

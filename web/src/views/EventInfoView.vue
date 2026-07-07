@@ -6,6 +6,7 @@ import Tag from 'primevue/tag'
 
 import StateBanner from '../components/StateBanner.vue'
 import AppShell from '../layouts/AppShell.vue'
+import { QueueStatus, normalizeQueueStatus } from '../lib/statusValues'
 import { useBookingFlowStore } from '../stores/bookingFlow'
 
 const route = useRoute()
@@ -15,22 +16,17 @@ const flow = useBookingFlowStore()
 const eventId = computed(() => Number(route.params.eventId))
 let pollingTimer: number | undefined
 
-const QueueStatus = {
-  Waiting: 1,
-  Ready: 2,
-  Expired: 3,
-} as const
-
-const waiting = computed(() => flow.queueStatus?.status === QueueStatus.Waiting)
-const ready = computed(() => flow.queueStatus?.status === QueueStatus.Ready && Boolean(flow.purchaseToken))
-const expired = computed(() => flow.queueStatus?.status === QueueStatus.Expired)
+const queueStatus = computed(() => (flow.queueStatus ? normalizeQueueStatus(flow.queueStatus.status) : ''))
+const waiting = computed(() => queueStatus.value === QueueStatus.Waiting)
+const ready = computed(() => queueStatus.value === QueueStatus.Ready && Boolean(flow.purchaseToken))
+const expired = computed(() => queueStatus.value === QueueStatus.Expired)
 const canStartQueue = computed(() => !flow.queueStatus || expired.value)
 const queueStatusLabel = computed(() => {
   if (!flow.queueStatus) return 'Not Joined'
   if (waiting.value) return 'Waiting'
-  if (flow.queueStatus.status === QueueStatus.Ready) return ready.value ? 'Ready' : 'Ready - Missing Token'
+  if (queueStatus.value === QueueStatus.Ready) return ready.value ? 'Ready' : 'Ready - Missing Token'
   if (expired.value) return 'Expired'
-  return `Unknown (${flow.queueStatus.status})`
+  return `Unknown (${queueStatus.value})`
 })
 const queueStatusSeverity = computed(() => {
   if (ready.value) return 'success'

@@ -6,6 +6,7 @@ import Tag from 'primevue/tag'
 
 import StateBanner from '../components/StateBanner.vue'
 import AppShell from '../layouts/AppShell.vue'
+import { EventStatus, ReservationStatus, normalizeEventStatus, normalizeReservationStatus } from '../lib/statusValues'
 import { useBookingFlowStore } from '../stores/bookingFlow'
 import type { EventResponse } from '../types/api'
 
@@ -13,7 +14,11 @@ const flow = useBookingFlowStore()
 const router = useRouter()
 
 const activeReservation = computed(() =>
-  flow.reservation && !flow.order && flow.reservation.status === 1 ? flow.reservation : null,
+  flow.reservation &&
+  !flow.order &&
+  normalizeReservationStatus(flow.reservation.status) === ReservationStatus.Holding
+    ? flow.reservation
+    : null,
 )
 
 const displayEvents = computed(() => {
@@ -132,7 +137,10 @@ onMounted(reload)
           <span>{{ event.venue }}</span>
         </div>
         <h2>{{ shortTitle(event) }}</h2>
-        <Tag :value="event.status === 1 ? 'On sale' : 'Preparing'" severity="danger" />
+        <Tag
+          :value="normalizeEventStatus(event.status) === EventStatus.OnSale ? 'On sale' : 'Preparing'"
+          severity="danger"
+        />
       </RouterLink>
     </section>
 

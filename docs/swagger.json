@@ -1671,7 +1671,7 @@
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -1754,7 +1754,7 @@
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "total_amount": {
                     "type": "integer"
@@ -1827,7 +1827,7 @@
                     "type": "integer"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "total_quantity": {
                     "type": "integer"
@@ -1859,7 +1859,7 @@
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -2007,7 +2007,7 @@
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -2079,7 +2079,7 @@
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "user_id": {
                     "type": "integer"
@@ -2114,7 +2114,7 @@
                     "type": "integer"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "total_amount": {
                     "type": "integer"
@@ -2143,7 +2143,7 @@
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -2198,7 +2198,7 @@
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "succeeded_at": {
                     "type": "string"
@@ -2236,7 +2236,7 @@
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -2274,7 +2274,7 @@
                     "type": "string"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -2306,7 +2306,7 @@
                     "type": "integer"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "total_amount": {
                     "type": "integer"
@@ -2368,7 +2368,7 @@
                     "type": "integer"
                 },
                 "event_status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "is_on_sale": {
                     "type": "boolean"
@@ -2409,7 +2409,7 @@
                     "type": "integer"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 }
             }
         },
@@ -2441,7 +2441,7 @@
                     "type": "integer"
                 },
                 "status": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "total_quantity": {
                     "type": "integer"

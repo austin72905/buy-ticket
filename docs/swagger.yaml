@@ -56,7 +56,7 @@ definitions:
       start_at:
         type: string
       status:
-        type: integer
+        type: string
       updated_at:
         type: string
       venue:
@@ -110,7 +110,7 @@ definitions:
       section_name:
         type: string
       status:
-        type: integer
+        type: string
       total_amount:
         type: integer
       unit_price:
@@ -158,7 +158,7 @@ definitions:
       sold_quantity:
         type: integer
       status:
-        type: integer
+        type: string
       total_quantity:
         type: integer
       updated_at:
@@ -179,7 +179,7 @@ definitions:
       role:
         type: string
       status:
-        type: integer
+        type: string
       updated_at:
         type: string
     type: object
@@ -275,7 +275,7 @@ definitions:
       start_at:
         type: string
       status:
-        type: integer
+        type: string
       updated_at:
         type: string
       venue:
@@ -322,7 +322,7 @@ definitions:
       queue_token:
         type: string
       status:
-        type: integer
+        type: string
       user_id:
         type: integer
     type: object
@@ -345,7 +345,7 @@ definitions:
       section_id:
         type: integer
       status:
-        type: integer
+        type: string
       total_amount:
         type: integer
       unit_price:
@@ -364,7 +364,7 @@ definitions:
       name:
         type: string
       status:
-        type: integer
+        type: string
       updated_at:
         type: string
     type: object
@@ -400,7 +400,7 @@ definitions:
       provider_trade_no:
         type: string
       status:
-        type: integer
+        type: string
       succeeded_at:
         type: string
       updated_at:
@@ -425,7 +425,7 @@ definitions:
       payment_no:
         type: string
       status:
-        type: integer
+        type: string
       updated_at:
         type: string
     type: object
@@ -450,7 +450,7 @@ definitions:
       queue_token:
         type: string
       status:
-        type: integer
+        type: string
       updated_at:
         type: string
       user_id:
@@ -471,7 +471,7 @@ definitions:
       section_id:
         type: integer
       status:
-        type: integer
+        type: string
       total_amount:
         type: integer
       unit_price:
@@ -513,7 +513,7 @@ definitions:
       event_id:
         type: integer
       event_status:
-        type: integer
+        type: string
       is_on_sale:
         type: boolean
       queue_enabled:
@@ -540,7 +540,7 @@ definitions:
       sold_quantity:
         type: integer
       status:
-        type: integer
+        type: string
     type: object
   controller.SectionResponse:
     properties:
@@ -561,7 +561,7 @@ definitions:
       sold_quantity:
         type: integer
       status:
-        type: integer
+        type: string
       total_quantity:
         type: integer
       updated_at:

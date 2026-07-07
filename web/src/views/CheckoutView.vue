@@ -6,6 +6,7 @@ import InputNumber from 'primevue/inputnumber'
 
 import StateBanner from '../components/StateBanner.vue'
 import AppShell from '../layouts/AppShell.vue'
+import { SectionStatus, normalizeSectionStatus } from '../lib/statusValues'
 import { useBookingFlowStore } from '../stores/bookingFlow'
 import type { SectionAvailabilityResponse } from '../types/api'
 
@@ -24,7 +25,12 @@ const selectedSection = computed(
   () => flow.sections.find((section) => section.id === flow.selectedSectionId) ?? null,
 )
 const totalAmount = computed(() => (selectedSection.value ? selectedSection.value.price * quantity.value : 0))
-const canReserve = computed(() => Boolean(flow.purchaseToken && flow.selectedSectionId && quantity.value > 0))
+const selectedSectionActive = computed(() =>
+  selectedAvailability.value ? isSectionSelectable(selectedAvailability.value) : false,
+)
+const canReserve = computed(() =>
+  Boolean(flow.purchaseToken && flow.selectedSectionId && selectedSectionActive.value && quantity.value > 0),
+)
 
 function formatDateTime(value?: string) {
   if (!value) return '-'
@@ -49,8 +55,20 @@ function availableBySection(sectionId: number) {
   return flow.availability.find((item) => item.section_id === sectionId)?.available_quantity ?? 0
 }
 
+function isSectionActive(section: SectionAvailabilityResponse) {
+  const fullSection = flow.sections.find((item) => item.id === section.section_id)
+  return (
+    normalizeSectionStatus(section.status) === SectionStatus.Active &&
+    (!fullSection || normalizeSectionStatus(fullSection.status) === SectionStatus.Active)
+  )
+}
+
+function isSectionSelectable(section: SectionAvailabilityResponse) {
+  return isSectionActive(section) && section.available_quantity > 0
+}
+
 function selectSection(section: SectionAvailabilityResponse) {
-  if (section.available_quantity <= 0) return
+  if (!isSectionSelectable(section)) return
   flow.selectedSectionId = section.section_id
 }
 
@@ -136,10 +154,10 @@ onMounted(load)
                 `seat-color-${(section.section_id % 5) + 1}`,
                 {
                   selected: flow.selectedSectionId === section.section_id,
-                  disabled: section.available_quantity <= 0,
+                  disabled: !isSectionSelectable(section),
                 },
               ]"
-              :disabled="section.available_quantity <= 0"
+              :disabled="!isSectionSelectable(section)"
               @click="selectSection(section)"
             >
               {{ section.name }}
@@ -159,13 +177,21 @@ onMounted(load)
             v-for="section in flow.availability"
             :key="section.section_id"
             :class="['ticket-row', { active: flow.selectedSectionId === section.section_id }]"
-            :disabled="section.available_quantity <= 0"
+            :disabled="!isSectionSelectable(section)"
             @click="selectSection(section)"
           >
             <span :class="['color-dot', `seat-color-${(section.section_id % 5) + 1}`]"></span>
             <span>{{ section.name }}</span>
             <strong>{{ formatCurrency(section.price) }}</strong>
-            <span>{{ section.available_quantity > 0 ? section.available_quantity : 'Sold out' }}</span>
+            <span>
+              {{
+                !isSectionActive(section)
+                  ? 'Inactive'
+                  : section.available_quantity > 0
+                    ? section.available_quantity
+                    : 'Sold out'
+              }}
+            </span>
           </button>
 
           <div class="order-box">

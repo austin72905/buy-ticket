@@ -54,8 +54,8 @@ func TestBookingControllerGetQueueStatus(t *testing.T) {
 		if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
 			t.Fatalf("預期回傳合法 JSON，但解析失敗: %v", err)
 		}
-		if body.Status != int8(service.QueueStatusWaiting) {
-			t.Fatalf("預期 status=%d，實際為 %d", service.QueueStatusWaiting, body.Status)
+		if body.Status != "WAITING" {
+			t.Fatalf("expected status WAITING, got %s", body.Status)
 		}
 		if body.QueueToken != "qt_001" {
 			t.Fatalf("預期 queue_token=qt_001，實際為 %s", body.QueueToken)
@@ -129,8 +129,8 @@ func TestBookingControllerJoinQueue(t *testing.T) {
 		if err := json.Unmarshal(resp.Body.Bytes(), &response); err != nil {
 			t.Fatalf("預期回傳合法 JSON，但解析失敗: %v", err)
 		}
-		if response.Status != int8(service.QueueStatusWaiting) {
-			t.Fatalf("預期 status=%d，實際為 %d", service.QueueStatusWaiting, response.Status)
+		if response.Status != "WAITING" {
+			t.Fatalf("expected status WAITING, got %s", response.Status)
 		}
 		if response.QueueToken == "" {
 			t.Fatal("預期回傳 queue token")
@@ -289,8 +289,8 @@ func TestBookingControllerStartPayment(t *testing.T) {
 		if response.OrderID != 20 {
 			t.Fatalf("expected order_id=20, got %d", response.OrderID)
 		}
-		if response.Status != int8(domain.PaymentAttemptStatusTimeout) {
-			t.Fatalf("expected timeout status without mock client, got %d", response.Status)
+		if response.Status != "TIMEOUT" {
+			t.Fatalf("expected timeout status without mock client, got %s", response.Status)
 		}
 		if response.MerchantTradeNo == "" {
 			t.Fatal("expected merchant_trade_no")

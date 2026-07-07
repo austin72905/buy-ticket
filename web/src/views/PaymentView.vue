@@ -7,6 +7,7 @@ import Tag from 'primevue/tag'
 import StateBanner from '../components/StateBanner.vue'
 import AppShell from '../layouts/AppShell.vue'
 import { canPayOrder, orderStatusLabel, orderStatusSeverity } from '../lib/orderStatus'
+import { PaymentAttemptStatus, normalizePaymentAttemptStatus, normalizePaymentStatus } from '../lib/statusValues'
 import { useBookingFlowStore } from '../stores/bookingFlow'
 
 const route = useRoute()
@@ -17,7 +18,14 @@ const eventId = computed(() => Number(route.params.eventId))
 const paymentMethod = 'credit_card'
 const paymentIdempotencyKey = ref('')
 const canRetryPaymentAttempt = computed(() =>
-  Boolean(flow.paymentAttempt && [3, 4, 5].includes(flow.paymentAttempt.status)),
+  Boolean(
+    flow.paymentAttempt &&
+      ([
+        PaymentAttemptStatus.Failed,
+        PaymentAttemptStatus.Timeout,
+        PaymentAttemptStatus.Cancelled,
+      ] as string[]).includes(normalizePaymentAttemptStatus(flow.paymentAttempt.status)),
+  ),
 )
 const canStartMockPayment = computed(() =>
   Boolean(
@@ -31,18 +39,26 @@ const canStartMockPayment = computed(() =>
 
 const paymentAttemptLabel = computed(() => {
   if (!flow.paymentAttempt) return 'Not started'
-  if (flow.paymentAttempt.status === 1) return 'Processing'
-  if (flow.paymentAttempt.status === 2) return 'Succeeded'
-  if (flow.paymentAttempt.status === 3) return 'Failed'
-  if (flow.paymentAttempt.status === 4) return 'Timeout'
-  if (flow.paymentAttempt.status === 5) return 'Cancelled'
-  return `Unknown (${flow.paymentAttempt.status})`
+  const status = normalizePaymentAttemptStatus(flow.paymentAttempt.status)
+  if (status === PaymentAttemptStatus.Processing) return 'Processing'
+  if (status === PaymentAttemptStatus.Succeeded) return 'Succeeded'
+  if (status === PaymentAttemptStatus.Failed) return 'Failed'
+  if (status === PaymentAttemptStatus.Timeout) return 'Timeout'
+  if (status === PaymentAttemptStatus.Cancelled) return 'Cancelled'
+  return `Unknown (${status})`
 })
 
 const paymentAttemptSeverity = computed(() => {
   if (!flow.paymentAttempt) return 'secondary'
-  if (flow.paymentAttempt.status === 2) return 'success'
-  if (flow.paymentAttempt.status === 3 || flow.paymentAttempt.status === 4 || flow.paymentAttempt.status === 5) return 'danger'
+  const status = normalizePaymentAttemptStatus(flow.paymentAttempt.status)
+  if (status === PaymentAttemptStatus.Succeeded) return 'success'
+  if (
+    status === PaymentAttemptStatus.Failed ||
+    status === PaymentAttemptStatus.Timeout ||
+    status === PaymentAttemptStatus.Cancelled
+  ) {
+    return 'danger'
+  }
   return 'warning'
 })
 
@@ -82,7 +98,11 @@ async function payOrder() {
       method: paymentMethod,
       idempotencyKey: ensurePaymentIdempotencyKey(),
     })
-    if (flow.payment || (flow.paymentAttempt && flow.paymentAttempt.status !== 1)) {
+    if (
+      flow.payment ||
+      (flow.paymentAttempt &&
+        normalizePaymentAttemptStatus(flow.paymentAttempt.status) !== PaymentAttemptStatus.Processing)
+    ) {
       paymentIdempotencyKey.value = ''
     }
   } catch {}
@@ -136,7 +156,7 @@ watch(
             </div>
             <div>
               <span>Payment Status</span>
-              <Tag :value="flow.payment ? String(flow.payment.status) : 'Not paid'" severity="success" />
+              <Tag :value="flow.payment ? normalizePaymentStatus(flow.payment.status) : 'Not paid'" severity="success" />
             </div>
             <div v-if="flow.paymentAttempt">
               <span>Provider Attempt</span>

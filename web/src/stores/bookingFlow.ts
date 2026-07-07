@@ -35,6 +35,13 @@ import type {
   UserResponse,
 } from '../types/api'
 import { OrderStatus } from '../lib/orderStatus'
+import {
+  PaymentAttemptStatus,
+  ReservationStatus,
+  normalizeOrderStatus,
+  normalizePaymentAttemptStatus,
+  normalizeReservationStatus,
+} from '../lib/statusValues'
 
 type TaskKey =
   | 'auth'
@@ -376,7 +383,11 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     const reservations = await runTask('myReservations', listMyReservations)
     const now = Date.now()
     reservation.value =
-      reservations.find((item) => item.status === 1 && new Date(item.expires_at).getTime() > now) ?? null
+      reservations.find(
+        (item) =>
+          normalizeReservationStatus(item.status) === ReservationStatus.Holding &&
+          new Date(item.expires_at).getTime() > now,
+      ) ?? null
 
     if (reservation.value) {
       selectedEventId.value = reservation.value.event_id
@@ -400,7 +411,7 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
     const [nextOrder, payments] = await Promise.all([getOrder(orderId), listMyPayments()])
     order.value = nextOrder
     payment.value = payments.find((item) => item.order_id === orderId) ?? payment.value
-    return nextOrder.status === OrderStatus.Paid || Boolean(payment.value)
+    return normalizeOrderStatus(nextOrder.status) === OrderStatus.Paid || Boolean(payment.value)
   }
 
   async function pollPaymentResult(orderId: number) {
@@ -417,11 +428,19 @@ export const useBookingFlowStore = defineStore('bookingFlow', () => {
       setError('payOrder', 'Order is required.')
       return
     }
-    if (payment.value || (paymentAttempt.value && ![3, 4, 5].includes(paymentAttempt.value.status))) {
+    if (
+      payment.value ||
+      (paymentAttempt.value &&
+        !([
+          PaymentAttemptStatus.Failed,
+          PaymentAttemptStatus.Timeout,
+          PaymentAttemptStatus.Cancelled,
+        ] as string[]).includes(normalizePaymentAttemptStatus(paymentAttempt.value.status)))
+    ) {
       setError('payOrder', 'Payment has already been submitted.')
       return
     }
-    if (order.value.status !== OrderStatus.PendingPayment) {
+    if (normalizeOrderStatus(order.value.status) !== OrderStatus.PendingPayment) {
       setError('payOrder', 'Only pending payment orders can be paid.')
       return
     }

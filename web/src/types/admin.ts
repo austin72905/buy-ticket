@@ -8,7 +8,7 @@ export interface AdminUserResponse {
   name: string
   email: string
   role: string
-  status: number
+  status: string
   organizer_id?: number
   created_at: string
   updated_at: string
@@ -25,7 +25,7 @@ export interface CreateAdminUserRequest {
 export interface OrganizerResponse {
   id: number
   name: string
-  status: number
+  status: string
   created_at: string
   updated_at: string
 }
@@ -53,7 +53,7 @@ export interface AdminOrderResponse {
   quantity: number
   unit_price: number
   total_amount: number
-  status: number
+  status: string
   expires_at: string
   paid_at?: string
   created_at: string
@@ -97,7 +97,7 @@ export interface AdminEventResponse {
   name: string
   venue: string
   organizer_id: number
-  status: number
+  status: string
   start_at: string
   end_at: string
   sale_start_at: string
@@ -127,7 +127,7 @@ export interface AdminSectionResponse {
   sold_quantity: number
   available_quantity: number
   purchase_limit: number
-  status: number
+  status: string
   created_at: string
   updated_at: string
 }

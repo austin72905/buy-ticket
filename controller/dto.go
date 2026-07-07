@@ -129,7 +129,7 @@ type ReservationResponse struct {
 	Quantity    int    `json:"quantity"`
 	UnitPrice   int64  `json:"unit_price"`
 	TotalAmount int64  `json:"total_amount"`
-	Status      int8   `json:"status"`
+	Status      string `json:"status"`
 	ExpiresAt   string `json:"expires_at"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
@@ -139,7 +139,7 @@ type EventResponse struct {
 	ID          int64  `json:"id"`
 	Name        string `json:"name"`
 	Venue       string `json:"venue"`
-	Status      int8   `json:"status"`
+	Status      string `json:"status"`
 	StartAt     string `json:"start_at"`
 	EndAt       string `json:"end_at"`
 	SaleStartAt string `json:"sale_start_at"`
@@ -162,7 +162,7 @@ type AdminUserResponse struct {
 	Name        string `json:"name"`
 	Email       string `json:"email"`
 	Role        string `json:"role"`
-	Status      int8   `json:"status"`
+	Status      string `json:"status"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 }
@@ -170,7 +170,7 @@ type AdminUserResponse struct {
 type OrganizerResponse struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`
-	Status    int8   `json:"status"`
+	Status    string `json:"status"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
@@ -180,7 +180,7 @@ type AdminEventResponse struct {
 	OrganizerID int64  `json:"organizer_id"`
 	Name        string `json:"name"`
 	Venue       string `json:"venue"`
-	Status      int8   `json:"status"`
+	Status      string `json:"status"`
 	StartAt     string `json:"start_at"`
 	EndAt       string `json:"end_at"`
 	SaleStartAt string `json:"sale_start_at"`
@@ -199,7 +199,7 @@ type AdminSectionResponse struct {
 	SoldQuantity      int    `json:"sold_quantity"`
 	AvailableQuantity int    `json:"available_quantity"`
 	PurchaseLimit     int    `json:"purchase_limit"`
-	Status            int8   `json:"status"`
+	Status            string `json:"status"`
 	CreatedAt         string `json:"created_at"`
 	UpdatedAt         string `json:"updated_at"`
 }
@@ -250,7 +250,7 @@ type AdminOrderResponse struct {
 	Quantity      int     `json:"quantity"`
 	UnitPrice     int64   `json:"unit_price"`
 	TotalAmount   int64   `json:"total_amount"`
-	Status        int8    `json:"status"`
+	Status        string  `json:"status"`
 	ExpiresAt     string  `json:"expires_at"`
 	PaidAt        *string `json:"paid_at,omitempty"`
 	CreatedAt     string  `json:"created_at"`
@@ -274,7 +274,7 @@ type SectionResponse struct {
 	ReservedQuantity int    `json:"reserved_quantity"`
 	SoldQuantity     int    `json:"sold_quantity"`
 	PurchaseLimit    int    `json:"purchase_limit"`
-	Status           int8   `json:"status"`
+	Status           string `json:"status"`
 	CreatedAt        string `json:"created_at"`
 	UpdatedAt        string `json:"updated_at"`
 }
@@ -286,12 +286,12 @@ type SectionAvailabilityResponse struct {
 	AvailableQuantity int    `json:"available_quantity"`
 	ReservedQuantity  int    `json:"reserved_quantity"`
 	SoldQuantity      int    `json:"sold_quantity"`
-	Status            int8   `json:"status"`
+	Status            string `json:"status"`
 }
 
 type SaleStatusResponse struct {
 	EventID      int64  `json:"event_id"`
-	EventStatus  int8   `json:"event_status"`
+	EventStatus  string `json:"event_status"`
 	IsOnSale     bool   `json:"is_on_sale"`
 	QueueEnabled bool   `json:"queue_enabled"`
 	CanJoinQueue bool   `json:"can_join_queue"`
@@ -311,7 +311,7 @@ type OrderResponse struct {
 	Quantity      int    `json:"quantity"`
 	UnitPrice     int64  `json:"unit_price"`
 	TotalAmount   int64  `json:"total_amount"`
-	Status        int8   `json:"status"`
+	Status        string `json:"status"`
 	ExpiresAt     string `json:"expires_at"`
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
@@ -322,7 +322,7 @@ func newEventResponse(event *domain.Event) EventResponse {
 		ID:          event.ID,
 		Name:        event.Name,
 		Venue:       event.Venue,
-		Status:      int8(event.Status),
+		Status:      eventStatusText(event.Status),
 		StartAt:     event.StartAt.Format(time.RFC3339),
 		EndAt:       event.EndAt.Format(time.RFC3339),
 		SaleStartAt: event.SaleStartAt.Format(time.RFC3339),
@@ -352,7 +352,7 @@ func newSectionResponse(section domain.Section) SectionResponse {
 		ReservedQuantity: section.ReservedQuantity,
 		SoldQuantity:     section.SoldQuantity,
 		PurchaseLimit:    section.PurchaseLimit,
-		Status:           int8(section.Status),
+		Status:           sectionStatusText(section.Status),
 		CreatedAt:        section.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:        section.UpdatedAt.Format(time.RFC3339),
 	}
@@ -366,14 +366,14 @@ func newSectionAvailabilityResponse(availability service.SectionAvailability) Se
 		AvailableQuantity: availability.Available,
 		ReservedQuantity:  availability.Section.ReservedQuantity,
 		SoldQuantity:      availability.Section.SoldQuantity,
-		Status:            int8(availability.Section.Status),
+		Status:            sectionStatusText(availability.Section.Status),
 	}
 }
 
 func newSaleStatusResponse(status *service.SaleStatus) SaleStatusResponse {
 	return SaleStatusResponse{
 		EventID:      status.EventID,
-		EventStatus:  int8(status.EventStatus),
+		EventStatus:  eventStatusText(status.EventStatus),
 		IsOnSale:     status.IsOnSale,
 		QueueEnabled: status.QueueEnabled,
 		CanJoinQueue: status.CanJoinQueue,
@@ -390,7 +390,7 @@ type PaymentResponse struct {
 	PaymentNo string  `json:"payment_no"`
 	Method    string  `json:"method"`
 	Amount    int64   `json:"amount"`
-	Status    int8    `json:"status"`
+	Status    string  `json:"status"`
 	PaidAt    *string `json:"paid_at,omitempty"`
 	FailedAt  *string `json:"failed_at,omitempty"`
 	CreatedAt string  `json:"created_at"`
@@ -406,7 +406,7 @@ type PaymentAttemptResponse struct {
 	ProviderTradeNo *string `json:"provider_trade_no,omitempty"`
 	Method          string  `json:"method"`
 	Amount          int64   `json:"amount"`
-	Status          int8    `json:"status"`
+	Status          string  `json:"status"`
 	ExpiresAt       *string `json:"expires_at,omitempty"`
 	SucceededAt     *string `json:"succeeded_at,omitempty"`
 	FailedAt        *string `json:"failed_at,omitempty"`
@@ -422,7 +422,7 @@ type ErrorResponse struct {
 
 type JoinQueueResponse struct {
 	QueueToken             string  `json:"queue_token"`
-	Status                 int8    `json:"status"`
+	Status                 string  `json:"status"`
 	EventID                int64   `json:"event_id"`
 	UserID                 int64   `json:"user_id"`
 	QueuePosition          int64   `json:"queue_position"`
@@ -437,7 +437,7 @@ type JoinQueueResponse struct {
 func newJoinQueueResponse(snapshot *service.QueueStatusSnapshot) JoinQueueResponse {
 	response := JoinQueueResponse{
 		QueueToken:           snapshot.QueueToken,
-		Status:               int8(snapshot.Status),
+		Status:               queueStatusText(snapshot.Status),
 		EventID:              snapshot.EventID,
 		UserID:               snapshot.UserID,
 		QueuePosition:        snapshot.QueuePosition,
@@ -461,7 +461,7 @@ func newJoinQueueResponse(snapshot *service.QueueStatusSnapshot) JoinQueueRespon
 
 type QueueStatusResponse struct {
 	QueueToken             string  `json:"queue_token"`
-	Status                 int8    `json:"status"`
+	Status                 string  `json:"status"`
 	EventID                int64   `json:"event_id"`
 	UserID                 int64   `json:"user_id"`
 	QueuePosition          int64   `json:"queue_position"`
@@ -477,7 +477,7 @@ type QueueStatusResponse struct {
 func newQueueStatusResponse(snapshot *service.QueueStatusSnapshot) QueueStatusResponse {
 	response := QueueStatusResponse{
 		QueueToken:           snapshot.QueueToken,
-		Status:               int8(snapshot.Status),
+		Status:               queueStatusText(snapshot.Status),
 		EventID:              snapshot.EventID,
 		UserID:               snapshot.UserID,
 		QueuePosition:        snapshot.QueuePosition,
@@ -509,7 +509,7 @@ func newReservationResponse(reservation *domain.Reservation) ReservationResponse
 		Quantity:    reservation.Quantity,
 		UnitPrice:   reservation.UnitPrice,
 		TotalAmount: reservation.TotalAmount,
-		Status:      int8(reservation.Status),
+		Status:      reservationStatusText(reservation.Status),
 		ExpiresAt:   reservation.ExpiresAt.Format(time.RFC3339),
 		CreatedAt:   reservation.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:   reservation.UpdatedAt.Format(time.RFC3339),
@@ -527,7 +527,7 @@ func newOrderResponse(order *domain.Order) OrderResponse {
 		Quantity:      order.Quantity,
 		UnitPrice:     order.UnitPrice,
 		TotalAmount:   order.TotalAmount,
-		Status:        int8(order.Status),
+		Status:        orderStatusText(order.Status),
 		ExpiresAt:     order.ExpiresAt.Format(time.RFC3339),
 		CreatedAt:     order.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:     order.UpdatedAt.Format(time.RFC3339),
@@ -541,7 +541,7 @@ func newPaymentResponse(payment *domain.Payment) PaymentResponse {
 		PaymentNo: payment.PaymentNo,
 		Method:    payment.Method,
 		Amount:    payment.Amount,
-		Status:    int8(payment.Status),
+		Status:    paymentStatusText(payment.Status),
 		CreatedAt: payment.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: payment.UpdatedAt.Format(time.RFC3339),
 	}
@@ -569,7 +569,7 @@ func newPaymentAttemptResponse(attempt *domain.PaymentAttempt) PaymentAttemptRes
 		ProviderTradeNo: attempt.ProviderTradeNo,
 		Method:          attempt.Method,
 		Amount:          attempt.Amount,
-		Status:          int8(attempt.Status),
+		Status:          paymentAttemptStatusText(attempt.Status),
 		CreatedAt:       attempt.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:       attempt.UpdatedAt.Format(time.RFC3339),
 	}
@@ -597,7 +597,7 @@ func newAdminUserResponse(adminUser *domain.AdminUser) AdminUserResponse {
 		Name:        adminUser.Name,
 		Email:       adminUser.Email,
 		Role:        string(adminUser.Role),
-		Status:      int8(adminUser.Status),
+		Status:      adminUserStatusText(adminUser.Status),
 		CreatedAt:   adminUser.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:   adminUser.UpdatedAt.Format(time.RFC3339),
 	}
@@ -616,7 +616,7 @@ func newOrganizerResponse(organizer *domain.Organizer) OrganizerResponse {
 	return OrganizerResponse{
 		ID:        organizer.ID,
 		Name:      organizer.Name,
-		Status:    int8(organizer.Status),
+		Status:    organizerStatusText(organizer.Status),
 		CreatedAt: organizer.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: organizer.UpdatedAt.Format(time.RFC3339),
 	}
@@ -637,7 +637,7 @@ func newAdminEventResponse(event domain.Event) AdminEventResponse {
 		OrganizerID: event.OrganizerID,
 		Name:        event.Name,
 		Venue:       event.Venue,
-		Status:      int8(event.Status),
+		Status:      eventStatusText(event.Status),
 		StartAt:     event.StartAt.Format(time.RFC3339),
 		EndAt:       event.EndAt.Format(time.RFC3339),
 		SaleStartAt: event.SaleStartAt.Format(time.RFC3339),
@@ -666,7 +666,7 @@ func newAdminSectionResponse(section domain.Section) AdminSectionResponse {
 		SoldQuantity:      section.SoldQuantity,
 		AvailableQuantity: section.AvailableQuantity(),
 		PurchaseLimit:     section.PurchaseLimit,
-		Status:            int8(section.Status),
+		Status:            sectionStatusText(section.Status),
 		CreatedAt:         section.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:         section.UpdatedAt.Format(time.RFC3339),
 	}
@@ -715,7 +715,7 @@ func newAdminOrderResponse(order domain.AdminOrder) AdminOrderResponse {
 		Quantity:      order.Quantity,
 		UnitPrice:     order.UnitPrice,
 		TotalAmount:   order.TotalAmount,
-		Status:        int8(order.Status),
+		Status:        orderStatusText(order.Status),
 		ExpiresAt:     order.ExpiresAt.Format(time.RFC3339),
 		CreatedAt:     order.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:     order.UpdatedAt.Format(time.RFC3339),
