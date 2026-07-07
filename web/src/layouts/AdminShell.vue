@@ -12,6 +12,8 @@ const links = [
   { label: 'Orders', to: '/admin/orders' },
   { label: 'Events', to: '/admin/events' },
   { label: 'Audit Logs', to: '/admin/audit-logs' },
+  { label: 'Users', to: '/admin/users', superAdminOnly: true },
+  { label: 'Organizers', to: '/admin/organizers', superAdminOnly: true },
 ]
 
 async function logout() {
@@ -34,7 +36,11 @@ async function logout() {
       </RouterLink>
 
       <nav class="admin-nav">
-        <RouterLink v-for="link in links" :key="link.label" :to="link.to">
+        <RouterLink
+          v-for="link in links.filter((item) => !item.superAdminOnly || adminAuth.isSuperAdmin)"
+          :key="link.label"
+          :to="link.to"
+        >
           {{ link.label }}
         </RouterLink>
       </nav>

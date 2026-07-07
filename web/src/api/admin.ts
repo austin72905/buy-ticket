@@ -9,6 +9,11 @@ import type {
   AdminOrderSensitiveResponse,
   AdminSectionResponse,
   AdminUserResponse,
+  CreateAdminEventRequest,
+  CreateAdminSectionRequest,
+  CreateAdminUserRequest,
+  CreateOrganizerRequest,
+  OrganizerResponse,
   RevealSensitiveRequest,
 } from '../types/admin'
 
@@ -23,6 +28,26 @@ export async function adminLogout() {
 
 export async function getAdminMe() {
   const { data } = await http.get<AdminUserResponse>('/admin/me')
+  return data
+}
+
+export async function listAdminUsers() {
+  const { data } = await http.get<AdminUserResponse[]>('/admin/users')
+  return data
+}
+
+export async function createAdminUser(payload: CreateAdminUserRequest) {
+  const { data } = await http.post<AdminUserResponse>('/admin/users', payload)
+  return data
+}
+
+export async function listOrganizers() {
+  const { data } = await http.get<OrganizerResponse[]>('/admin/organizers')
+  return data
+}
+
+export async function createOrganizer(payload: CreateOrganizerRequest) {
+  const { data } = await http.post<OrganizerResponse>('/admin/organizers', payload)
   return data
 }
 
@@ -44,6 +69,11 @@ export async function listAdminEvents() {
   return data
 }
 
+export async function createAdminEvent(payload: CreateAdminEventRequest) {
+  const { data } = await http.post<AdminEventResponse>('/admin/events', payload)
+  return data
+}
+
 export async function getAdminEvent(eventId: number) {
   const { data } = await http.get<AdminEventResponse>(`/admin/events/${eventId}`)
   return data
@@ -51,6 +81,11 @@ export async function getAdminEvent(eventId: number) {
 
 export async function listAdminEventSections(eventId: number) {
   const { data } = await http.get<AdminSectionResponse[]>(`/admin/events/${eventId}/sections`)
+  return data
+}
+
+export async function createAdminEventSection(eventId: number, payload: CreateAdminSectionRequest) {
+  const { data } = await http.post<AdminSectionResponse>(`/admin/events/${eventId}/sections`, payload)
   return data
 }
 

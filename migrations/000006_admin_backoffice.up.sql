@@ -64,8 +64,8 @@ INSERT INTO admin_users (
     1,
     NULL,
     'Super Admin',
-    'admin@example.com',
-    '$2a$10$C98Lze8JLKbSUnfmKjJ9VeKsmGNw4q71gUA53CSVEJHrpYJcGQG3G',
+    'admin@mail.com',
+    '$2a$10$PD.sijaQCzIc4l0oMKACSe3rXJiCdJRK1DrjS7349KC5HnM/ddQH.',
     'SUPER_ADMIN',
     1
 );

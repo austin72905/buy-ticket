@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 
@@ -14,6 +14,14 @@ const router = useRouter()
 const backoffice = useAdminBackofficeStore()
 
 const eventId = computed(() => Number(route.params.eventId))
+const showCreate = ref(false)
+const form = ref({
+  name: '',
+  price: 1,
+  totalQuantity: 1,
+  purchaseLimit: 1,
+  status: 1,
+})
 const columns = [
   'ID',
   'Section',
@@ -34,9 +42,33 @@ function formatCurrency(value?: number) {
   }).format(value ?? 0)
 }
 
+function resetForm() {
+  form.value = {
+    name: '',
+    price: 1,
+    totalQuantity: 1,
+    purchaseLimit: 1,
+    status: 1,
+  }
+}
+
 async function load() {
   try {
     await backoffice.loadEventDetail(eventId.value)
+  } catch {}
+}
+
+async function createSection() {
+  try {
+    await backoffice.saveSection(eventId.value, {
+      name: form.value.name,
+      price: Number(form.value.price),
+      total_quantity: Number(form.value.totalQuantity),
+      purchase_limit: Number(form.value.purchaseLimit),
+      status: form.value.status,
+    })
+    showCreate.value = false
+    resetForm()
   } catch {}
 }
 
@@ -54,6 +86,7 @@ onMounted(load)
         </div>
         <div class="admin-actions">
           <Button label="Back" severity="secondary" outlined @click="router.push('/admin/events')" />
+          <Button label="New Section" severity="danger" @click="showCreate = true" />
           <Button label="Refresh" severity="secondary" icon="pi pi-refresh" :loading="backoffice.isPending('eventDetail')" @click="load" />
         </div>
       </header>
@@ -84,5 +117,52 @@ onMounted(load)
         </tr>
       </AdminDataTable>
     </section>
+
+    <div v-if="showCreate" class="admin-modal-backdrop">
+      <form class="admin-modal" @submit.prevent="createSection">
+        <header class="admin-modal-header">
+          <div>
+            <h2>New Section</h2>
+            <p class="small-muted">Create a section under this event.</p>
+          </div>
+          <Button label="Close" severity="secondary" outlined type="button" @click="showCreate = false" />
+        </header>
+
+        <div class="admin-modal-body">
+          <label class="admin-field">
+            <span>Name</span>
+            <input v-model.trim="form.name" class="plain-input" required />
+          </label>
+          <label class="admin-field">
+            <span>Price</span>
+            <input v-model.number="form.price" class="plain-input" type="number" min="1" required />
+          </label>
+          <label class="admin-field">
+            <span>Total Quantity</span>
+            <input v-model.number="form.totalQuantity" class="plain-input" type="number" min="1" required />
+          </label>
+          <label class="admin-field">
+            <span>Purchase Limit</span>
+            <input v-model.number="form.purchaseLimit" class="plain-input" type="number" min="1" required />
+          </label>
+          <label class="admin-field">
+            <span>Status</span>
+            <select v-model.number="form.status" class="plain-input">
+              <option :value="1">Active</option>
+              <option :value="2">Inactive</option>
+              <option :value="3">Sold Out</option>
+            </select>
+          </label>
+          <p v-if="backoffice.getError('saveSection')" class="admin-error">
+            {{ backoffice.getError('saveSection') }}
+          </p>
+        </div>
+
+        <footer class="admin-modal-actions">
+          <Button label="Cancel" severity="secondary" outlined type="button" @click="showCreate = false" />
+          <Button label="Create" severity="danger" type="submit" :loading="backoffice.isPending('saveSection')" />
+        </footer>
+      </form>
+    </div>
   </AdminShell>
 </template>

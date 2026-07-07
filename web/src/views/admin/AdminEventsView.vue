@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 
@@ -7,12 +7,25 @@ import AdminDataTable from '../../components/admin/AdminDataTable.vue'
 import AdminShell from '../../layouts/AdminShell.vue'
 import AdminStateBanner from '../../components/admin/AdminStateBanner.vue'
 import AdminStatusTag from '../../components/admin/AdminStatusTag.vue'
+import { useAdminAuthStore } from '../../stores/adminAuth'
 import { useAdminBackofficeStore } from '../../stores/adminBackoffice'
 
 const router = useRouter()
 const backoffice = useAdminBackofficeStore()
+const adminAuth = useAdminAuthStore()
 
 const columns = ['ID', 'Name', 'Venue', 'Status', 'Organizer', 'Start', 'Sale Start', 'Sale End', 'Actions']
+const showCreate = ref(false)
+const form = ref({
+  name: '',
+  venue: '',
+  organizerId: '',
+  status: 1,
+  startAt: '',
+  endAt: '',
+  saleStartAt: '',
+  saleEndAt: '',
+})
 
 function formatDateTime(value?: string) {
   if (!value) return '-'
@@ -25,9 +38,52 @@ function formatDateTime(value?: string) {
   })
 }
 
+function toRFC3339(value: string) {
+  return new Date(value).toISOString()
+}
+
+function optionalNumber(value: string) {
+  if (!value.trim()) return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function resetForm() {
+  form.value = {
+    name: '',
+    venue: '',
+    organizerId: '',
+    status: 1,
+    startAt: '',
+    endAt: '',
+    saleStartAt: '',
+    saleEndAt: '',
+  }
+}
+
 async function load() {
   try {
-    await backoffice.loadEvents()
+    await Promise.all([
+      backoffice.loadEvents(),
+      adminAuth.isSuperAdmin ? backoffice.loadOrganizers() : Promise.resolve(),
+    ])
+  } catch {}
+}
+
+async function createEvent() {
+  try {
+    await backoffice.saveEvent({
+      name: form.value.name,
+      venue: form.value.venue,
+      organizer_id: optionalNumber(form.value.organizerId),
+      status: form.value.status,
+      start_at: toRFC3339(form.value.startAt),
+      end_at: toRFC3339(form.value.endAt),
+      sale_start_at: toRFC3339(form.value.saleStartAt),
+      sale_end_at: toRFC3339(form.value.saleEndAt),
+    })
+    showCreate.value = false
+    resetForm()
   } catch {}
 }
 
@@ -41,14 +97,23 @@ onMounted(load)
         <div>
           <p class="eyebrow">Events</p>
           <h1>Event Management</h1>
-          <p class="small-muted">View events and section inventory.</p>
+          <p class="small-muted">View and create events from the admin-events API.</p>
         </div>
-        <Button label="Refresh" icon="pi pi-refresh" severity="secondary" :loading="backoffice.isPending('events')" @click="load" />
+        <div class="admin-actions">
+          <Button label="New Event" severity="danger" @click="showCreate = true" />
+          <Button
+            label="Refresh"
+            icon="pi pi-refresh"
+            severity="secondary"
+            :loading="backoffice.isPending('events')"
+            @click="load"
+          />
+        </div>
       </header>
 
       <AdminStateBanner
-        :loading="backoffice.isPending('events')"
-        :error="backoffice.getError('events')"
+        :loading="backoffice.isPending('events') || backoffice.isPending('organizers')"
+        :error="backoffice.getError('events') || backoffice.getError('organizers')"
         loading-text="Loading events..."
         :retryable="true"
         @retry="load"
@@ -70,5 +135,68 @@ onMounted(load)
         </tr>
       </AdminDataTable>
     </section>
+
+    <div v-if="showCreate" class="admin-modal-backdrop">
+      <form class="admin-modal" @submit.prevent="createEvent">
+        <header class="admin-modal-header">
+          <div>
+            <h2>New Event</h2>
+            <p class="small-muted">Datetime fields are submitted as RFC3339 timestamps.</p>
+          </div>
+          <Button label="Close" severity="secondary" outlined type="button" @click="showCreate = false" />
+        </header>
+
+        <div class="admin-modal-body">
+          <label class="admin-field">
+            <span>Name</span>
+            <input v-model.trim="form.name" class="plain-input" required />
+          </label>
+          <label class="admin-field">
+            <span>Venue</span>
+            <input v-model.trim="form.venue" class="plain-input" required />
+          </label>
+          <label v-if="adminAuth.isSuperAdmin" class="admin-field">
+            <span>Organizer</span>
+            <select v-model="form.organizerId" class="plain-input">
+              <option value="">Required for SUPER_ADMIN</option>
+              <option v-for="organizer in backoffice.organizers" :key="organizer.id" :value="String(organizer.id)">
+                #{{ organizer.id }} {{ organizer.name }}
+              </option>
+            </select>
+          </label>
+          <label class="admin-field">
+            <span>Status</span>
+            <select v-model.number="form.status" class="plain-input">
+              <option :value="1">Draft</option>
+              <option :value="2">Published</option>
+              <option :value="3">On Sale</option>
+              <option :value="4">Ended</option>
+            </select>
+          </label>
+          <label class="admin-field">
+            <span>Start At</span>
+            <input v-model="form.startAt" class="plain-input" type="datetime-local" required />
+          </label>
+          <label class="admin-field">
+            <span>End At</span>
+            <input v-model="form.endAt" class="plain-input" type="datetime-local" required />
+          </label>
+          <label class="admin-field">
+            <span>Sale Start</span>
+            <input v-model="form.saleStartAt" class="plain-input" type="datetime-local" required />
+          </label>
+          <label class="admin-field">
+            <span>Sale End</span>
+            <input v-model="form.saleEndAt" class="plain-input" type="datetime-local" required />
+          </label>
+          <p v-if="backoffice.getError('saveEvent')" class="admin-error">{{ backoffice.getError('saveEvent') }}</p>
+        </div>
+
+        <footer class="admin-modal-actions">
+          <Button label="Cancel" severity="secondary" outlined type="button" @click="showCreate = false" />
+          <Button label="Create" severity="danger" type="submit" :loading="backoffice.isPending('saveEvent')" />
+        </footer>
+      </form>
+    </div>
   </AdminShell>
 </template>

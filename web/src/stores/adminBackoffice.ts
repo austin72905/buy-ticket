@@ -2,10 +2,16 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import {
+  createAdminEvent,
+  createAdminEventSection,
+  createAdminUser,
+  createOrganizer,
   getAdminEvent,
   listAdminAuditLogs,
   listAdminEventSections,
   listAdminEvents,
+  listAdminUsers,
+  listOrganizers,
   listAdminOrders,
   revealAdminOrderSensitive,
 } from '../api/admin'
@@ -17,9 +23,26 @@ import type {
   AdminOrderResponse,
   AdminOrderSensitiveResponse,
   AdminSectionResponse,
+  AdminUserResponse,
+  CreateAdminEventRequest,
+  CreateAdminSectionRequest,
+  CreateAdminUserRequest,
+  CreateOrganizerRequest,
+  OrganizerResponse,
 } from '../types/admin'
 
-type AdminTaskKey = 'orders' | 'events' | 'eventDetail' | 'auditLogs' | 'reveal'
+type AdminTaskKey =
+  | 'orders'
+  | 'events'
+  | 'eventDetail'
+  | 'auditLogs'
+  | 'reveal'
+  | 'users'
+  | 'organizers'
+  | 'saveEvent'
+  | 'saveSection'
+  | 'saveUser'
+  | 'saveOrganizer'
 
 const pageLimit = 20
 
@@ -76,6 +99,8 @@ export const useAdminBackofficeStore = defineStore('adminBackoffice', () => {
   const events = ref<AdminEventResponse[]>([])
   const selectedEvent = ref<AdminEventResponse | null>(null)
   const selectedSections = ref<AdminSectionResponse[]>([])
+  const adminUsers = ref<AdminUserResponse[]>([])
+  const organizers = ref<OrganizerResponse[]>([])
 
   const auditLogs = ref<AdminAuditLogResponse[]>([])
   const auditNextCursor = ref<AdminCursor | null>(null)
@@ -149,12 +174,44 @@ export const useAdminBackofficeStore = defineStore('adminBackoffice', () => {
     events.value = await runTask('events', listAdminEvents)
   }
 
+  async function saveEvent(payload: CreateAdminEventRequest) {
+    const created = await runTask('saveEvent', () => createAdminEvent(payload))
+    events.value = [created, ...events.value]
+    return created
+  }
+
   async function loadEventDetail(eventId: number) {
     const [event, sections] = await runTask('eventDetail', () =>
       Promise.all([getAdminEvent(eventId), listAdminEventSections(eventId)]),
     )
     selectedEvent.value = event
     selectedSections.value = sections
+  }
+
+  async function saveSection(eventId: number, payload: CreateAdminSectionRequest) {
+    const created = await runTask('saveSection', () => createAdminEventSection(eventId, payload))
+    selectedSections.value = [...selectedSections.value, created]
+    return created
+  }
+
+  async function loadAdminUsers() {
+    adminUsers.value = await runTask('users', listAdminUsers)
+  }
+
+  async function saveAdminUser(payload: CreateAdminUserRequest) {
+    const created = await runTask('saveUser', () => createAdminUser(payload))
+    adminUsers.value = [created, ...adminUsers.value]
+    return created
+  }
+
+  async function loadOrganizers() {
+    organizers.value = await runTask('organizers', listOrganizers)
+  }
+
+  async function saveOrganizer(payload: CreateOrganizerRequest) {
+    const created = await runTask('saveOrganizer', () => createOrganizer(payload))
+    organizers.value = [created, ...organizers.value]
+    return created
   }
 
   async function loadAuditLogs() {
@@ -191,6 +248,7 @@ export const useAdminBackofficeStore = defineStore('adminBackoffice', () => {
   }
 
   return {
+    adminUsers,
     auditLogs,
     auditNextCursor,
     clearError,
@@ -199,18 +257,25 @@ export const useAdminBackofficeStore = defineStore('adminBackoffice', () => {
     events,
     getError,
     isPending,
+    loadAdminUsers,
     loadAuditLogs,
     loadEventDetail,
     loadEvents,
     loadMoreAuditLogs,
     loadMoreOrders,
+    loadOrganizers,
     loadOrders,
     orderFilters,
     orderNextCursor,
     orders,
+    organizers,
     pending,
     revealedOrder,
     revealOrderSensitive,
+    saveAdminUser,
+    saveEvent,
+    saveOrganizer,
+    saveSection,
     selectedEvent,
     selectedSections,
   }

@@ -6,6 +6,8 @@ import AdminEventsView from '../views/admin/AdminEventsView.vue'
 import AdminForbiddenView from '../views/admin/AdminForbiddenView.vue'
 import AdminLoginView from '../views/admin/AdminLoginView.vue'
 import AdminOrdersView from '../views/admin/AdminOrdersView.vue'
+import AdminOrganizersView from '../views/admin/AdminOrganizersView.vue'
+import AdminUsersView from '../views/admin/AdminUsersView.vue'
 import CheckoutView from '../views/CheckoutView.vue'
 import EventDetailView from '../views/EventDetailView.vue'
 import EventInfoView from '../views/EventInfoView.vue'
@@ -57,6 +59,18 @@ const router = createRouter({
       path: '/admin/audit-logs',
       name: 'admin-audit-logs',
       component: AdminAuditLogsView,
+      meta: { requiresAdminAuth: true },
+    },
+    {
+      path: '/admin/users',
+      name: 'admin-users',
+      component: AdminUsersView,
+      meta: { requiresAdminAuth: true },
+    },
+    {
+      path: '/admin/organizers',
+      name: 'admin-organizers',
+      component: AdminOrganizersView,
       meta: { requiresAdminAuth: true },
     },
     {

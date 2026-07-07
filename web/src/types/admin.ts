@@ -14,6 +14,26 @@ export interface AdminUserResponse {
   updated_at: string
 }
 
+export interface CreateAdminUserRequest {
+  organizer_id?: number
+  name: string
+  email: string
+  password: string
+  role: string
+}
+
+export interface OrganizerResponse {
+  id: number
+  name: string
+  status: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateOrganizerRequest {
+  name: string
+}
+
 export interface AdminCursor {
   created_at: string
   id: number
@@ -86,6 +106,17 @@ export interface AdminEventResponse {
   updated_at: string
 }
 
+export interface CreateAdminEventRequest {
+  organizer_id?: number
+  name: string
+  venue: string
+  status?: number
+  start_at: string
+  end_at: string
+  sale_start_at: string
+  sale_end_at: string
+}
+
 export interface AdminSectionResponse {
   id: number
   event_id: number
@@ -99,6 +130,14 @@ export interface AdminSectionResponse {
   status: number
   created_at: string
   updated_at: string
+}
+
+export interface CreateAdminSectionRequest {
+  name: string
+  price: number
+  total_quantity: number
+  purchase_limit: number
+  status?: number
 }
 
 export interface AdminAuditLogResponse {
