@@ -1,8 +1,8 @@
 services:
   postgres:
     image: postgres:16
-    container_name: buy-ticket-postgres
-    hostname: buy-ticket-postgres
+    container_name: buy-ticket-go-postgres
+    hostname: buy-ticket-go-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: buy_ticket
@@ -18,12 +18,12 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - buy-ticket-network
+      - buy-ticket-go-network
 
   redis:
     image: redis:7
-    container_name: buy-ticket-redis
-    hostname: buy-ticket-redis
+    container_name: buy-ticket-go-redis
+    hostname: buy-ticket-go-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -35,12 +35,12 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - buy-ticket-network
+      - buy-ticket-go-network
 
   rabbitmq:
     image: rabbitmq:3-management
-    container_name: buy-ticket-rabbitmq
-    hostname: buy-ticket-rabbitmq
+    container_name: buy-ticket-go-rabbitmq
+    hostname: buy-ticket-go-rabbitmq
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: guest
@@ -56,16 +56,16 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - buy-ticket-network
+      - buy-ticket-go-network
 
 volumes:
   postgres_data:
-    name: buy-ticket-postgres-data
+    name: buy-ticket-go-postgres-data
   redis_data:
-    name: buy-ticket-redis-data
+    name: buy-ticket-go-redis-data
   rabbitmq_data:
-    name: buy-ticket-rabbitmq-data
+    name: buy-ticket-go-rabbitmq-data
 
 networks:
-  buy-ticket-network:
-    name: buy-ticket-network
+  buy-ticket-go-network:
+    name: buy-ticket-go-network
