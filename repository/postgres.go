@@ -182,6 +182,10 @@ func (r *PostgresEventRepository) CreateAdminEvent(ctx context.Context, event *d
 	return nil
 }
 
+func (r *PostgresEventRepository) AdvanceEventStatuses(ctx context.Context, now time.Time) (int64, error) {
+	return r.queries.AdvanceEventStatuses(ctx, toPgTimestamp(now))
+}
+
 func (r *PostgresEventRepository) ListAdminEventSections(ctx context.Context, eventID int64, organizerID *int64) ([]domain.Section, error) {
 	organizerIDValue := int64(0)
 	if organizerID != nil {

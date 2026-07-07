@@ -428,6 +428,34 @@ func (r *MemoryEventRepository) CreateAdminEvent(ctx context.Context, event *dom
 	return nil
 }
 
+func (r *MemoryEventRepository) AdvanceEventStatuses(ctx context.Context, now time.Time) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var count int64
+	for _, event := range r.events {
+		nextStatus := event.Status
+		switch {
+		case event.Status == domain.EventStatusPublished && event.SaleEndAt.Before(now):
+			nextStatus = domain.EventStatusEnded
+		case event.Status == domain.EventStatusPublished && !event.SaleStartAt.After(now) && !event.SaleEndAt.Before(now):
+			nextStatus = domain.EventStatusOnSale
+		case event.Status == domain.EventStatusOnSale && event.SaleEndAt.Before(now):
+			nextStatus = domain.EventStatusEnded
+		}
+
+		if nextStatus == event.Status {
+			continue
+		}
+
+		event.Status = nextStatus
+		event.UpdatedAt = now
+		count++
+	}
+
+	return count, nil
+}
+
 func (r *MemoryEventRepository) ListAdminEventSections(ctx context.Context, eventID int64, organizerID *int64) ([]domain.Section, error) {
 	event, err := r.FindAdminEventByID(ctx, eventID, organizerID)
 	if err != nil {

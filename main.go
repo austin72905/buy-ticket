@@ -148,6 +148,11 @@ func (app *BuyTicketApp) Initialize() {
 	sessionTTL := sessionTTL(app.Runtime)
 
 	if role == appRoleAll || role == appRoleScheduler {
+		if count, err := bookingService.AdvanceEventStatuses(context.Background(), time.Now()); err != nil {
+			log.Fatalf("advance event statuses failed: %v", err)
+		} else if count > 0 {
+			log.Printf("event status scheduler advanced %d events", count)
+		}
 		if err := bookingService.RebuildStock(context.Background()); err != nil {
 			log.Fatalf("rebuild stock failed: %v", err)
 		}
@@ -349,6 +354,20 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	})
 	if err != nil {
 		log.Fatalf("register order expire scheduler failed: %v", err)
+	}
+
+	_, err = scheduler.AddFuncJobWithName("*/5 * * * * *", "event-status-advance", func(ctx context.Context) {
+		count, err := bookingService.AdvanceEventStatuses(ctx, time.Now())
+		if err != nil {
+			log.Printf("event status scheduler advance failed: %v", err)
+			return
+		}
+		if count > 0 {
+			log.Printf("event status scheduler advanced %d events", count)
+		}
+	})
+	if err != nil {
+		log.Fatalf("register event status scheduler failed: %v", err)
 	}
 
 	_, err = scheduler.AddFuncJobWithName("*/1 * * * * *", "purchase-token-cleanup", func(ctx context.Context) {

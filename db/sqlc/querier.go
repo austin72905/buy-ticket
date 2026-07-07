@@ -11,6 +11,7 @@ import (
 )
 
 type Querier interface {
+	AdvanceEventStatuses(ctx context.Context, now pgtype.Timestamptz) (int64, error)
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
 	ConfirmSectionSale(ctx context.Context, arg ConfirmSectionSaleParams) (EventSection, error)
 	CreateAdminAuditLog(ctx context.Context, arg CreateAdminAuditLogParams) (AdminAuditLog, error)

@@ -49,6 +49,10 @@ type EventRepository interface {
 	List(ctx context.Context) ([]domain.Event, error)
 }
 
+type EventStatusAdvancer interface {
+	AdvanceEventStatuses(ctx context.Context, now time.Time) (int64, error)
+}
+
 type UserRepository interface {
 	FindByID(ctx context.Context, userID int64) (*domain.User, error)
 	FindByEmail(ctx context.Context, email string) (*domain.User, error)

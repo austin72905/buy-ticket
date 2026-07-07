@@ -35,6 +35,7 @@ var (
 type BookingService struct {
 	DB                     *pgxpool.Pool
 	EventRepo              repository.EventRepository
+	EventStatusAdvancer    repository.EventStatusAdvancer
 	SectionRepo            repository.SectionRepository
 	ReservationRepo        repository.ReservationRepository
 	OrderRepo              repository.OrderRepository
@@ -151,7 +152,7 @@ func NewBookingService(
 	orderRepo repository.OrderRepository,
 	paymentRepo repository.PaymentRepository,
 ) *BookingService {
-	return &BookingService{
+	bookingService := &BookingService{
 		EventRepo:          eventRepo,
 		SectionRepo:        sectionRepo,
 		ReservationRepo:    reservationRepo,
@@ -161,6 +162,12 @@ func NewBookingService(
 		QueueStore:         NewMemoryQueueStore(1),
 		OrderPaymentTTL:    10 * time.Minute,
 	}
+
+	if advancer, ok := eventRepo.(repository.EventStatusAdvancer); ok {
+		bookingService.EventStatusAdvancer = advancer
+	}
+
+	return bookingService
 }
 
 func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketInput) (*domain.Reservation, error) {
@@ -645,6 +652,14 @@ func (s *BookingService) GetPaymentByPaymentNo(ctx context.Context, paymentNo st
 
 func (s *BookingService) ListPaymentsByUserID(ctx context.Context, userID int64) ([]domain.Payment, error) {
 	return s.PaymentRepo.ListByUserID(ctx, userID)
+}
+
+func (s *BookingService) AdvanceEventStatuses(ctx context.Context, now time.Time) (int64, error) {
+	if s.EventStatusAdvancer == nil {
+		return 0, nil
+	}
+
+	return s.EventStatusAdvancer.AdvanceEventStatuses(ctx, now)
 }
 
 func (s *BookingService) GetSaleStatus(ctx context.Context, eventID int64, now time.Time) (*SaleStatus, error) {

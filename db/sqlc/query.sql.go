@@ -11,6 +11,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const advanceEventStatuses = `-- name: AdvanceEventStatuses :execrows
+UPDATE events
+SET
+    status = CASE
+        WHEN status = 2 AND sale_end_at < $1::timestamptz THEN 4
+        WHEN status = 2
+             AND sale_start_at <= $1::timestamptz
+             AND sale_end_at >= $1::timestamptz THEN 3
+        WHEN status = 3 AND sale_end_at < $1::timestamptz THEN 4
+        ELSE status
+    END,
+    updated_at = $1::timestamptz
+WHERE
+    (status = 2 AND sale_end_at < $1::timestamptz)
+    OR (
+        status = 2
+        AND sale_start_at <= $1::timestamptz
+        AND sale_end_at >= $1::timestamptz
+    )
+    OR (status = 3 AND sale_end_at < $1::timestamptz)
+`
+
+func (q *Queries) AdvanceEventStatuses(ctx context.Context, now pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, advanceEventStatuses, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const completeIdempotencyKey = `-- name: CompleteIdempotencyKey :exec
 UPDATE idempotency_keys
 SET

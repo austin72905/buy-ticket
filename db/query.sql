@@ -288,6 +288,27 @@ RETURNING
     created_at,
     updated_at;
 
+-- name: AdvanceEventStatuses :execrows
+UPDATE events
+SET
+    status = CASE
+        WHEN status = 2 AND sale_end_at < sqlc.arg(now)::timestamptz THEN 4
+        WHEN status = 2
+             AND sale_start_at <= sqlc.arg(now)::timestamptz
+             AND sale_end_at >= sqlc.arg(now)::timestamptz THEN 3
+        WHEN status = 3 AND sale_end_at < sqlc.arg(now)::timestamptz THEN 4
+        ELSE status
+    END,
+    updated_at = sqlc.arg(now)::timestamptz
+WHERE
+    (status = 2 AND sale_end_at < sqlc.arg(now)::timestamptz)
+    OR (
+        status = 2
+        AND sale_start_at <= sqlc.arg(now)::timestamptz
+        AND sale_end_at >= sqlc.arg(now)::timestamptz
+    )
+    OR (status = 3 AND sale_end_at < sqlc.arg(now)::timestamptz);
+
 -- name: GetSectionByEventAndID :one
 SELECT
     id,
