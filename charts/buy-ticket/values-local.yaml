@@ -6,6 +6,12 @@ image:
   tag: local
   pullPolicy: IfNotPresent
 
+web:
+  image:
+    repository: buy-ticket-web
+    tag: local
+    pullPolicy: IfNotPresent
+
 service:
   type: NodePort
   port: 8080

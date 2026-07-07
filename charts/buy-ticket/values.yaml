@@ -6,6 +6,25 @@ image:
   tag: local
   pullPolicy: IfNotPresent
 
+web:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: buy-ticket-web
+    tag: local
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  resources: {}
+  probes:
+    readiness:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    liveness:
+      initialDelaySeconds: 10
+      periodSeconds: 20
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
@@ -16,13 +35,20 @@ service:
 
 ingress:
   enabled: false
-  className: ""
+  className: traefik
   annotations: {}
   hosts:
     - host: buy-ticket.local
-      paths:
-        - path: /
-          pathType: Prefix
+    - host: admin.buy-ticket.local
+  web:
+    path: /
+    pathType: Prefix
+  api:
+    path: /api
+    pathType: Prefix
+    stripPrefix: true
+    stripPrefixMiddleware:
+      apiVersion: traefik.io/v1alpha1
   tls: []
 
 app:
