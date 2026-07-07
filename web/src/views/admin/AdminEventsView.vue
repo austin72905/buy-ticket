@@ -171,7 +171,7 @@ onMounted(load)
           <td>{{ event.name }}</td>
           <td>{{ event.venue }}</td>
           <td><AdminStatusTag :status="event.status" kind="event" /></td>
-          <td>{{ event.organizer_id }}</td>
+          <td>{{ event.organizer?.name ?? `#${event.organizer_id}` }}</td>
           <td>{{ formatDateTime(event.start_at) }}</td>
           <td>{{ formatDateTime(event.sale_start_at) }}</td>
           <td>{{ formatDateTime(event.sale_end_at) }}</td>

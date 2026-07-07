@@ -1012,22 +1012,25 @@ func (q *Queries) GetActiveReservationByUserAndEvent(ctx context.Context, arg Ge
 
 const getAdminEventByID = `-- name: GetAdminEventByID :one
 SELECT
-    id,
-    organizer_id,
-    name,
-    venue,
-    status,
-    start_at,
-    end_at,
-    sale_start_at,
-    sale_end_at,
-    created_at,
-    updated_at
-FROM events
-WHERE id = $1
+    e.id,
+    e.organizer_id,
+    o.name AS organizer_name,
+    o.status AS organizer_status,
+    e.name,
+    e.venue,
+    e.status,
+    e.start_at,
+    e.end_at,
+    e.sale_start_at,
+    e.sale_end_at,
+    e.created_at,
+    e.updated_at
+FROM events e
+LEFT JOIN organizers o ON o.id = e.organizer_id
+WHERE e.id = $1
   AND (
       $2::bigint = 0
-      OR organizer_id = $2
+      OR e.organizer_id = $2
   )
 LIMIT 1
 `
@@ -1038,17 +1041,19 @@ type GetAdminEventByIDParams struct {
 }
 
 type GetAdminEventByIDRow struct {
-	ID          int64              `json:"id"`
-	OrganizerID int64              `json:"organizer_id"`
-	Name        string             `json:"name"`
-	Venue       string             `json:"venue"`
-	Status      int16              `json:"status"`
-	StartAt     pgtype.Timestamptz `json:"start_at"`
-	EndAt       pgtype.Timestamptz `json:"end_at"`
-	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
-	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ID              int64              `json:"id"`
+	OrganizerID     int64              `json:"organizer_id"`
+	OrganizerName   pgtype.Text        `json:"organizer_name"`
+	OrganizerStatus pgtype.Int2        `json:"organizer_status"`
+	Name            string             `json:"name"`
+	Venue           string             `json:"venue"`
+	Status          int16              `json:"status"`
+	StartAt         pgtype.Timestamptz `json:"start_at"`
+	EndAt           pgtype.Timestamptz `json:"end_at"`
+	SaleStartAt     pgtype.Timestamptz `json:"sale_start_at"`
+	SaleEndAt       pgtype.Timestamptz `json:"sale_end_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) GetAdminEventByID(ctx context.Context, arg GetAdminEventByIDParams) (GetAdminEventByIDRow, error) {
@@ -1057,6 +1062,8 @@ func (q *Queries) GetAdminEventByID(ctx context.Context, arg GetAdminEventByIDPa
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizerID,
+		&i.OrganizerName,
+		&i.OrganizerStatus,
 		&i.Name,
 		&i.Venue,
 		&i.Status,
@@ -1797,23 +1804,41 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 
 const listAdminAuditLogs = `-- name: ListAdminAuditLogs :many
 SELECT
-    id,
-    admin_user_id,
-    action,
-    target_type,
-    target_id,
-    reason,
-    ip_address,
-    user_agent,
-    created_at
-FROM admin_audit_logs
-WHERE ($1::bigint = 0 OR admin_user_id = $1)
+    l.id,
+    l.admin_user_id,
+    au.name AS admin_user_name,
+    au.email AS admin_user_email,
+    au.role AS admin_user_role,
+    au.status AS admin_user_status,
+    l.action,
+    l.target_type,
+    l.target_id,
+    CASE
+        WHEN l.target_type = 'ADMIN_USER' THEN target_admin.name
+        WHEN l.target_type = 'ORGANIZER' THEN target_organizer.name
+        WHEN l.target_type = 'EVENT' THEN target_event.name
+        WHEN l.target_type = 'SECTION' THEN target_section.section_name
+        WHEN l.target_type = 'ORDER' THEN target_order.order_no
+        ELSE NULL
+    END AS target_name,
+    l.reason,
+    l.ip_address,
+    l.user_agent,
+    l.created_at
+FROM admin_audit_logs l
+LEFT JOIN admin_users au ON au.id = l.admin_user_id
+LEFT JOIN admin_users target_admin ON l.target_type = 'ADMIN_USER' AND target_admin.id = l.target_id
+LEFT JOIN organizers target_organizer ON l.target_type = 'ORGANIZER' AND target_organizer.id = l.target_id
+LEFT JOIN events target_event ON l.target_type = 'EVENT' AND target_event.id = l.target_id
+LEFT JOIN event_sections target_section ON l.target_type = 'SECTION' AND target_section.id = l.target_id
+LEFT JOIN orders target_order ON l.target_type = 'ORDER' AND target_order.id = l.target_id
+WHERE ($1::bigint = 0 OR l.admin_user_id = $1)
   AND (
       $2::timestamptz IS NULL
-      OR created_at < $2
-      OR (created_at = $2 AND id < $3)
+      OR l.created_at < $2
+      OR (l.created_at = $2 AND l.id < $3)
   )
-ORDER BY created_at DESC, id DESC
+ORDER BY l.created_at DESC, l.id DESC
 LIMIT $4
 `
 
@@ -1824,7 +1849,24 @@ type ListAdminAuditLogsParams struct {
 	PageLimit       int32              `json:"page_limit"`
 }
 
-func (q *Queries) ListAdminAuditLogs(ctx context.Context, arg ListAdminAuditLogsParams) ([]AdminAuditLog, error) {
+type ListAdminAuditLogsRow struct {
+	ID              int64              `json:"id"`
+	AdminUserID     int64              `json:"admin_user_id"`
+	AdminUserName   pgtype.Text        `json:"admin_user_name"`
+	AdminUserEmail  pgtype.Text        `json:"admin_user_email"`
+	AdminUserRole   pgtype.Text        `json:"admin_user_role"`
+	AdminUserStatus pgtype.Int2        `json:"admin_user_status"`
+	Action          string             `json:"action"`
+	TargetType      string             `json:"target_type"`
+	TargetID        int64              `json:"target_id"`
+	TargetName      interface{}        `json:"target_name"`
+	Reason          pgtype.Text        `json:"reason"`
+	IpAddress       pgtype.Text        `json:"ip_address"`
+	UserAgent       pgtype.Text        `json:"user_agent"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListAdminAuditLogs(ctx context.Context, arg ListAdminAuditLogsParams) ([]ListAdminAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, listAdminAuditLogs,
 		arg.AdminUserID,
 		arg.CursorCreatedAt,
@@ -1835,15 +1877,20 @@ func (q *Queries) ListAdminAuditLogs(ctx context.Context, arg ListAdminAuditLogs
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AdminAuditLog{}
+	items := []ListAdminAuditLogsRow{}
 	for rows.Next() {
-		var i AdminAuditLog
+		var i ListAdminAuditLogsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.AdminUserID,
+			&i.AdminUserName,
+			&i.AdminUserEmail,
+			&i.AdminUserRole,
+			&i.AdminUserStatus,
 			&i.Action,
 			&i.TargetType,
 			&i.TargetID,
+			&i.TargetName,
 			&i.Reason,
 			&i.IpAddress,
 			&i.UserAgent,
@@ -1923,35 +1970,40 @@ func (q *Queries) ListAdminEventSections(ctx context.Context, arg ListAdminEvent
 
 const listAdminEvents = `-- name: ListAdminEvents :many
 SELECT
-    id,
-    organizer_id,
-    name,
-    venue,
-    status,
-    start_at,
-    end_at,
-    sale_start_at,
-    sale_end_at,
-    created_at,
-    updated_at
-FROM events
+    e.id,
+    e.organizer_id,
+    o.name AS organizer_name,
+    o.status AS organizer_status,
+    e.name,
+    e.venue,
+    e.status,
+    e.start_at,
+    e.end_at,
+    e.sale_start_at,
+    e.sale_end_at,
+    e.created_at,
+    e.updated_at
+FROM events e
+LEFT JOIN organizers o ON o.id = e.organizer_id
 WHERE $1::bigint = 0
-   OR organizer_id = $1
-ORDER BY id
+   OR e.organizer_id = $1
+ORDER BY e.id
 `
 
 type ListAdminEventsRow struct {
-	ID          int64              `json:"id"`
-	OrganizerID int64              `json:"organizer_id"`
-	Name        string             `json:"name"`
-	Venue       string             `json:"venue"`
-	Status      int16              `json:"status"`
-	StartAt     pgtype.Timestamptz `json:"start_at"`
-	EndAt       pgtype.Timestamptz `json:"end_at"`
-	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
-	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ID              int64              `json:"id"`
+	OrganizerID     int64              `json:"organizer_id"`
+	OrganizerName   pgtype.Text        `json:"organizer_name"`
+	OrganizerStatus pgtype.Int2        `json:"organizer_status"`
+	Name            string             `json:"name"`
+	Venue           string             `json:"venue"`
+	Status          int16              `json:"status"`
+	StartAt         pgtype.Timestamptz `json:"start_at"`
+	EndAt           pgtype.Timestamptz `json:"end_at"`
+	SaleStartAt     pgtype.Timestamptz `json:"sale_start_at"`
+	SaleEndAt       pgtype.Timestamptz `json:"sale_end_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) ListAdminEvents(ctx context.Context, organizerID int64) ([]ListAdminEventsRow, error) {
@@ -1966,6 +2018,8 @@ func (q *Queries) ListAdminEvents(ctx context.Context, organizerID int64) ([]Lis
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizerID,
+			&i.OrganizerName,
+			&i.OrganizerStatus,
 			&i.Name,
 			&i.Venue,
 			&i.Status,

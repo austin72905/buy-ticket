@@ -106,11 +106,23 @@ export interface AdminOrderSensitiveResponse {
   user_email: string
 }
 
+export interface AdminReferenceResponse {
+  id: number
+  name: string
+}
+
+export interface AdminTargetReferenceResponse {
+  id: number
+  type: string
+  name?: string
+}
+
 export interface AdminEventResponse {
   id: number
   name: string
   venue: string
   organizer_id: number
+  organizer?: AdminReferenceResponse
   status: string
   start_at: string
   end_at: string
@@ -176,9 +188,11 @@ export interface UpdateAdminSectionRequest {
 export interface AdminAuditLogResponse {
   id: number
   admin_user_id: number
+  admin_user?: AdminReferenceResponse
   action: string
   target_type: string
   target_id: number
+  target?: AdminTargetReferenceResponse
   reason?: string
   ip_address?: string
   user_agent?: string

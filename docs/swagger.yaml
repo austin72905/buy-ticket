@@ -20,6 +20,8 @@ definitions:
     properties:
       action:
         type: string
+      admin_user:
+        $ref: '#/definitions/controller.AdminReferenceResponse'
       admin_user_id:
         type: integer
       created_at:
@@ -30,6 +32,8 @@ definitions:
         type: string
       reason:
         type: string
+      target:
+        $ref: '#/definitions/controller.AdminTargetReferenceResponse'
       target_id:
         type: integer
       target_type:
@@ -47,6 +51,8 @@ definitions:
         type: integer
       name:
         type: string
+      organizer:
+        $ref: '#/definitions/controller.AdminReferenceResponse'
       organizer_id:
         type: integer
       sale_end_at:
@@ -137,6 +143,13 @@ definitions:
       user_name:
         type: string
     type: object
+  controller.AdminReferenceResponse:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
   controller.AdminSectionResponse:
     properties:
       available_quantity:
@@ -162,6 +175,15 @@ definitions:
       total_quantity:
         type: integer
       updated_at:
+        type: string
+    type: object
+  controller.AdminTargetReferenceResponse:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      type:
         type: string
     type: object
   controller.AdminUserResponse:

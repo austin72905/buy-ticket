@@ -1017,7 +1017,7 @@ func (r *PostgresAdminAuditLogRepository) List(ctx context.Context, filter domai
 
 	logs := make([]domain.AdminAuditLog, 0, len(records))
 	for _, record := range records {
-		logs = append(logs, *toDomainAdminAuditLog(record))
+		logs = append(logs, *toDomainAdminAuditLogFromListAdminAuditLogs(record))
 	}
 
 	return logs, nil
@@ -1083,7 +1083,7 @@ func toDomainEventFromListEvents(record db.ListEventsRow) *domain.Event {
 }
 
 func toDomainEventFromListAdminEvents(record db.ListAdminEventsRow) *domain.Event {
-	return &domain.Event{
+	event := &domain.Event{
 		ID:          record.ID,
 		OrganizerID: record.OrganizerID,
 		Name:        record.Name,
@@ -1096,10 +1096,12 @@ func toDomainEventFromListAdminEvents(record db.ListAdminEventsRow) *domain.Even
 		CreatedAt:   record.CreatedAt.Time,
 		UpdatedAt:   record.UpdatedAt.Time,
 	}
+	event.Organizer = toDomainOrganizerSummary(record.OrganizerID, record.OrganizerName, record.OrganizerStatus)
+	return event
 }
 
 func toDomainEventFromGetAdminEventByID(record db.GetAdminEventByIDRow) *domain.Event {
-	return &domain.Event{
+	event := &domain.Event{
 		ID:          record.ID,
 		OrganizerID: record.OrganizerID,
 		Name:        record.Name,
@@ -1112,6 +1114,8 @@ func toDomainEventFromGetAdminEventByID(record db.GetAdminEventByIDRow) *domain.
 		CreatedAt:   record.CreatedAt.Time,
 		UpdatedAt:   record.UpdatedAt.Time,
 	}
+	event.Organizer = toDomainOrganizerSummary(record.OrganizerID, record.OrganizerName, record.OrganizerStatus)
+	return event
 }
 
 func toDomainEventFromCreateEvent(record db.CreateEventRow) *domain.Event {
@@ -1140,6 +1144,21 @@ func toDomainOrganizer(record db.Organizer) *domain.Organizer {
 	}
 }
 
+func toDomainOrganizerSummary(id int64, name pgtype.Text, status pgtype.Int2) *domain.Organizer {
+	if !name.Valid {
+		return nil
+	}
+
+	organizer := &domain.Organizer{
+		ID:   id,
+		Name: name.String,
+	}
+	if status.Valid {
+		organizer.Status = domain.OrganizerStatus(status.Int16)
+	}
+	return organizer
+}
+
 func toDomainAdminUser(record db.AdminUser) *domain.AdminUser {
 	adminUser := &domain.AdminUser{
 		ID:           record.ID,
@@ -1160,6 +1179,43 @@ func toDomainAdminUser(record db.AdminUser) *domain.AdminUser {
 
 func toDomainAdminAuditLogFromCreateAdminAuditLog(record db.AdminAuditLog) *domain.AdminAuditLog {
 	return toDomainAdminAuditLog(record)
+}
+
+func toDomainAdminAuditLogFromListAdminAuditLogs(record db.ListAdminAuditLogsRow) *domain.AdminAuditLog {
+	log := &domain.AdminAuditLog{
+		ID:          record.ID,
+		AdminUserID: record.AdminUserID,
+		Action:      record.Action,
+		TargetType:  record.TargetType,
+		TargetID:    record.TargetID,
+		CreatedAt:   record.CreatedAt.Time,
+	}
+	if record.AdminUserName.Valid {
+		adminUser := &domain.AdminUser{
+			ID:     record.AdminUserID,
+			Name:   record.AdminUserName.String,
+			Email:  record.AdminUserEmail.String,
+			Role:   domain.AdminRole(record.AdminUserRole.String),
+			Status: domain.AdminUserStatus(record.AdminUserStatus.Int16),
+		}
+		log.AdminUser = adminUser
+	}
+	if targetName, ok := stringFromSQLValue(record.TargetName); ok {
+		log.TargetName = &targetName
+	}
+	if record.Reason.Valid {
+		reason := record.Reason.String
+		log.Reason = &reason
+	}
+	if record.IpAddress.Valid {
+		ipAddress := record.IpAddress.String
+		log.IPAddress = &ipAddress
+	}
+	if record.UserAgent.Valid {
+		userAgent := record.UserAgent.String
+		log.UserAgent = &userAgent
+	}
+	return log
 }
 
 func toDomainAdminAuditLog(record db.AdminAuditLog) *domain.AdminAuditLog {
@@ -1184,6 +1240,21 @@ func toDomainAdminAuditLog(record db.AdminAuditLog) *domain.AdminAuditLog {
 		log.UserAgent = &userAgent
 	}
 	return log
+}
+
+func stringFromSQLValue(value interface{}) (string, bool) {
+	switch typed := value.(type) {
+	case nil:
+		return "", false
+	case string:
+		return typed, typed != ""
+	case []byte:
+		text := string(typed)
+		return text, text != ""
+	default:
+		text := fmt.Sprint(typed)
+		return text, text != ""
+	}
 }
 
 func toDomainUser(record db.User) *domain.User {

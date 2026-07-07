@@ -70,9 +70,9 @@ onMounted(load)
       <AdminDataTable :columns="columns" :empty="backoffice.auditLogs.length === 0" empty-text="No audit logs found.">
         <tr v-for="log in backoffice.auditLogs" :key="log.id">
           <td>{{ log.action }}</td>
-          <td>{{ log.admin_user_id }}</td>
+          <td>{{ log.admin_user?.name ?? `#${log.admin_user_id}` }}</td>
           <td>{{ log.target_type }}</td>
-          <td>{{ log.target_id }}</td>
+          <td>{{ log.target?.name ? `${log.target.name} (#${log.target.id})` : `#${log.target_id}` }}</td>
           <td>{{ log.reason || '-' }}</td>
           <td>{{ log.ip_address || '-' }}</td>
           <td class="admin-user-agent">{{ log.user_agent || '-' }}</td>

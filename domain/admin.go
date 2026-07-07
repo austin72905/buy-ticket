@@ -58,9 +58,11 @@ func (a AdminUser) IsEventAdmin() bool {
 type AdminAuditLog struct {
 	ID          int64
 	AdminUserID int64
+	AdminUser   *AdminUser
 	Action      string
 	TargetType  string
 	TargetID    int64
+	TargetName  *string
 	Reason      *string
 	IPAddress   *string
 	UserAgent   *string

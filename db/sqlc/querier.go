@@ -43,7 +43,7 @@ type Querier interface {
 	GetSectionByEventAndID(ctx context.Context, arg GetSectionByEventAndIDParams) (EventSection, error)
 	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
 	GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error)
-	ListAdminAuditLogs(ctx context.Context, arg ListAdminAuditLogsParams) ([]AdminAuditLog, error)
+	ListAdminAuditLogs(ctx context.Context, arg ListAdminAuditLogsParams) ([]ListAdminAuditLogsRow, error)
 	ListAdminEventSections(ctx context.Context, arg ListAdminEventSectionsParams) ([]EventSection, error)
 	ListAdminEvents(ctx context.Context, organizerID int64) ([]ListAdminEventsRow, error)
 	ListAdminOrders(ctx context.Context, arg ListAdminOrdersParams) ([]ListAdminOrdersRow, error)

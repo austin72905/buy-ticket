@@ -1889,6 +1889,9 @@ const docTemplate = `{
                 "action": {
                     "type": "string"
                 },
+                "admin_user": {
+                    "$ref": "#/definitions/controller.AdminReferenceResponse"
+                },
                 "admin_user_id": {
                     "type": "integer"
                 },
@@ -1903,6 +1906,9 @@ const docTemplate = `{
                 },
                 "reason": {
                     "type": "string"
+                },
+                "target": {
+                    "$ref": "#/definitions/controller.AdminTargetReferenceResponse"
                 },
                 "target_id": {
                     "type": "integer"
@@ -1929,6 +1935,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "organizer": {
+                    "$ref": "#/definitions/controller.AdminReferenceResponse"
                 },
                 "organizer_id": {
                     "type": "integer"
@@ -2068,6 +2077,17 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.AdminReferenceResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "controller.AdminSectionResponse": {
             "type": "object",
             "properties": {
@@ -2105,6 +2125,20 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.AdminTargetReferenceResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 }
             }

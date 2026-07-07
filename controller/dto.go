@@ -208,18 +208,30 @@ type OrganizerResponse struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
+type AdminReferenceResponse struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+type AdminTargetReferenceResponse struct {
+	ID   int64  `json:"id"`
+	Type string `json:"type"`
+	Name string `json:"name,omitempty"`
+}
+
 type AdminEventResponse struct {
-	ID          int64  `json:"id"`
-	OrganizerID int64  `json:"organizer_id"`
-	Name        string `json:"name"`
-	Venue       string `json:"venue"`
-	Status      string `json:"status"`
-	StartAt     string `json:"start_at"`
-	EndAt       string `json:"end_at"`
-	SaleStartAt string `json:"sale_start_at"`
-	SaleEndAt   string `json:"sale_end_at"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	ID          int64                   `json:"id"`
+	OrganizerID int64                   `json:"organizer_id"`
+	Organizer   *AdminReferenceResponse `json:"organizer,omitempty"`
+	Name        string                  `json:"name"`
+	Venue       string                  `json:"venue"`
+	Status      string                  `json:"status"`
+	StartAt     string                  `json:"start_at"`
+	EndAt       string                  `json:"end_at"`
+	SaleStartAt string                  `json:"sale_start_at"`
+	SaleEndAt   string                  `json:"sale_end_at"`
+	CreatedAt   string                  `json:"created_at"`
+	UpdatedAt   string                  `json:"updated_at"`
 }
 
 type AdminSectionResponse struct {
@@ -258,15 +270,17 @@ type AdminAuditLogCursorDTO struct {
 }
 
 type AdminAuditLogResponse struct {
-	ID          int64   `json:"id"`
-	AdminUserID int64   `json:"admin_user_id"`
-	Action      string  `json:"action"`
-	TargetType  string  `json:"target_type"`
-	TargetID    int64   `json:"target_id"`
-	Reason      *string `json:"reason,omitempty"`
-	IPAddress   *string `json:"ip_address,omitempty"`
-	UserAgent   *string `json:"user_agent,omitempty"`
-	CreatedAt   string  `json:"created_at"`
+	ID          int64                         `json:"id"`
+	AdminUserID int64                         `json:"admin_user_id"`
+	AdminUser   *AdminReferenceResponse       `json:"admin_user,omitempty"`
+	Action      string                        `json:"action"`
+	TargetType  string                        `json:"target_type"`
+	TargetID    int64                         `json:"target_id"`
+	Target      *AdminTargetReferenceResponse `json:"target,omitempty"`
+	Reason      *string                       `json:"reason,omitempty"`
+	IPAddress   *string                       `json:"ip_address,omitempty"`
+	UserAgent   *string                       `json:"user_agent,omitempty"`
+	CreatedAt   string                        `json:"created_at"`
 }
 
 type AdminOrderResponse struct {
@@ -665,7 +679,7 @@ func newOrganizerResponses(organizers []domain.Organizer) []OrganizerResponse {
 }
 
 func newAdminEventResponse(event domain.Event) AdminEventResponse {
-	return AdminEventResponse{
+	response := AdminEventResponse{
 		ID:          event.ID,
 		OrganizerID: event.OrganizerID,
 		Name:        event.Name,
@@ -678,6 +692,13 @@ func newAdminEventResponse(event domain.Event) AdminEventResponse {
 		CreatedAt:   event.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:   event.UpdatedAt.Format(time.RFC3339),
 	}
+	if event.Organizer != nil {
+		response.Organizer = &AdminReferenceResponse{
+			ID:   event.Organizer.ID,
+			Name: event.Organizer.Name,
+		}
+	}
+	return response
 }
 
 func newAdminEventResponses(events []domain.Event) []AdminEventResponse {
@@ -802,6 +823,19 @@ func newAdminAuditLogResponse(log domain.AdminAuditLog) AdminAuditLogResponse {
 		Reason:      log.Reason,
 		UserAgent:   log.UserAgent,
 		CreatedAt:   log.CreatedAt.Format(time.RFC3339),
+	}
+	if log.AdminUser != nil {
+		response.AdminUser = &AdminReferenceResponse{
+			ID:   log.AdminUser.ID,
+			Name: log.AdminUser.Name,
+		}
+	}
+	response.Target = &AdminTargetReferenceResponse{
+		ID:   log.TargetID,
+		Type: log.TargetType,
+	}
+	if log.TargetName != nil {
+		response.Target.Name = *log.TargetName
 	}
 
 	if log.IPAddress != nil {

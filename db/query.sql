@@ -207,23 +207,41 @@ RETURNING
 
 -- name: ListAdminAuditLogs :many
 SELECT
-    id,
-    admin_user_id,
-    action,
-    target_type,
-    target_id,
-    reason,
-    ip_address,
-    user_agent,
-    created_at
-FROM admin_audit_logs
-WHERE (sqlc.arg(admin_user_id)::bigint = 0 OR admin_user_id = sqlc.arg(admin_user_id))
+    l.id,
+    l.admin_user_id,
+    au.name AS admin_user_name,
+    au.email AS admin_user_email,
+    au.role AS admin_user_role,
+    au.status AS admin_user_status,
+    l.action,
+    l.target_type,
+    l.target_id,
+    CASE
+        WHEN l.target_type = 'ADMIN_USER' THEN target_admin.name
+        WHEN l.target_type = 'ORGANIZER' THEN target_organizer.name
+        WHEN l.target_type = 'EVENT' THEN target_event.name
+        WHEN l.target_type = 'SECTION' THEN target_section.section_name
+        WHEN l.target_type = 'ORDER' THEN target_order.order_no
+        ELSE NULL
+    END AS target_name,
+    l.reason,
+    l.ip_address,
+    l.user_agent,
+    l.created_at
+FROM admin_audit_logs l
+LEFT JOIN admin_users au ON au.id = l.admin_user_id
+LEFT JOIN admin_users target_admin ON l.target_type = 'ADMIN_USER' AND target_admin.id = l.target_id
+LEFT JOIN organizers target_organizer ON l.target_type = 'ORGANIZER' AND target_organizer.id = l.target_id
+LEFT JOIN events target_event ON l.target_type = 'EVENT' AND target_event.id = l.target_id
+LEFT JOIN event_sections target_section ON l.target_type = 'SECTION' AND target_section.id = l.target_id
+LEFT JOIN orders target_order ON l.target_type = 'ORDER' AND target_order.id = l.target_id
+WHERE (sqlc.arg(admin_user_id)::bigint = 0 OR l.admin_user_id = sqlc.arg(admin_user_id))
   AND (
       sqlc.arg(cursor_created_at)::timestamptz IS NULL
-      OR created_at < sqlc.arg(cursor_created_at)
-      OR (created_at = sqlc.arg(cursor_created_at) AND id < sqlc.arg(cursor_id))
+      OR l.created_at < sqlc.arg(cursor_created_at)
+      OR (l.created_at = sqlc.arg(cursor_created_at) AND l.id < sqlc.arg(cursor_id))
   )
-ORDER BY created_at DESC, id DESC
+ORDER BY l.created_at DESC, l.id DESC
 LIMIT sqlc.arg(page_limit);
 
 -- name: GetEventByID :one
@@ -261,40 +279,46 @@ ORDER BY id;
 
 -- name: ListAdminEvents :many
 SELECT
-    id,
-    organizer_id,
-    name,
-    venue,
-    status,
-    start_at,
-    end_at,
-    sale_start_at,
-    sale_end_at,
-    created_at,
-    updated_at
-FROM events
+    e.id,
+    e.organizer_id,
+    o.name AS organizer_name,
+    o.status AS organizer_status,
+    e.name,
+    e.venue,
+    e.status,
+    e.start_at,
+    e.end_at,
+    e.sale_start_at,
+    e.sale_end_at,
+    e.created_at,
+    e.updated_at
+FROM events e
+LEFT JOIN organizers o ON o.id = e.organizer_id
 WHERE sqlc.arg(organizer_id)::bigint = 0
-   OR organizer_id = sqlc.arg(organizer_id)
-ORDER BY id;
+   OR e.organizer_id = sqlc.arg(organizer_id)
+ORDER BY e.id;
 
 -- name: GetAdminEventByID :one
 SELECT
-    id,
-    organizer_id,
-    name,
-    venue,
-    status,
-    start_at,
-    end_at,
-    sale_start_at,
-    sale_end_at,
-    created_at,
-    updated_at
-FROM events
-WHERE id = sqlc.arg(event_id)
+    e.id,
+    e.organizer_id,
+    o.name AS organizer_name,
+    o.status AS organizer_status,
+    e.name,
+    e.venue,
+    e.status,
+    e.start_at,
+    e.end_at,
+    e.sale_start_at,
+    e.sale_end_at,
+    e.created_at,
+    e.updated_at
+FROM events e
+LEFT JOIN organizers o ON o.id = e.organizer_id
+WHERE e.id = sqlc.arg(event_id)
   AND (
       sqlc.arg(organizer_id)::bigint = 0
-      OR organizer_id = sqlc.arg(organizer_id)
+      OR e.organizer_id = sqlc.arg(organizer_id)
   )
 LIMIT 1;
 
