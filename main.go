@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -25,6 +25,8 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
+
+// 這些檔案一起打包進去binary
 
 //go:embed config/default/app.properties
 var defaultConfigFiles embed.FS
@@ -72,7 +74,13 @@ const (
 	appRoleScheduler appRole = "scheduler"
 )
 
+type envConfig struct {
+	fileName string
+	fs       embed.FS
+}
+
 func (app *BuyTicketApp) Initialize() {
+	// 目前將 程式分 api  、 scheduler 兩個image 部屬， 用 環境變數區分
 	role := parseAppRole()
 	if role == appRoleScheduler {
 		app.Runtime.Lifecycle.Startup.Serve = nil
@@ -83,6 +91,7 @@ func (app *BuyTicketApp) Initialize() {
 		env = "local"
 	}
 
+	// 先載入 config/default/app.properties，把共用預設設定放進 runtime.Property.Store
 	if err := app.Runtime.Property.LoadPropertiesByFS(
 		defaultConfigFiles,
 		"config/default/app.properties",
@@ -91,31 +100,36 @@ func (app *BuyTicketApp) Initialize() {
 		log.Fatalf("load default app.properties failed: %v", err)
 	}
 
-	envConfigFile := map[string]string{
-		"local": "config/local/app.properties",
-		"dev":   "config/dev/app.properties",
-		"prod":  "config/prod/app.properties",
+	envConfigs := map[string]envConfig{
+		"local": {
+			fileName: "config/local/app.properties",
+			fs:       localConfigFiles,
+		},
+		"dev": {
+			fileName: "config/dev/app.properties",
+			fs:       devConfigFiles,
+		},
+		"prod": {
+			fileName: "config/prod/app.properties",
+			fs:       prodConfigFiles,
+		},
 	}
-	envFile, ok := envConfigFile[env]
+
+	config, ok := envConfigs[env]
 	if !ok {
 		log.Fatalf("unsupported APP_ENV %q", env)
 	}
 
-	envConfigFS := map[string]embed.FS{
-		"local": localConfigFiles,
-		"dev":   devConfigFiles,
-		"prod":  prodConfigFiles,
-	}
-
 	if err := app.Runtime.Property.LoadPropertiesByFS(
-		envConfigFS[env],
-		envFile,
+		config.fs,
+		config.fileName,
 		defaultConfigFiles,
 	); err != nil {
 		log.Fatalf("load %s app.properties failed: %v", env, err)
 	}
 	applyEnvOverrides(app.Runtime)
 
+	//repo
 	userRepo, adminUserRepo, organizerRepo, adminAuditLogRepo, eventRepo, adminEventRepo, sectionRepo, reservationRepo, orderRepo, adminOrderRepo, paymentRepo, dbPool := buildRepositories(app.Runtime)
 
 	bookingService := service.NewBookingService(
@@ -127,16 +141,7 @@ func (app *BuyTicketApp) Initialize() {
 	)
 	bookingService.DB = dbPool
 	bookingService.OrderPaymentTTL = orderPaymentTTL(app.Runtime)
-	if dbPool != nil {
-		bookingService.PaymentAttemptRepo = repository.NewPostgresPaymentAttemptRepository(db.New(dbPool))
-		bookingService.IdempotencyRepo = repository.NewPostgresIdempotencyRepository(db.New(dbPool))
-	}
 	bookingService.MockPaymentCallbackURL = app.Runtime.Property.Property("payment.mock.callback_url")
-	paymentBreakerConfig := paymentCircuitBreakerConfig(app.Runtime)
-	if mockPaymentRouter := buildMockPaymentProviderRouter(app.Runtime, paymentBreakerConfig); mockPaymentRouter != nil {
-		bookingService.MockPaymentRouter = mockPaymentRouter
-		bookingService.MockPaymentClient = mockPaymentRouter.PrimaryClient()
-	}
 	bookingService.QueueStore = buildQueueStore(app.Runtime)
 	bookingService.StockStore = buildStockStore(app.Runtime)
 	bookingService.MockPaymentSignature = service.MockPaymentSignatureConfig{
@@ -144,6 +149,19 @@ func (app *BuyTicketApp) Initialize() {
 		HashKey:    app.Runtime.Property.Property("payment.mock.hash_key"),
 		HashIV:     app.Runtime.Property.Property("payment.mock.hash_iv"),
 	}
+
+	// 只有真的有 PostgreSQL 連線池時，才掛上 PaymentAttemptRepo 和 IdempotencyRepo
+	if dbPool != nil {
+		bookingService.PaymentAttemptRepo = repository.NewPostgresPaymentAttemptRepository(db.New(dbPool))
+		bookingService.IdempotencyRepo = repository.NewPostgresIdempotencyRepository(db.New(dbPool))
+	}
+
+	paymentBreakerConfig := paymentCircuitBreakerConfig(app.Runtime)
+	if mockPaymentRouter := buildMockPaymentProviderRouter(app.Runtime, paymentBreakerConfig); mockPaymentRouter != nil {
+		bookingService.MockPaymentRouter = mockPaymentRouter
+		bookingService.MockPaymentClient = mockPaymentRouter.PrimaryClient()
+	}
+
 	sessionStore := buildSessionStore(app.Runtime)
 	sessionTTL := sessionTTL(app.Runtime)
 
@@ -223,6 +241,9 @@ func registerHTTPServer(
 	log.Printf("server configured at %s", addr)
 }
 
+// 環境變數覆寫邏輯: 先從 embed 進 binary 的 config/default/app.properties 和 config/{APP_ENV}/app.properties 載入。
+// 再用部署環境給的環境變數覆蓋掉 properties 裡的值。
+// 主要是讓 Helm/Kubernetes 的 ConfigMap / Secret 能真的生效
 func applyEnvOverrides(runtime *infraapp.Runtime) {
 	envOverrides := map[string]string{
 		"SERVER_ADDR":                            "server.addr",
@@ -256,7 +277,7 @@ func applyEnvOverrides(runtime *infraapp.Runtime) {
 	}
 
 	for envName, propertyKey := range envOverrides {
-		value, ok := os.LookupEnv(envName)
+		value, ok := os.LookupEnv(envName) // 即使值是空字串 也會覆蓋，跟 os.Getenv 不同
 		if ok {
 			runtime.Property.Store.Set(propertyKey, value)
 		}
@@ -576,9 +597,10 @@ func buildRepositories(runtime *infraapp.Runtime) (
 	repository.PaymentRepository,
 	*pgxpool.Pool,
 ) {
+	// 決定資料庫 repository 要用 PostgreSQL 還是 memory
 	if runtime.Property.RequiredProperty("app.store") == "postgres" {
-		pg := infrapostgres.Register(runtime, "main")
-		pg.LoadFromPrefix("postgres")
+		pg := infrapostgres.Register(runtime, "main") // 註冊一個 PostgreSQL component，名字叫 "main"
+		pg.LoadFromPrefix("postgres")                 // 從 property 裡讀 postgres.* 這組設定
 		pool := pg.Pool()
 		queries := db.New(pool)
 		eventRepo := repository.NewPostgresEventRepository(queries)
