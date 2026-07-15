@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -149,12 +149,9 @@ func (app *BuyTicketApp) Initialize() {
 		HashKey:    app.Runtime.Property.Property("payment.mock.hash_key"),
 		HashIV:     app.Runtime.Property.Property("payment.mock.hash_iv"),
 	}
-
-	// 只有真的有 PostgreSQL 連線池時，才掛上 PaymentAttemptRepo 和 IdempotencyRepo
-	if dbPool != nil {
-		bookingService.PaymentAttemptRepo = repository.NewPostgresPaymentAttemptRepository(db.New(dbPool))
-		bookingService.IdempotencyRepo = repository.NewPostgresIdempotencyRepository(db.New(dbPool))
-	}
+	queries := db.New(dbPool)
+	bookingService.PaymentAttemptRepo = repository.NewPostgresPaymentAttemptRepository(queries)
+	bookingService.IdempotencyRepo = repository.NewPostgresIdempotencyRepository(queries)
 
 	paymentBreakerConfig := paymentCircuitBreakerConfig(app.Runtime)
 	if mockPaymentRouter := buildMockPaymentProviderRouter(app.Runtime, paymentBreakerConfig); mockPaymentRouter != nil {
@@ -247,7 +244,6 @@ func registerHTTPServer(
 func applyEnvOverrides(runtime *infraapp.Runtime) {
 	envOverrides := map[string]string{
 		"SERVER_ADDR":                            "server.addr",
-		"APP_STORE":                              "app.store",
 		"QUEUE_STORE":                            "queue.store",
 		"QUEUE_RELEASE_LIMIT":                    "queue.release.limit",
 		"QUEUE_JOIN_MAX_IN_FLIGHT":               "queue.join.max_in_flight",
@@ -597,41 +593,22 @@ func buildRepositories(runtime *infraapp.Runtime) (
 	repository.PaymentRepository,
 	*pgxpool.Pool,
 ) {
-	// 決定資料庫 repository 要用 PostgreSQL 還是 memory
-	if runtime.Property.RequiredProperty("app.store") == "postgres" {
-		pg := infrapostgres.Register(runtime, "main") // 註冊一個 PostgreSQL component，名字叫 "main"
-		pg.LoadFromPrefix("postgres")                 // 從 property 裡讀 postgres.* 這組設定
-		pool := pg.Pool()
-		queries := db.New(pool)
-		eventRepo := repository.NewPostgresEventRepository(queries)
-		orderRepo := repository.NewPostgresOrderRepository(queries)
-		return repository.NewPostgresUserRepository(queries),
-			repository.NewPostgresAdminUserRepository(queries),
-			repository.NewPostgresOrganizerRepository(queries),
-			repository.NewPostgresAdminAuditLogRepository(queries),
-			eventRepo,
-			eventRepo,
-			repository.NewPostgresSectionRepository(queries),
-			repository.NewPostgresReservationRepository(queries),
-			orderRepo,
-			orderRepo,
-			repository.NewPostgresPaymentRepository(queries),
-			pool
-	}
-
-	users, adminUsers, organizers, events, sections := repository.SeedSampleData()
-	eventRepo := repository.NewMemoryEventRepository(events)
-	orderRepo := repository.NewMemoryOrderRepository()
-	return repository.NewMemoryUserRepository(users),
-		repository.NewMemoryAdminUserRepository(adminUsers),
-		repository.NewMemoryOrganizerRepository(organizers),
-		repository.NewMemoryAdminAuditLogRepository(),
+	pg := infrapostgres.Register(runtime, "main") // 註冊一個 PostgreSQL component，名字叫 "main"
+	pg.LoadFromPrefix("postgres")                 // 從 property 裡讀 postgres.* 這組設定
+	pool := pg.Pool()
+	queries := db.New(pool)
+	eventRepo := repository.NewPostgresEventRepository(queries)
+	orderRepo := repository.NewPostgresOrderRepository(queries)
+	return repository.NewPostgresUserRepository(queries),
+		repository.NewPostgresAdminUserRepository(queries),
+		repository.NewPostgresOrganizerRepository(queries),
+		repository.NewPostgresAdminAuditLogRepository(queries),
 		eventRepo,
 		eventRepo,
-		repository.NewMemorySectionRepository(sections),
-		repository.NewMemoryReservationRepository(),
+		repository.NewPostgresSectionRepository(queries),
+		repository.NewPostgresReservationRepository(queries),
 		orderRepo,
 		orderRepo,
-		repository.NewMemoryPaymentRepository(),
-		nil
+		repository.NewPostgresPaymentRepository(queries),
+		pool
 }

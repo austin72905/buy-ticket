@@ -54,7 +54,6 @@ ingress:
 app:
   env: dev
   serverAddr: ":8080"
-  store: postgres
 
 queue:
   store: redis

@@ -7,7 +7,6 @@ metadata:
 data:
   APP_ENV: {{ .Values.app.env | quote }}
   SERVER_ADDR: {{ .Values.app.serverAddr | quote }}
-  APP_STORE: {{ .Values.app.store | quote }}
   QUEUE_STORE: {{ .Values.queue.store | quote }}
   QUEUE_RELEASE_LIMIT: {{ .Values.queue.releaseLimit | quote }}
   QUEUE_JOIN_MAX_IN_FLIGHT: {{ .Values.queue.join.maxInFlight | quote }}
