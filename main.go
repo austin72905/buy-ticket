@@ -79,6 +79,21 @@ type envConfig struct {
 	fs       embed.FS
 }
 
+type appRepositories struct {
+	user          repository.UserRepository
+	adminUser     repository.AdminUserRepository
+	organizer     repository.OrganizerRepository
+	adminAuditLog repository.AdminAuditLogRepository
+	event         repository.EventRepository
+	adminEvent    repository.AdminEventRepository
+	section       repository.SectionRepository
+	reservation   repository.ReservationRepository
+	order         repository.OrderRepository
+	adminOrder    repository.AdminOrderRepository
+	payment       repository.PaymentRepository
+	dbPool        *pgxpool.Pool
+}
+
 func (app *BuyTicketApp) Initialize() {
 	// 目前將 程式分 api  、 scheduler 兩個image 部屬， 用 環境變數區分
 	role := parseAppRole()
@@ -129,40 +144,14 @@ func (app *BuyTicketApp) Initialize() {
 	}
 	applyEnvOverrides(app.Runtime)
 
-	//repo
-	userRepo, adminUserRepo, organizerRepo, adminAuditLogRepo, eventRepo, adminEventRepo, sectionRepo, reservationRepo, orderRepo, adminOrderRepo, paymentRepo, dbPool := buildRepositories(app.Runtime)
-
-	bookingService := service.NewBookingService(
-		eventRepo,
-		sectionRepo,
-		reservationRepo,
-		orderRepo,
-		paymentRepo,
-	)
-	bookingService.DB = dbPool
-	bookingService.OrderPaymentTTL = orderPaymentTTL(app.Runtime)
-	bookingService.MockPaymentCallbackURL = app.Runtime.Property.Property("payment.mock.callback_url")
-	bookingService.QueueStore = buildQueueStore(app.Runtime)
-	bookingService.StockStore = buildStockStore(app.Runtime)
-	bookingService.MockPaymentSignature = service.MockPaymentSignatureConfig{
-		MerchantID: app.Runtime.Property.Property("payment.mock.merchant_id"),
-		HashKey:    app.Runtime.Property.Property("payment.mock.hash_key"),
-		HashIV:     app.Runtime.Property.Property("payment.mock.hash_iv"),
-	}
-	queries := db.New(dbPool)
-	bookingService.PaymentAttemptRepo = repository.NewPostgresPaymentAttemptRepository(queries)
-	bookingService.IdempotencyRepo = repository.NewPostgresIdempotencyRepository(queries)
-
-	paymentBreakerConfig := paymentCircuitBreakerConfig(app.Runtime)
-	if mockPaymentRouter := buildMockPaymentProviderRouter(app.Runtime, paymentBreakerConfig); mockPaymentRouter != nil {
-		bookingService.MockPaymentRouter = mockPaymentRouter
-		bookingService.MockPaymentClient = mockPaymentRouter.PrimaryClient()
-	}
-
+	// Build app dependencies after properties and env overrides are loaded.
+	repos := buildRepositories(app.Runtime)
+	bookingService := buildBookingService(app.Runtime, repos)
 	sessionStore := buildSessionStore(app.Runtime)
 	sessionTTL := sessionTTL(app.Runtime)
 
 	if role == appRoleAll || role == appRoleScheduler {
+		// Run once on startup so stale event statuses are corrected before the periodic scheduler.
 		if count, err := bookingService.AdvanceEventStatuses(context.Background(), time.Now()); err != nil {
 			log.Fatalf("advance event statuses failed: %v", err)
 		} else if count > 0 {
@@ -176,7 +165,7 @@ func (app *BuyTicketApp) Initialize() {
 	}
 
 	if role == appRoleAll || role == appRoleAPI {
-		registerHTTPServer(app.Runtime, userRepo, adminUserRepo, organizerRepo, adminAuditLogRepo, adminOrderRepo, adminEventRepo, bookingService, sessionStore, sessionTTL)
+		registerHTTPServer(app.Runtime, repos.user, repos.adminUser, repos.organizer, repos.adminAuditLog, repos.adminOrder, repos.adminEvent, bookingService, sessionStore, sessionTTL)
 	}
 
 	log.Printf("app role configured: %s", role)
@@ -236,6 +225,38 @@ func registerHTTPServer(
 	addr := runtime.Property.RequiredProperty("server.addr")
 	runtime.Web.Listen(addr)
 	log.Printf("server configured at %s", addr)
+}
+
+func buildBookingService(runtime *infraapp.Runtime, repos *appRepositories) *service.BookingService {
+	bookingService := service.NewBookingService(
+		repos.event,
+		repos.section,
+		repos.reservation,
+		repos.order,
+		repos.payment,
+	)
+	bookingService.DB = repos.dbPool
+	bookingService.OrderPaymentTTL = orderPaymentTTL(runtime)
+	bookingService.MockPaymentCallbackURL = runtime.Property.Property("payment.mock.callback_url")
+	bookingService.QueueStore = buildQueueStore(runtime)
+	bookingService.StockStore = buildStockStore(runtime)
+	bookingService.MockPaymentSignature = service.MockPaymentSignatureConfig{
+		MerchantID: runtime.Property.Property("payment.mock.merchant_id"),
+		HashKey:    runtime.Property.Property("payment.mock.hash_key"),
+		HashIV:     runtime.Property.Property("payment.mock.hash_iv"),
+	}
+
+	queries := db.New(repos.dbPool)
+	bookingService.PaymentAttemptRepo = repository.NewPostgresPaymentAttemptRepository(queries)
+	bookingService.IdempotencyRepo = repository.NewPostgresIdempotencyRepository(queries)
+
+	paymentBreakerConfig := paymentCircuitBreakerConfig(runtime)
+	if mockPaymentRouter := buildMockPaymentProviderRouter(runtime, paymentBreakerConfig); mockPaymentRouter != nil {
+		bookingService.MockPaymentRouter = mockPaymentRouter
+		bookingService.MockPaymentClient = mockPaymentRouter.PrimaryClient()
+	}
+
+	return bookingService
 }
 
 // 環境變數覆寫邏輯: 先從 embed 進 binary 的 config/default/app.properties 和 config/{APP_ENV}/app.properties 載入。
@@ -579,36 +600,25 @@ func secondsProperty(runtime *infraapp.Runtime, key string, fallbackSeconds int)
 	return time.Duration(seconds) * time.Second
 }
 
-func buildRepositories(runtime *infraapp.Runtime) (
-	repository.UserRepository,
-	repository.AdminUserRepository,
-	repository.OrganizerRepository,
-	repository.AdminAuditLogRepository,
-	repository.EventRepository,
-	repository.AdminEventRepository,
-	repository.SectionRepository,
-	repository.ReservationRepository,
-	repository.OrderRepository,
-	repository.AdminOrderRepository,
-	repository.PaymentRepository,
-	*pgxpool.Pool,
-) {
+func buildRepositories(runtime *infraapp.Runtime) *appRepositories {
 	pg := infrapostgres.Register(runtime, "main") // 註冊一個 PostgreSQL component，名字叫 "main"
 	pg.LoadFromPrefix("postgres")                 // 從 property 裡讀 postgres.* 這組設定
 	pool := pg.Pool()
 	queries := db.New(pool)
 	eventRepo := repository.NewPostgresEventRepository(queries)
 	orderRepo := repository.NewPostgresOrderRepository(queries)
-	return repository.NewPostgresUserRepository(queries),
-		repository.NewPostgresAdminUserRepository(queries),
-		repository.NewPostgresOrganizerRepository(queries),
-		repository.NewPostgresAdminAuditLogRepository(queries),
-		eventRepo,
-		eventRepo,
-		repository.NewPostgresSectionRepository(queries),
-		repository.NewPostgresReservationRepository(queries),
-		orderRepo,
-		orderRepo,
-		repository.NewPostgresPaymentRepository(queries),
-		pool
+	return &appRepositories{
+		user:          repository.NewPostgresUserRepository(queries),
+		adminUser:     repository.NewPostgresAdminUserRepository(queries),
+		organizer:     repository.NewPostgresOrganizerRepository(queries),
+		adminAuditLog: repository.NewPostgresAdminAuditLogRepository(queries),
+		event:         eventRepo,
+		adminEvent:    eventRepo,
+		section:       repository.NewPostgresSectionRepository(queries),
+		reservation:   repository.NewPostgresReservationRepository(queries),
+		order:         orderRepo,
+		adminOrder:    orderRepo,
+		payment:       repository.NewPostgresPaymentRepository(queries),
+		dbPool:        pool,
+	}
 }
