@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -146,6 +146,7 @@ func (app *BuyTicketApp) Initialize() {
 
 	// Build app dependencies after properties and env overrides are loaded.
 	repos := buildRepositories(app.Runtime)
+	// 同時被api scheduler 依賴所以放這
 	bookingService := buildBookingService(app.Runtime, repos)
 	sessionStore := buildSessionStore(app.Runtime)
 	sessionTTL := sessionTTL(app.Runtime)
@@ -366,7 +367,7 @@ func buildMockPaymentProviderRouter(runtime *infraapp.Runtime, breakerConfig ser
 func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.BookingService) {
 	scheduler := infrascheduler.Register(runtime, "")
 	scheduler.SetPanicOnAnyAddError(true)
-
+	// 每秒  把排隊中的使用者從 waiting 推進成 ready，並發給他一個 purchaseToken
 	_, err := scheduler.AddFuncJobWithName("*/1 * * * * *", "queue-promote-ready", func(ctx context.Context) {
 		now := time.Now()
 		if err := bookingService.QueueStore.PromoteReady(ctx, now); err != nil {
@@ -376,7 +377,7 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	if err != nil {
 		log.Fatalf("register queue scheduler failed: %v", err)
 	}
-
+	// 每 5 秒 找出已超過付款期限、但還是 pending payment 的訂單，將它們過期
 	_, err = scheduler.AddFuncJobWithName("*/5 * * * * *", "order-expire-sweep", func(ctx context.Context) {
 		count, err := bookingService.SweepExpiredOrders(ctx, service.SweepExpiredOrdersInput{
 			Now:   time.Now(),
@@ -393,7 +394,7 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	if err != nil {
 		log.Fatalf("register order expire scheduler failed: %v", err)
 	}
-
+	// 每 5 秒  活動到了開賣時間、結束時間，就更新 event status
 	_, err = scheduler.AddFuncJobWithName("*/5 * * * * *", "event-status-advance", func(ctx context.Context) {
 		count, err := bookingService.AdvanceEventStatuses(ctx, time.Now())
 		if err != nil {
@@ -407,7 +408,7 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	if err != nil {
 		log.Fatalf("register event status scheduler failed: %v", err)
 	}
-
+	// 每 1 秒  清掉已經過期的 purchaseToken
 	_, err = scheduler.AddFuncJobWithName("*/1 * * * * *", "purchase-token-cleanup", func(ctx context.Context) {
 		count, err := bookingService.CleanupExpiredPurchaseTokens(ctx, time.Now())
 		if err != nil {
@@ -421,7 +422,7 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	if err != nil {
 		log.Fatalf("register purchase token cleanup failed: %v", err)
 	}
-
+	// 每 10 秒  清掉整個 queue token 已過期的排隊紀錄
 	_, err = scheduler.AddFuncJobWithName("*/10 * * * * *", "queue-timeout-cleanup", func(ctx context.Context) {
 		count, err := bookingService.CleanupExpiredQueues(ctx, time.Now())
 		if err != nil {
@@ -435,7 +436,7 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	if err != nil {
 		log.Fatalf("register queue timeout cleanup failed: %v", err)
 	}
-
+	// 每分鐘第 0 秒跑一次  校正 Redis stock 和資料庫 section inventory 的差異。
 	_, err = scheduler.AddFuncJobWithName("0 * * * * *", "stock-reconcile", func(ctx context.Context) {
 		result, err := bookingService.ReconcileStock(ctx)
 		if err != nil {
