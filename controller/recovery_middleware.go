@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// global panic handler
 func RecoveryMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		defer func() {

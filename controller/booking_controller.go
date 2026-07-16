@@ -45,6 +45,7 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 	router.GET("/payments/:paymentNo", c.GetPaymentByPaymentNo)
 	router.POST("/payments/provider/ecpay/callback", c.HandleECPayCallback)
 
+	// 以下掛在 authenticated 上的 route 都會先經過 RequireAuth()
 	authenticated := router.Group("/")
 	authenticated.Use(RequireAuth())
 	authenticated.GET("/me/reservations", c.ListUserReservations)
