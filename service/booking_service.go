@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"buy-ticket/db/sqlc"
+	db "buy-ticket/db/sqlc"
 	"buy-ticket/domain"
 	"buy-ticket/repository"
 
@@ -209,6 +209,7 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 		}
 
 		reservedSection = section
+		// 先扣 Redis stock，避免高併發超賣
 		if s.StockStore != nil {
 			if err := s.StockStore.Reserve(ctx, *section, input.Quantity); err != nil {
 				if errors.Is(err, ErrInsufficientStock) {
@@ -218,7 +219,7 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 			}
 			stockReserved = true
 		}
-
+		// 扣 DB 裡 section 的庫存
 		section, err = repos.section.ReserveInventory(ctx, input.EventID, input.SectionID, input.Quantity, now)
 		if err != nil {
 			if stockReserved {
@@ -244,13 +245,18 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
-
+		// 建立 reservation
 		return repos.reservation.Save(ctx, reservation)
 	})
+
 	if err != nil {
+		// 交易失敗，回補db 庫存
+		// s.DB == nil  代表目前不是 DB transaction 模式
 		if sectionInventoryReserved && s.DB == nil {
 			_, _ = s.SectionRepo.ReleaseInventory(ctx, input.EventID, input.SectionID, input.Quantity, now)
 		}
+
+		// 回補redis 庫存
 		if stockReserved && reservedSection != nil {
 			_ = s.StockStore.Release(ctx, *reservedSection, input.Quantity)
 		}
@@ -312,6 +318,7 @@ func (s *BookingService) orderPaymentTTL() time.Duration {
 	return s.OrderPaymentTTL
 }
 
+// 把一筆待付款訂單標記為已付款 (最後更新的那個動作)
 func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*domain.Payment, error) {
 	var payment *domain.Payment
 

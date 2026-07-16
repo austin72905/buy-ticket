@@ -57,7 +57,7 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 			QueueJoinBackpressure(c.QueueJoinMaxInFlight, c.QueueJoinRetryAfter),
 		}, queueJoinHandlers...)
 	}
-	authenticated.POST("/queue/join", queueJoinHandlers...)
+	authenticated.POST("/queue/join", queueJoinHandlers...) // 可以接多個handler  router.POST("/queue/join", RequireAuth(), QueueJoinBackpressure(...), c.JoinQueue)
 	authenticated.POST("/reservations", c.ReserveTicket)
 	authenticated.POST("/orders", c.CreateOrder)
 	authenticated.POST("/payments", c.PayOrder)

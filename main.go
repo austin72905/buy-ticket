@@ -309,7 +309,7 @@ func buildQueueStore(runtime *infraapp.Runtime) service.QueueStore {
 		redisComponent.LoadFromPrefix("redis")
 		return service.NewRedisQueueStore(redisComponent.Client(), releaseLimit)
 	}
-
+	// redis_queue_store
 	return service.NewMemoryQueueStore(releaseLimit)
 }
 
