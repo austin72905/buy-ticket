@@ -96,7 +96,14 @@ type PaymentAttemptRepository interface {
 	FindByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (*domain.PaymentAttempt, error)
 	FindByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentAttempt, error)
 	ListByOrderID(ctx context.Context, orderID int64) ([]domain.PaymentAttempt, error)
+	ListReconcileCandidates(ctx context.Context, now time.Time, cutoff time.Time, limit int, maxAttempts int) ([]domain.PaymentAttempt, error)
 	Save(ctx context.Context, attempt *domain.PaymentAttempt) error
+}
+
+type OutboxEventRepository interface {
+	Create(ctx context.Context, event *domain.OutboxEvent) error
+	ListPending(ctx context.Context, now time.Time, limit int) ([]domain.OutboxEvent, error)
+	UpdatePublishState(ctx context.Context, event *domain.OutboxEvent) error
 }
 
 type IdempotencyRepository interface {

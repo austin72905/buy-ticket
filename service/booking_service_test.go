@@ -20,6 +20,23 @@ type testBookingDeps struct {
 	IdempotencyRepo    repository.IdempotencyRepository
 }
 
+type fakeMockPaymentQueryClient struct {
+	result  *MockPaymentQueryResult
+	payload []byte
+	err     error
+}
+
+func (f *fakeMockPaymentQueryClient) Process(ctx context.Context, input MockPaymentProcessInput) ([]byte, error) {
+	return []byte(`{"accepted":true}`), nil
+}
+
+func (f *fakeMockPaymentQueryClient) Query(ctx context.Context, input MockPaymentQueryInput) (*MockPaymentQueryResult, []byte, error) {
+	if f.err != nil {
+		return nil, f.payload, f.err
+	}
+	return f.result, f.payload, nil
+}
+
 func newTestBookingService(deps testBookingDeps) *BookingService {
 	if deps.EventRepo == nil {
 		deps.EventRepo = &fakeEventRepository{}
@@ -450,6 +467,7 @@ func TestBookingServicePayOrder(t *testing.T) {
 			},
 		}
 		paymentRepo := &fakePaymentRepository{}
+		outboxRepo := repository.NewMemoryOutboxEventRepository()
 		svc := newTestBookingService(testBookingDeps{
 			EventRepo:       &fakeEventRepository{},
 			SectionRepo:     sectionRepo,
@@ -457,6 +475,7 @@ func TestBookingServicePayOrder(t *testing.T) {
 			OrderRepo:       orderRepo,
 			PaymentRepo:     paymentRepo,
 		})
+		svc.OutboxRepo = outboxRepo
 
 		payment, err := svc.PayOrder(context.Background(), PayOrderInput{
 			OrderID:   20,
@@ -480,6 +499,16 @@ func TestBookingServicePayOrder(t *testing.T) {
 		}
 		if sectionRepo.section.ReservedQuantity != 0 || sectionRepo.section.SoldQuantity != 5 {
 			t.Fatalf("預期 reserved=0 sold=5，實際為 reserved=%d sold=%d", sectionRepo.section.ReservedQuantity, sectionRepo.section.SoldQuantity)
+		}
+		events, err := outboxRepo.ListPending(context.Background(), now, 10)
+		if err != nil {
+			t.Fatalf("expected outbox list pending success: %v", err)
+		}
+		if len(events) != 1 {
+			t.Fatalf("expected 1 outbox event, got %d", len(events))
+		}
+		if events[0].EventType != OutboxEventPaymentSucceeded {
+			t.Fatalf("expected payment succeeded outbox event, got %s", events[0].EventType)
 		}
 	})
 
@@ -700,6 +729,111 @@ func TestBookingServiceHandleECPayCallback(t *testing.T) {
 			t.Fatal("預期 order 維持 pending_payment")
 		}
 	})
+}
+
+func TestBookingServiceReconcilePaymentAttempts(t *testing.T) {
+	now := time.Now()
+	orderRepo := &fakeOrderRepository{
+		orders: map[int64]*domain.Order{
+			20: {
+				ID:            20,
+				OrderNo:       "ORD-RC-001",
+				ReservationID: 10,
+				UserID:        3,
+				EventID:       1,
+				SectionID:     2,
+				Quantity:      2,
+				UnitPrice:     1800,
+				TotalAmount:   3600,
+				Status:        domain.OrderStatusPendingPayment,
+				ExpiresAt:     now.Add(10 * time.Minute),
+			},
+		},
+	}
+	reservationRepo := &fakeReservationRepository{
+		reservations: map[int64]*domain.Reservation{
+			10: {
+				ID:          10,
+				EventID:     1,
+				SectionID:   2,
+				UserID:      3,
+				Quantity:    2,
+				UnitPrice:   1800,
+				TotalAmount: 3600,
+				Status:      domain.ReservationStatusHolding,
+				ExpiresAt:   now.Add(5 * time.Minute),
+			},
+		},
+	}
+	sectionRepo := &fakeSectionRepository{
+		section: &domain.Section{
+			ID:               2,
+			EventID:          1,
+			ReservedQuantity: 2,
+			SoldQuantity:     0,
+			TotalQuantity:    10,
+			Status:           domain.SectionStatusActive,
+		},
+	}
+	attemptRepo := repository.NewMemoryPaymentAttemptRepository([]*domain.PaymentAttempt{
+		{
+			ID:              30,
+			OrderID:         20,
+			Provider:        "mock_ecpay_primary",
+			MerchantTradeNo: "MT-RC-001",
+			Method:          "credit_card",
+			Amount:          3600,
+			Status:          domain.PaymentAttemptStatusProcessing,
+			CreatedAt:       now.Add(-3 * time.Minute),
+			UpdatedAt:       now.Add(-3 * time.Minute),
+		},
+	})
+	svc := newTestBookingService(testBookingDeps{
+		EventRepo:          &fakeEventRepository{},
+		SectionRepo:        sectionRepo,
+		ReservationRepo:    reservationRepo,
+		OrderRepo:          orderRepo,
+		PaymentRepo:        &fakePaymentRepository{},
+		PaymentAttemptRepo: attemptRepo,
+	})
+	svc.MockPaymentClient = &fakeMockPaymentQueryClient{
+		result: &MockPaymentQueryResult{
+			MerchantTradeNo: "MT-RC-001",
+			ProviderTradeNo: "TRADE-RC-001",
+			Amount:          3600,
+			PaidAt:          now,
+			Method:          "Credit",
+			Status:          MockPaymentQueryStatusSuccess,
+		},
+		payload: []byte(`{"status":"SUCCESS"}`),
+	}
+
+	count, err := svc.ReconcilePaymentAttempts(context.Background(), ReconcilePaymentAttemptsInput{
+		Now:         now,
+		Delay:       2 * time.Minute,
+		RetryAfter:  30 * time.Second,
+		Limit:       100,
+		MaxAttempts: 5,
+	})
+	if err != nil {
+		t.Fatalf("reconcile payment attempts should not fail: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 reconciled attempt, got %d", count)
+	}
+	if orderRepo.orders[20].Status != domain.OrderStatusPaid {
+		t.Fatalf("expected order paid, got %d", orderRepo.orders[20].Status)
+	}
+	if reservationRepo.reservations[10].Status != domain.ReservationStatusConfirmed {
+		t.Fatalf("expected reservation confirmed, got %d", reservationRepo.reservations[10].Status)
+	}
+	attempt, err := attemptRepo.FindByMerchantTradeNo(context.Background(), "MT-RC-001")
+	if err != nil {
+		t.Fatalf("expected attempt exists: %v", err)
+	}
+	if attempt.Status != domain.PaymentAttemptStatusSucceeded {
+		t.Fatalf("expected attempt succeeded, got %d", attempt.Status)
+	}
 }
 
 func TestBookingServiceVerifyMockPaymentCallback(t *testing.T) {

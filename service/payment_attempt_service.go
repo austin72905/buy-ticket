@@ -11,6 +11,7 @@ import (
 )
 
 var ErrPaymentAttemptIdempotencyConflict = errors.New("payment attempt idempotency key reused with different request")
+var ErrPaymentAttemptRepositoryNotConfigured = errors.New("payment attempt repository is not configured")
 var ErrMockPaymentClientNotConfigured = errors.New("mock payment client is not configured")
 
 type CreatePaymentAttemptInput struct {

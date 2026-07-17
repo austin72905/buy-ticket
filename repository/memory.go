@@ -1017,6 +1017,12 @@ type MemoryPaymentAttemptRepository struct {
 	nextID   int64
 }
 
+type MemoryOutboxEventRepository struct {
+	mu     sync.RWMutex
+	events map[int64]*domain.OutboxEvent
+	nextID int64
+}
+
 func NewMemoryPaymentAttemptRepository(attempts []*domain.PaymentAttempt) *MemoryPaymentAttemptRepository {
 	repo := &MemoryPaymentAttemptRepository{
 		attempts: map[int64]*domain.PaymentAttempt{},
@@ -1034,6 +1040,13 @@ func NewMemoryPaymentAttemptRepository(attempts []*domain.PaymentAttempt) *Memor
 	repo.nextID = maxID + 1
 
 	return repo
+}
+
+func NewMemoryOutboxEventRepository() *MemoryOutboxEventRepository {
+	return &MemoryOutboxEventRepository{
+		events: map[int64]*domain.OutboxEvent{},
+		nextID: 1,
+	}
 }
 
 func (r *MemoryPaymentAttemptRepository) FindByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (*domain.PaymentAttempt, error) {
@@ -1082,6 +1095,41 @@ func (r *MemoryPaymentAttemptRepository) ListByOrderID(ctx context.Context, orde
 	return attempts, nil
 }
 
+func (r *MemoryPaymentAttemptRepository) ListReconcileCandidates(ctx context.Context, now time.Time, cutoff time.Time, limit int, maxAttempts int) ([]domain.PaymentAttempt, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 100
+	}
+	if maxAttempts <= 0 {
+		maxAttempts = 5
+	}
+	attempts := make([]domain.PaymentAttempt, 0)
+	for _, attempt := range r.attempts {
+		if attempt.Status != domain.PaymentAttemptStatusProcessing && attempt.Status != domain.PaymentAttemptStatusTimeout {
+			continue
+		}
+		if attempt.ReconcileAttempts >= maxAttempts {
+			continue
+		}
+		if attempt.NextReconcileAt != nil && attempt.NextReconcileAt.After(now) {
+			continue
+		}
+		if attempt.CreatedAt.After(cutoff) {
+			continue
+		}
+
+		cloned := *attempt
+		attempts = append(attempts, cloned)
+		if len(attempts) >= limit {
+			break
+		}
+	}
+
+	return attempts, nil
+}
+
 func (r *MemoryPaymentAttemptRepository) Save(ctx context.Context, attempt *domain.PaymentAttempt) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1094,6 +1142,64 @@ func (r *MemoryPaymentAttemptRepository) Save(ctx context.Context, attempt *doma
 	}
 
 	r.attempts[cloned.ID] = &cloned
+	return nil
+}
+
+func (r *MemoryOutboxEventRepository) Create(ctx context.Context, event *domain.OutboxEvent) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cloned := *event
+	if cloned.ID == 0 {
+		cloned.ID = r.nextID
+		r.nextID++
+	}
+	if cloned.CreatedAt.IsZero() {
+		cloned.CreatedAt = time.Now()
+	}
+	if cloned.UpdatedAt.IsZero() {
+		cloned.UpdatedAt = cloned.CreatedAt
+	}
+	r.events[cloned.ID] = &cloned
+	*event = cloned
+	return nil
+}
+
+func (r *MemoryOutboxEventRepository) ListPending(ctx context.Context, now time.Time, limit int) ([]domain.OutboxEvent, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 100
+	}
+	events := make([]domain.OutboxEvent, 0)
+	for _, event := range r.events {
+		if event.Status != domain.OutboxEventStatusPending {
+			continue
+		}
+		if event.Attempts >= event.MaxAttempts {
+			continue
+		}
+		if event.NextAttemptAt != nil && event.NextAttemptAt.After(now) {
+			continue
+		}
+		events = append(events, *event)
+		if len(events) >= limit {
+			break
+		}
+	}
+	return events, nil
+}
+
+func (r *MemoryOutboxEventRepository) UpdatePublishState(ctx context.Context, event *domain.OutboxEvent) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.events[event.ID]; !ok {
+		return ErrIdempotencyKeyNotFound
+	}
+	cloned := *event
+	r.events[event.ID] = &cloned
 	return nil
 }
 

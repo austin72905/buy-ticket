@@ -83,25 +83,6 @@ func (s *BookingService) HandleECPayCallback(ctx context.Context, input HandleEC
 		return repository.ErrPaymentAttemptNotFound
 	}
 
-	if existingPayment, err := s.PaymentRepo.FindByPaymentNo(ctx, input.TradeNo); err == nil && existingPayment != nil {
-		if attempt.Status != domain.PaymentAttemptStatusSucceeded {
-			callbackPayload, _ := json.Marshal(input)
-			if attempt.MarkSucceeded(existingPayment.ID, input.TradeNo, callbackPayload, time.Now()) {
-				_ = s.PaymentAttemptRepo.Save(ctx, attempt)
-			}
-		}
-		return nil
-	}
-
-	order, err := s.OrderRepo.FindByID(ctx, attempt.OrderID)
-	if err != nil {
-		return err
-	}
-
-	if order.Status == domain.OrderStatusPaid {
-		return nil
-	}
-
 	amount, err := strconv.ParseInt(input.TradeAmt, 10, 64)
 	if err != nil {
 		return ErrInvalidPaymentCallback
@@ -112,10 +93,42 @@ func (s *BookingService) HandleECPayCallback(ctx context.Context, input HandleEC
 		return err
 	}
 
+	callbackPayload, _ := json.Marshal(input)
+	return s.completeSuccessfulPaymentAttempt(ctx, attempt, input.TradeNo, amount, paidAt, normalizeECPayPaymentMethod(input.PaymentType), callbackPayload)
+}
+
+func (s *BookingService) completeSuccessfulPaymentAttempt(ctx context.Context, attempt *domain.PaymentAttempt, providerTradeNo string, amount int64, paidAt time.Time, method string, payload []byte) error {
+	if providerTradeNo == "" || amount <= 0 {
+		return ErrInvalidPaymentCallback
+	}
+	if paidAt.IsZero() {
+		paidAt = time.Now()
+	}
+	if method == "" {
+		method = "ecpay"
+	}
+
+	if existingPayment, err := s.PaymentRepo.FindByPaymentNo(ctx, providerTradeNo); err == nil && existingPayment != nil {
+		if attempt.Status != domain.PaymentAttemptStatusSucceeded {
+			if attempt.MarkSucceeded(existingPayment.ID, providerTradeNo, payload, paidAt) {
+				return s.PaymentAttemptRepo.Save(ctx, attempt)
+			}
+		}
+		return nil
+	}
+
+	order, err := s.OrderRepo.FindByID(ctx, attempt.OrderID)
+	if err != nil {
+		return err
+	}
+	if order.Status == domain.OrderStatusPaid {
+		return nil
+	}
+
 	payment, err := s.PayOrder(ctx, PayOrderInput{
 		OrderID:   order.ID,
-		PaymentNo: input.TradeNo,
-		Method:    normalizeECPayPaymentMethod(input.PaymentType),
+		PaymentNo: providerTradeNo,
+		Method:    method,
 		Amount:    amount,
 		PaidAt:    paidAt,
 	})
@@ -123,12 +136,10 @@ func (s *BookingService) HandleECPayCallback(ctx context.Context, input HandleEC
 		return err
 	}
 
-	callbackPayload, _ := json.Marshal(input)
-	if attempt.MarkSucceeded(payment.ID, input.TradeNo, callbackPayload, paidAt) {
+	if attempt.MarkSucceeded(payment.ID, providerTradeNo, payload, paidAt) {
 		return s.PaymentAttemptRepo.Save(ctx, attempt)
 	}
-
-	return err
+	return nil
 }
 
 func (s *BookingService) findPaymentAttemptForCallback(ctx context.Context, merchantTradeNo string) (*domain.PaymentAttempt, error) {

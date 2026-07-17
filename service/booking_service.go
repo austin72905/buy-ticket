@@ -41,6 +41,7 @@ type BookingService struct {
 	OrderRepo              repository.OrderRepository
 	PaymentRepo            repository.PaymentRepository
 	PaymentAttemptRepo     repository.PaymentAttemptRepository
+	OutboxRepo             repository.OutboxEventRepository
 	IdempotencyRepo        repository.IdempotencyRepository
 	MockPaymentClient      MockPaymentClient
 	MockPaymentRouter      *MockPaymentProviderRouter
@@ -183,6 +184,7 @@ func NewBookingService(
 		OrderRepo:          orderRepo,
 		PaymentRepo:        paymentRepo,
 		PaymentAttemptRepo: paymentAttemptRepo,
+		OutboxRepo:         repository.NewMemoryOutboxEventRepository(),
 		IdempotencyRepo:    idempotencyRepo,
 		QueueStore:         NewMemoryQueueStore(1),
 		OrderPaymentTTL:    10 * time.Minute,
@@ -423,7 +425,19 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 			return err
 		}
 
-		return repos.payment.Save(ctx, payment)
+		if err := repos.payment.Save(ctx, payment); err != nil {
+			return err
+		}
+
+		if repos.outbox != nil {
+			event, err := newPaymentSucceededOutboxEvent(order, reservation, payment, paidAt)
+			if err != nil {
+				return err
+			}
+			return repos.outbox.Create(ctx, event)
+		}
+
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -756,6 +770,7 @@ type bookingRepos struct {
 	order          repository.OrderRepository
 	payment        repository.PaymentRepository
 	paymentAttempt repository.PaymentAttemptRepository
+	outbox         repository.OutboxEventRepository
 }
 
 func (s *BookingService) withTx(ctx context.Context, fn func(repos bookingRepos) error) error {
@@ -767,6 +782,7 @@ func (s *BookingService) withTx(ctx context.Context, fn func(repos bookingRepos)
 			order:          s.OrderRepo,
 			payment:        s.PaymentRepo,
 			paymentAttempt: s.PaymentAttemptRepo,
+			outbox:         s.OutboxRepo,
 		})
 	}
 
@@ -784,6 +800,7 @@ func (s *BookingService) withTx(ctx context.Context, fn func(repos bookingRepos)
 		order:          repository.NewPostgresOrderRepository(queries),
 		payment:        repository.NewPostgresPaymentRepository(queries),
 		paymentAttempt: repository.NewPostgresPaymentAttemptRepository(queries),
+		outbox:         repository.NewPostgresOutboxEventRepository(queries),
 	}
 
 	if err := fn(repos); err != nil {

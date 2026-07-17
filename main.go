@@ -92,6 +92,7 @@ type appRepositories struct {
 	adminOrder     repository.AdminOrderRepository
 	payment        repository.PaymentRepository
 	paymentAttempt repository.PaymentAttemptRepository
+	outbox         repository.OutboxEventRepository
 	idempotency    repository.IdempotencyRepository
 	dbPool         *pgxpool.Pool
 }
@@ -240,6 +241,7 @@ func buildBookingService(runtime *infraapp.Runtime, repos *appRepositories) *ser
 		repos.paymentAttempt,
 		repos.idempotency,
 	)
+	bookingService.OutboxRepo = repos.outbox
 	bookingService.DB = repos.dbPool
 	bookingService.OrderPaymentTTL = orderPaymentTTL(runtime)
 	bookingService.MockPaymentCallbackURL = runtime.Property.Property("payment.mock.callback_url")
@@ -292,6 +294,14 @@ func applyEnvOverrides(runtime *infraapp.Runtime) {
 		"PAYMENT_BREAKER_CONSECUTIVE_FAILURES":   "payment.breaker.consecutive_failures",
 		"PAYMENT_BREAKER_OPEN_TIMEOUT_SECONDS":   "payment.breaker.open_timeout_seconds",
 		"PAYMENT_BREAKER_HALF_OPEN_MAX_REQUESTS": "payment.breaker.half_open_max_requests",
+		"PAYMENT_RECONCILE_ENABLED":              "payment.reconcile.enabled",
+		"PAYMENT_RECONCILE_BATCH_SIZE":           "payment.reconcile.batch_size",
+		"PAYMENT_RECONCILE_DELAY_SECONDS":        "payment.reconcile.delay_seconds",
+		"PAYMENT_RECONCILE_RETRY_AFTER_SECONDS":  "payment.reconcile.retry_after_seconds",
+		"PAYMENT_RECONCILE_MAX_ATTEMPTS":         "payment.reconcile.max_attempts",
+		"OUTBOX_PUBLISH_ENABLED":                 "outbox.publish.enabled",
+		"OUTBOX_PUBLISH_BATCH_SIZE":              "outbox.publish.batch_size",
+		"OUTBOX_PUBLISH_RETRY_AFTER_SECONDS":     "outbox.publish.retry_after_seconds",
 	}
 
 	for envName, propertyKey := range envOverrides {
@@ -450,6 +460,48 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	if err != nil {
 		log.Fatalf("register stock reconcile failed: %v", err)
 	}
+
+	if paymentReconcileEnabled(runtime) {
+		_, err = scheduler.AddFuncJobWithName("*/30 * * * * *", "payment-attempt-reconcile", func(ctx context.Context) {
+			count, err := bookingService.ReconcilePaymentAttempts(ctx, service.ReconcilePaymentAttemptsInput{
+				Now:         time.Now(),
+				Delay:       paymentReconcileDelay(runtime),
+				RetryAfter:  paymentReconcileRetryAfter(runtime),
+				Limit:       paymentReconcileBatchSize(runtime),
+				MaxAttempts: paymentReconcileMaxAttempts(runtime),
+			})
+			if err != nil {
+				log.Printf("payment attempt reconcile failed: %v", err)
+				return
+			}
+			if count > 0 {
+				log.Printf("payment attempt reconcile completed %d attempts", count)
+			}
+		})
+		if err != nil {
+			log.Fatalf("register payment attempt reconcile failed: %v", err)
+		}
+	}
+
+	if outboxPublishEnabled(runtime) {
+		_, err = scheduler.AddFuncJobWithName("*/10 * * * * *", "outbox-publish", func(ctx context.Context) {
+			count, err := bookingService.PublishOutboxEvents(ctx, service.PublishOutboxEventsInput{
+				Now:        time.Now(),
+				Limit:      outboxPublishBatchSize(runtime),
+				RetryAfter: outboxPublishRetryAfter(runtime),
+			})
+			if err != nil {
+				log.Printf("outbox publish failed: %v", err)
+				return
+			}
+			if count > 0 {
+				log.Printf("outbox published %d events", count)
+			}
+		})
+		if err != nil {
+			log.Fatalf("register outbox publish failed: %v", err)
+		}
+	}
 }
 
 func queueReleaseLimit(runtime *infraapp.Runtime) int {
@@ -464,6 +516,96 @@ func queueReleaseLimit(runtime *infraapp.Runtime) int {
 	}
 
 	return limit
+}
+
+func paymentReconcileEnabled(runtime *infraapp.Runtime) bool {
+	value := runtime.Property.Property("payment.reconcile.enabled")
+	if value == "" {
+		return true
+	}
+	enabled, err := strconv.ParseBool(value)
+	return err == nil && enabled
+}
+
+func paymentReconcileBatchSize(runtime *infraapp.Runtime) int {
+	value := runtime.Property.Property("payment.reconcile.batch_size")
+	if value == "" {
+		return 100
+	}
+	limit, err := strconv.Atoi(value)
+	if err != nil || limit <= 0 {
+		return 100
+	}
+	return limit
+}
+
+func paymentReconcileDelay(runtime *infraapp.Runtime) time.Duration {
+	value := runtime.Property.Property("payment.reconcile.delay_seconds")
+	if value == "" {
+		return 2 * time.Minute
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return 2 * time.Minute
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func paymentReconcileRetryAfter(runtime *infraapp.Runtime) time.Duration {
+	value := runtime.Property.Property("payment.reconcile.retry_after_seconds")
+	if value == "" {
+		return 30 * time.Second
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return 30 * time.Second
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func paymentReconcileMaxAttempts(runtime *infraapp.Runtime) int {
+	value := runtime.Property.Property("payment.reconcile.max_attempts")
+	if value == "" {
+		return 5
+	}
+	limit, err := strconv.Atoi(value)
+	if err != nil || limit <= 0 {
+		return 5
+	}
+	return limit
+}
+
+func outboxPublishEnabled(runtime *infraapp.Runtime) bool {
+	value := runtime.Property.Property("outbox.publish.enabled")
+	if value == "" {
+		return true
+	}
+	enabled, err := strconv.ParseBool(value)
+	return err == nil && enabled
+}
+
+func outboxPublishBatchSize(runtime *infraapp.Runtime) int {
+	value := runtime.Property.Property("outbox.publish.batch_size")
+	if value == "" {
+		return 100
+	}
+	limit, err := strconv.Atoi(value)
+	if err != nil || limit <= 0 {
+		return 100
+	}
+	return limit
+}
+
+func outboxPublishRetryAfter(runtime *infraapp.Runtime) time.Duration {
+	value := runtime.Property.Property("outbox.publish.retry_after_seconds")
+	if value == "" {
+		return 30 * time.Second
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return 30 * time.Second
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func queueJoinMaxInFlight(runtime *infraapp.Runtime) int {
@@ -616,6 +758,7 @@ func buildRepositories(runtime *infraapp.Runtime) *appRepositories {
 	orderRepo := repository.NewPostgresOrderRepository(queries)
 	paymentRepo := repository.NewPostgresPaymentRepository(queries)
 	paymentAttemptRepo := repository.NewPostgresPaymentAttemptRepository(queries)
+	outboxRepo := repository.NewPostgresOutboxEventRepository(queries)
 	idempotencyRepo := repository.NewPostgresIdempotencyRepository(queries)
 	return &appRepositories{
 		user:           userRepo,
@@ -630,6 +773,7 @@ func buildRepositories(runtime *infraapp.Runtime) *appRepositories {
 		adminOrder:     orderRepo,
 		payment:        paymentRepo,
 		paymentAttempt: paymentAttemptRepo,
+		outbox:         outboxRepo,
 		idempotency:    idempotencyRepo,
 		dbPool:         pool,
 	}

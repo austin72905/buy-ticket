@@ -29,3 +29,11 @@ data:
   PAYMENT_BREAKER_CONSECUTIVE_FAILURES: {{ .Values.payment.breaker.consecutiveFailures | quote }}
   PAYMENT_BREAKER_OPEN_TIMEOUT_SECONDS: {{ .Values.payment.breaker.openTimeoutSeconds | quote }}
   PAYMENT_BREAKER_HALF_OPEN_MAX_REQUESTS: {{ .Values.payment.breaker.halfOpenMaxRequests | quote }}
+  PAYMENT_RECONCILE_ENABLED: {{ .Values.payment.reconcile.enabled | quote }}
+  PAYMENT_RECONCILE_BATCH_SIZE: {{ .Values.payment.reconcile.batchSize | quote }}
+  PAYMENT_RECONCILE_DELAY_SECONDS: {{ .Values.payment.reconcile.delaySeconds | quote }}
+  PAYMENT_RECONCILE_RETRY_AFTER_SECONDS: {{ .Values.payment.reconcile.retryAfterSeconds | quote }}
+  PAYMENT_RECONCILE_MAX_ATTEMPTS: {{ .Values.payment.reconcile.maxAttempts | quote }}
+  OUTBOX_PUBLISH_ENABLED: {{ .Values.outbox.publish.enabled | quote }}
+  OUTBOX_PUBLISH_BATCH_SIZE: {{ .Values.outbox.publish.batchSize | quote }}
+  OUTBOX_PUBLISH_RETRY_AFTER_SECONDS: {{ .Values.outbox.publish.retryAfterSeconds | quote }}

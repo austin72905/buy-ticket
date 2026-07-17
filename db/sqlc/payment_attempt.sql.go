@@ -29,10 +29,13 @@ INSERT INTO payment_attempts (
     expires_at,
     succeeded_at,
     failed_at,
+    reconcile_attempts,
+    next_reconcile_at,
+    last_reconcile_error,
     created_at,
     updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $20
 )
 RETURNING
     id,
@@ -52,31 +55,62 @@ RETURNING
     expires_at,
     succeeded_at,
     failed_at,
+    reconcile_attempts,
+    next_reconcile_at,
+    last_reconcile_error,
     created_at,
     updated_at
 `
 
 type CreatePaymentAttemptParams struct {
-	OrderID         int64              `json:"order_id"`
-	PaymentID       pgtype.Int8        `json:"payment_id"`
-	IdempotencyKey  pgtype.Text        `json:"idempotency_key"`
-	Provider        string             `json:"provider"`
-	MerchantTradeNo string             `json:"merchant_trade_no"`
-	ProviderTradeNo pgtype.Text        `json:"provider_trade_no"`
-	Method          string             `json:"method"`
-	Amount          int64              `json:"amount"`
-	Status          int16              `json:"status"`
-	RequestPayload  []byte             `json:"request_payload"`
-	ResponsePayload []byte             `json:"response_payload"`
-	CallbackPayload []byte             `json:"callback_payload"`
-	FailureReason   pgtype.Text        `json:"failure_reason"`
-	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
-	SucceededAt     pgtype.Timestamptz `json:"succeeded_at"`
-	FailedAt        pgtype.Timestamptz `json:"failed_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	OrderID            int64              `json:"order_id"`
+	PaymentID          pgtype.Int8        `json:"payment_id"`
+	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
+	Provider           string             `json:"provider"`
+	MerchantTradeNo    string             `json:"merchant_trade_no"`
+	ProviderTradeNo    pgtype.Text        `json:"provider_trade_no"`
+	Method             string             `json:"method"`
+	Amount             int64              `json:"amount"`
+	Status             int16              `json:"status"`
+	RequestPayload     []byte             `json:"request_payload"`
+	ResponsePayload    []byte             `json:"response_payload"`
+	CallbackPayload    []byte             `json:"callback_payload"`
+	FailureReason      pgtype.Text        `json:"failure_reason"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	SucceededAt        pgtype.Timestamptz `json:"succeeded_at"`
+	FailedAt           pgtype.Timestamptz `json:"failed_at"`
+	ReconcileAttempts  int32              `json:"reconcile_attempts"`
+	NextReconcileAt    pgtype.Timestamptz `json:"next_reconcile_at"`
+	LastReconcileError pgtype.Text        `json:"last_reconcile_error"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
-func (q *Queries) CreatePaymentAttempt(ctx context.Context, arg CreatePaymentAttemptParams) (PaymentAttempt, error) {
+type CreatePaymentAttemptRow struct {
+	ID                 int64              `json:"id"`
+	OrderID            int64              `json:"order_id"`
+	PaymentID          pgtype.Int8        `json:"payment_id"`
+	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
+	Provider           string             `json:"provider"`
+	MerchantTradeNo    string             `json:"merchant_trade_no"`
+	ProviderTradeNo    pgtype.Text        `json:"provider_trade_no"`
+	Method             string             `json:"method"`
+	Amount             int64              `json:"amount"`
+	Status             int16              `json:"status"`
+	RequestPayload     []byte             `json:"request_payload"`
+	ResponsePayload    []byte             `json:"response_payload"`
+	CallbackPayload    []byte             `json:"callback_payload"`
+	FailureReason      pgtype.Text        `json:"failure_reason"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	SucceededAt        pgtype.Timestamptz `json:"succeeded_at"`
+	FailedAt           pgtype.Timestamptz `json:"failed_at"`
+	ReconcileAttempts  int32              `json:"reconcile_attempts"`
+	NextReconcileAt    pgtype.Timestamptz `json:"next_reconcile_at"`
+	LastReconcileError pgtype.Text        `json:"last_reconcile_error"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) CreatePaymentAttempt(ctx context.Context, arg CreatePaymentAttemptParams) (CreatePaymentAttemptRow, error) {
 	row := q.db.QueryRow(ctx, createPaymentAttempt,
 		arg.OrderID,
 		arg.PaymentID,
@@ -94,9 +128,12 @@ func (q *Queries) CreatePaymentAttempt(ctx context.Context, arg CreatePaymentAtt
 		arg.ExpiresAt,
 		arg.SucceededAt,
 		arg.FailedAt,
+		arg.ReconcileAttempts,
+		arg.NextReconcileAt,
+		arg.LastReconcileError,
 		arg.CreatedAt,
 	)
-	var i PaymentAttempt
+	var i CreatePaymentAttemptRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrderID,
@@ -115,6 +152,9 @@ func (q *Queries) CreatePaymentAttempt(ctx context.Context, arg CreatePaymentAtt
 		&i.ExpiresAt,
 		&i.SucceededAt,
 		&i.FailedAt,
+		&i.ReconcileAttempts,
+		&i.NextReconcileAt,
+		&i.LastReconcileError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -140,6 +180,9 @@ SELECT
     expires_at,
     succeeded_at,
     failed_at,
+    reconcile_attempts,
+    next_reconcile_at,
+    last_reconcile_error,
     created_at,
     updated_at
 FROM payment_attempts
@@ -147,9 +190,34 @@ WHERE idempotency_key = $1
 LIMIT 1
 `
 
-func (q *Queries) GetPaymentAttemptByIdempotencyKey(ctx context.Context, idempotencyKey pgtype.Text) (PaymentAttempt, error) {
+type GetPaymentAttemptByIdempotencyKeyRow struct {
+	ID                 int64              `json:"id"`
+	OrderID            int64              `json:"order_id"`
+	PaymentID          pgtype.Int8        `json:"payment_id"`
+	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
+	Provider           string             `json:"provider"`
+	MerchantTradeNo    string             `json:"merchant_trade_no"`
+	ProviderTradeNo    pgtype.Text        `json:"provider_trade_no"`
+	Method             string             `json:"method"`
+	Amount             int64              `json:"amount"`
+	Status             int16              `json:"status"`
+	RequestPayload     []byte             `json:"request_payload"`
+	ResponsePayload    []byte             `json:"response_payload"`
+	CallbackPayload    []byte             `json:"callback_payload"`
+	FailureReason      pgtype.Text        `json:"failure_reason"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	SucceededAt        pgtype.Timestamptz `json:"succeeded_at"`
+	FailedAt           pgtype.Timestamptz `json:"failed_at"`
+	ReconcileAttempts  int32              `json:"reconcile_attempts"`
+	NextReconcileAt    pgtype.Timestamptz `json:"next_reconcile_at"`
+	LastReconcileError pgtype.Text        `json:"last_reconcile_error"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetPaymentAttemptByIdempotencyKey(ctx context.Context, idempotencyKey pgtype.Text) (GetPaymentAttemptByIdempotencyKeyRow, error) {
 	row := q.db.QueryRow(ctx, getPaymentAttemptByIdempotencyKey, idempotencyKey)
-	var i PaymentAttempt
+	var i GetPaymentAttemptByIdempotencyKeyRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrderID,
@@ -168,6 +236,9 @@ func (q *Queries) GetPaymentAttemptByIdempotencyKey(ctx context.Context, idempot
 		&i.ExpiresAt,
 		&i.SucceededAt,
 		&i.FailedAt,
+		&i.ReconcileAttempts,
+		&i.NextReconcileAt,
+		&i.LastReconcileError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -193,6 +264,9 @@ SELECT
     expires_at,
     succeeded_at,
     failed_at,
+    reconcile_attempts,
+    next_reconcile_at,
+    last_reconcile_error,
     created_at,
     updated_at
 FROM payment_attempts
@@ -200,9 +274,34 @@ WHERE merchant_trade_no = $1
 LIMIT 1
 `
 
-func (q *Queries) GetPaymentAttemptByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (PaymentAttempt, error) {
+type GetPaymentAttemptByMerchantTradeNoRow struct {
+	ID                 int64              `json:"id"`
+	OrderID            int64              `json:"order_id"`
+	PaymentID          pgtype.Int8        `json:"payment_id"`
+	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
+	Provider           string             `json:"provider"`
+	MerchantTradeNo    string             `json:"merchant_trade_no"`
+	ProviderTradeNo    pgtype.Text        `json:"provider_trade_no"`
+	Method             string             `json:"method"`
+	Amount             int64              `json:"amount"`
+	Status             int16              `json:"status"`
+	RequestPayload     []byte             `json:"request_payload"`
+	ResponsePayload    []byte             `json:"response_payload"`
+	CallbackPayload    []byte             `json:"callback_payload"`
+	FailureReason      pgtype.Text        `json:"failure_reason"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	SucceededAt        pgtype.Timestamptz `json:"succeeded_at"`
+	FailedAt           pgtype.Timestamptz `json:"failed_at"`
+	ReconcileAttempts  int32              `json:"reconcile_attempts"`
+	NextReconcileAt    pgtype.Timestamptz `json:"next_reconcile_at"`
+	LastReconcileError pgtype.Text        `json:"last_reconcile_error"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetPaymentAttemptByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (GetPaymentAttemptByMerchantTradeNoRow, error) {
 	row := q.db.QueryRow(ctx, getPaymentAttemptByMerchantTradeNo, merchantTradeNo)
-	var i PaymentAttempt
+	var i GetPaymentAttemptByMerchantTradeNoRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrderID,
@@ -221,6 +320,9 @@ func (q *Queries) GetPaymentAttemptByMerchantTradeNo(ctx context.Context, mercha
 		&i.ExpiresAt,
 		&i.SucceededAt,
 		&i.FailedAt,
+		&i.ReconcileAttempts,
+		&i.NextReconcileAt,
+		&i.LastReconcileError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -246,6 +348,9 @@ SELECT
     expires_at,
     succeeded_at,
     failed_at,
+    reconcile_attempts,
+    next_reconcile_at,
+    last_reconcile_error,
     created_at,
     updated_at
 FROM payment_attempts
@@ -253,15 +358,40 @@ WHERE order_id = $1
 ORDER BY created_at DESC, id DESC
 `
 
-func (q *Queries) ListPaymentAttemptsByOrderID(ctx context.Context, orderID int64) ([]PaymentAttempt, error) {
+type ListPaymentAttemptsByOrderIDRow struct {
+	ID                 int64              `json:"id"`
+	OrderID            int64              `json:"order_id"`
+	PaymentID          pgtype.Int8        `json:"payment_id"`
+	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
+	Provider           string             `json:"provider"`
+	MerchantTradeNo    string             `json:"merchant_trade_no"`
+	ProviderTradeNo    pgtype.Text        `json:"provider_trade_no"`
+	Method             string             `json:"method"`
+	Amount             int64              `json:"amount"`
+	Status             int16              `json:"status"`
+	RequestPayload     []byte             `json:"request_payload"`
+	ResponsePayload    []byte             `json:"response_payload"`
+	CallbackPayload    []byte             `json:"callback_payload"`
+	FailureReason      pgtype.Text        `json:"failure_reason"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	SucceededAt        pgtype.Timestamptz `json:"succeeded_at"`
+	FailedAt           pgtype.Timestamptz `json:"failed_at"`
+	ReconcileAttempts  int32              `json:"reconcile_attempts"`
+	NextReconcileAt    pgtype.Timestamptz `json:"next_reconcile_at"`
+	LastReconcileError pgtype.Text        `json:"last_reconcile_error"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListPaymentAttemptsByOrderID(ctx context.Context, orderID int64) ([]ListPaymentAttemptsByOrderIDRow, error) {
 	rows, err := q.db.Query(ctx, listPaymentAttemptsByOrderID, orderID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []PaymentAttempt{}
+	items := []ListPaymentAttemptsByOrderIDRow{}
 	for rows.Next() {
-		var i PaymentAttempt
+		var i ListPaymentAttemptsByOrderIDRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrderID,
@@ -280,6 +410,125 @@ func (q *Queries) ListPaymentAttemptsByOrderID(ctx context.Context, orderID int6
 			&i.ExpiresAt,
 			&i.SucceededAt,
 			&i.FailedAt,
+			&i.ReconcileAttempts,
+			&i.NextReconcileAt,
+			&i.LastReconcileError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentAttemptsForReconciliation = `-- name: ListPaymentAttemptsForReconciliation :many
+SELECT
+    id,
+    order_id,
+    payment_id,
+    idempotency_key,
+    provider,
+    merchant_trade_no,
+    provider_trade_no,
+    method,
+    amount,
+    status,
+    request_payload,
+    response_payload,
+    callback_payload,
+    failure_reason,
+    expires_at,
+    succeeded_at,
+    failed_at,
+    reconcile_attempts,
+    next_reconcile_at,
+    last_reconcile_error,
+    created_at,
+    updated_at
+FROM payment_attempts
+WHERE status IN (1, 4)
+  AND reconcile_attempts < $1::integer
+  AND (
+      next_reconcile_at IS NULL
+      OR next_reconcile_at <= $2::timestamptz
+  )
+  AND created_at <= $3::timestamptz
+ORDER BY created_at ASC, id ASC
+LIMIT $4::integer
+`
+
+type ListPaymentAttemptsForReconciliationParams struct {
+	MaxAttempts int32              `json:"max_attempts"`
+	Now         pgtype.Timestamptz `json:"now"`
+	Cutoff      pgtype.Timestamptz `json:"cutoff"`
+	LimitRows   int32              `json:"limit_rows"`
+}
+
+type ListPaymentAttemptsForReconciliationRow struct {
+	ID                 int64              `json:"id"`
+	OrderID            int64              `json:"order_id"`
+	PaymentID          pgtype.Int8        `json:"payment_id"`
+	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
+	Provider           string             `json:"provider"`
+	MerchantTradeNo    string             `json:"merchant_trade_no"`
+	ProviderTradeNo    pgtype.Text        `json:"provider_trade_no"`
+	Method             string             `json:"method"`
+	Amount             int64              `json:"amount"`
+	Status             int16              `json:"status"`
+	RequestPayload     []byte             `json:"request_payload"`
+	ResponsePayload    []byte             `json:"response_payload"`
+	CallbackPayload    []byte             `json:"callback_payload"`
+	FailureReason      pgtype.Text        `json:"failure_reason"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	SucceededAt        pgtype.Timestamptz `json:"succeeded_at"`
+	FailedAt           pgtype.Timestamptz `json:"failed_at"`
+	ReconcileAttempts  int32              `json:"reconcile_attempts"`
+	NextReconcileAt    pgtype.Timestamptz `json:"next_reconcile_at"`
+	LastReconcileError pgtype.Text        `json:"last_reconcile_error"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListPaymentAttemptsForReconciliation(ctx context.Context, arg ListPaymentAttemptsForReconciliationParams) ([]ListPaymentAttemptsForReconciliationRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentAttemptsForReconciliation,
+		arg.MaxAttempts,
+		arg.Now,
+		arg.Cutoff,
+		arg.LimitRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPaymentAttemptsForReconciliationRow{}
+	for rows.Next() {
+		var i ListPaymentAttemptsForReconciliationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.PaymentID,
+			&i.IdempotencyKey,
+			&i.Provider,
+			&i.MerchantTradeNo,
+			&i.ProviderTradeNo,
+			&i.Method,
+			&i.Amount,
+			&i.Status,
+			&i.RequestPayload,
+			&i.ResponsePayload,
+			&i.CallbackPayload,
+			&i.FailureReason,
+			&i.ExpiresAt,
+			&i.SucceededAt,
+			&i.FailedAt,
+			&i.ReconcileAttempts,
+			&i.NextReconcileAt,
+			&i.LastReconcileError,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -304,21 +553,27 @@ SET
     failure_reason = $7,
     succeeded_at = $8,
     failed_at = $9,
-    updated_at = $10
+    reconcile_attempts = $10,
+    next_reconcile_at = $11,
+    last_reconcile_error = $12,
+    updated_at = $13
 WHERE id = $1
 `
 
 type UpdatePaymentAttemptStatusParams struct {
-	ID              int64              `json:"id"`
-	PaymentID       pgtype.Int8        `json:"payment_id"`
-	ProviderTradeNo pgtype.Text        `json:"provider_trade_no"`
-	Status          int16              `json:"status"`
-	ResponsePayload []byte             `json:"response_payload"`
-	CallbackPayload []byte             `json:"callback_payload"`
-	FailureReason   pgtype.Text        `json:"failure_reason"`
-	SucceededAt     pgtype.Timestamptz `json:"succeeded_at"`
-	FailedAt        pgtype.Timestamptz `json:"failed_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ID                 int64              `json:"id"`
+	PaymentID          pgtype.Int8        `json:"payment_id"`
+	ProviderTradeNo    pgtype.Text        `json:"provider_trade_no"`
+	Status             int16              `json:"status"`
+	ResponsePayload    []byte             `json:"response_payload"`
+	CallbackPayload    []byte             `json:"callback_payload"`
+	FailureReason      pgtype.Text        `json:"failure_reason"`
+	SucceededAt        pgtype.Timestamptz `json:"succeeded_at"`
+	FailedAt           pgtype.Timestamptz `json:"failed_at"`
+	ReconcileAttempts  int32              `json:"reconcile_attempts"`
+	NextReconcileAt    pgtype.Timestamptz `json:"next_reconcile_at"`
+	LastReconcileError pgtype.Text        `json:"last_reconcile_error"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) UpdatePaymentAttemptStatus(ctx context.Context, arg UpdatePaymentAttemptStatusParams) error {
@@ -332,6 +587,9 @@ func (q *Queries) UpdatePaymentAttemptStatus(ctx context.Context, arg UpdatePaym
 		arg.FailureReason,
 		arg.SucceededAt,
 		arg.FailedAt,
+		arg.ReconcileAttempts,
+		arg.NextReconcileAt,
+		arg.LastReconcileError,
 		arg.UpdatedAt,
 	)
 	return err

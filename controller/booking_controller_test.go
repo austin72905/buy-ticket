@@ -546,6 +546,20 @@ func (f *fakePaymentAttemptRepositoryForController) ListByOrderID(ctx context.Co
 	return attempts, nil
 }
 
+func (f *fakePaymentAttemptRepositoryForController) ListReconcileCandidates(ctx context.Context, now time.Time, cutoff time.Time, limit int, maxAttempts int) ([]domain.PaymentAttempt, error) {
+	attempts := make([]domain.PaymentAttempt, 0)
+	for _, attempt := range f.attempts {
+		if attempt.Status != domain.PaymentAttemptStatusProcessing && attempt.Status != domain.PaymentAttemptStatusTimeout {
+			continue
+		}
+		if attempt.CreatedAt.After(cutoff) {
+			continue
+		}
+		attempts = append(attempts, *attempt)
+	}
+	return attempts, nil
+}
+
 func (f *fakePaymentAttemptRepositoryForController) Save(ctx context.Context, attempt *domain.PaymentAttempt) error {
 	if f.attempts == nil {
 		f.attempts = map[int64]*domain.PaymentAttempt{}

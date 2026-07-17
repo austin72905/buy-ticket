@@ -20,8 +20,9 @@ type Querier interface {
 	CreateIdempotencyKey(ctx context.Context, arg CreateIdempotencyKeyParams) (IdempotencyKey, error)
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	CreateOrganizer(ctx context.Context, arg CreateOrganizerParams) (CreateOrganizerRow, error)
+	CreateOutboxEvent(ctx context.Context, arg CreateOutboxEventParams) (OutboxEvent, error)
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
-	CreatePaymentAttempt(ctx context.Context, arg CreatePaymentAttemptParams) (PaymentAttempt, error)
+	CreatePaymentAttempt(ctx context.Context, arg CreatePaymentAttemptParams) (CreatePaymentAttemptRow, error)
 	CreateReservation(ctx context.Context, arg CreateReservationParams) (Reservation, error)
 	CreateSection(ctx context.Context, arg CreateSectionParams) (CreateSectionRow, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
@@ -35,8 +36,8 @@ type Querier interface {
 	GetOrderByID(ctx context.Context, id int64) (Order, error)
 	GetOrderByOrderNo(ctx context.Context, orderNo string) (Order, error)
 	GetOrganizerByID(ctx context.Context, id int64) (GetOrganizerByIDRow, error)
-	GetPaymentAttemptByIdempotencyKey(ctx context.Context, idempotencyKey pgtype.Text) (PaymentAttempt, error)
-	GetPaymentAttemptByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (PaymentAttempt, error)
+	GetPaymentAttemptByIdempotencyKey(ctx context.Context, idempotencyKey pgtype.Text) (GetPaymentAttemptByIdempotencyKeyRow, error)
+	GetPaymentAttemptByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (GetPaymentAttemptByMerchantTradeNoRow, error)
 	GetPaymentByPaymentNo(ctx context.Context, paymentNo string) (Payment, error)
 	GetReservationByID(ctx context.Context, id int64) (Reservation, error)
 	GetReservationByReservationNo(ctx context.Context, reservationNo string) (Reservation, error)
@@ -53,8 +54,10 @@ type Querier interface {
 	ListExpiredPendingOrders(ctx context.Context, arg ListExpiredPendingOrdersParams) ([]Order, error)
 	ListOrdersByUserID(ctx context.Context, userID int64) ([]Order, error)
 	ListOrganizers(ctx context.Context) ([]ListOrganizersRow, error)
-	ListPaymentAttemptsByOrderID(ctx context.Context, orderID int64) ([]PaymentAttempt, error)
+	ListPaymentAttemptsByOrderID(ctx context.Context, orderID int64) ([]ListPaymentAttemptsByOrderIDRow, error)
+	ListPaymentAttemptsForReconciliation(ctx context.Context, arg ListPaymentAttemptsForReconciliationParams) ([]ListPaymentAttemptsForReconciliationRow, error)
 	ListPaymentsByUserID(ctx context.Context, userID int64) ([]Payment, error)
+	ListPendingOutboxEvents(ctx context.Context, arg ListPendingOutboxEventsParams) ([]OutboxEvent, error)
 	ListReservationsByUserID(ctx context.Context, userID int64) ([]Reservation, error)
 	ListSectionsByEventID(ctx context.Context, eventID int64) ([]ListSectionsByEventIDRow, error)
 	ReleaseSectionInventory(ctx context.Context, arg ReleaseSectionInventoryParams) (ReleaseSectionInventoryRow, error)
@@ -63,6 +66,7 @@ type Querier interface {
 	UpdateEvent(ctx context.Context, arg UpdateEventParams) (UpdateEventRow, error)
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) error
 	UpdateOrganizer(ctx context.Context, arg UpdateOrganizerParams) (UpdateOrganizerRow, error)
+	UpdateOutboxEventPublishState(ctx context.Context, arg UpdateOutboxEventPublishStateParams) error
 	UpdatePaymentAttemptStatus(ctx context.Context, arg UpdatePaymentAttemptStatusParams) error
 	UpdatePaymentStatus(ctx context.Context, arg UpdatePaymentStatusParams) error
 	UpdateReservationStatus(ctx context.Context, arg UpdateReservationStatusParams) error
