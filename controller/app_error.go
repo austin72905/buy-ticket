@@ -121,6 +121,8 @@ func errorCodeForError(fallbackStatus int, err error) string {
 		return "ADMIN_USER_NOT_FOUND"
 	case errors.Is(err, repository.ErrOrganizerNotFound):
 		return "ORGANIZER_NOT_FOUND"
+	case errors.Is(err, repository.ErrResourceVersionConflict):
+		return "RESOURCE_VERSION_CONFLICT"
 	default:
 		return errorCodeForStatus(fallbackStatus)
 	}

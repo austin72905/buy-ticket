@@ -27,6 +27,7 @@ type Organizer struct {
 	ID        int64
 	Name      string
 	Status    OrganizerStatus
+	Version   int64
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -39,6 +40,7 @@ type AdminUser struct {
 	PasswordHash string
 	Role         AdminRole
 	Status       AdminUserStatus
+	Version      int64
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

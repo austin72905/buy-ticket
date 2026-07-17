@@ -22,6 +22,7 @@ RETURNING
     id,
     name,
     status,
+    version,
     created_at,
     updated_at
 `
@@ -31,13 +32,23 @@ type CreateOrganizerParams struct {
 	Status int16  `json:"status"`
 }
 
-func (q *Queries) CreateOrganizer(ctx context.Context, arg CreateOrganizerParams) (Organizer, error) {
+type CreateOrganizerRow struct {
+	ID        int64              `json:"id"`
+	Name      string             `json:"name"`
+	Status    int16              `json:"status"`
+	Version   int64              `json:"version"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) CreateOrganizer(ctx context.Context, arg CreateOrganizerParams) (CreateOrganizerRow, error) {
 	row := q.db.QueryRow(ctx, createOrganizer, arg.Name, arg.Status)
-	var i Organizer
+	var i CreateOrganizerRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -49,6 +60,7 @@ SELECT
     id,
     name,
     status,
+    version,
     created_at,
     updated_at
 FROM organizers
@@ -56,13 +68,23 @@ WHERE id = $1
 LIMIT 1
 `
 
-func (q *Queries) GetOrganizerByID(ctx context.Context, id int64) (Organizer, error) {
+type GetOrganizerByIDRow struct {
+	ID        int64              `json:"id"`
+	Name      string             `json:"name"`
+	Status    int16              `json:"status"`
+	Version   int64              `json:"version"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetOrganizerByID(ctx context.Context, id int64) (GetOrganizerByIDRow, error) {
 	row := q.db.QueryRow(ctx, getOrganizerByID, id)
-	var i Organizer
+	var i GetOrganizerByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -74,25 +96,36 @@ SELECT
     id,
     name,
     status,
+    version,
     created_at,
     updated_at
 FROM organizers
 ORDER BY id
 `
 
-func (q *Queries) ListOrganizers(ctx context.Context) ([]Organizer, error) {
+type ListOrganizersRow struct {
+	ID        int64              `json:"id"`
+	Name      string             `json:"name"`
+	Status    int16              `json:"status"`
+	Version   int64              `json:"version"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListOrganizers(ctx context.Context) ([]ListOrganizersRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Organizer{}
+	items := []ListOrganizersRow{}
 	for rows.Next() {
-		var i Organizer
+		var i ListOrganizersRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
 			&i.Status,
+			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -111,12 +144,15 @@ UPDATE organizers
 SET
     name = $2,
     status = $3,
+    version = version + 1,
     updated_at = $4
 WHERE id = $1
+  AND version = $5
 RETURNING
     id,
     name,
     status,
+    version,
     created_at,
     updated_at
 `
@@ -126,20 +162,32 @@ type UpdateOrganizerParams struct {
 	Name      string             `json:"name"`
 	Status    int16              `json:"status"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	Version   int64              `json:"version"`
 }
 
-func (q *Queries) UpdateOrganizer(ctx context.Context, arg UpdateOrganizerParams) (Organizer, error) {
+type UpdateOrganizerRow struct {
+	ID        int64              `json:"id"`
+	Name      string             `json:"name"`
+	Status    int16              `json:"status"`
+	Version   int64              `json:"version"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateOrganizer(ctx context.Context, arg UpdateOrganizerParams) (UpdateOrganizerRow, error) {
 	row := q.db.QueryRow(ctx, updateOrganizer,
 		arg.ID,
 		arg.Name,
 		arg.Status,
 		arg.UpdatedAt,
+		arg.Version,
 	)
-	var i Organizer
+	var i UpdateOrganizerRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

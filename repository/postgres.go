@@ -194,10 +194,11 @@ func (r *PostgresEventRepository) UpdateAdminEvent(ctx context.Context, event *d
 		SaleStartAt: toPgTimestamp(event.SaleStartAt),
 		SaleEndAt:   toPgTimestamp(event.SaleEndAt),
 		UpdatedAt:   toPgTimestamp(event.UpdatedAt),
+		Version:     event.Version,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrEventNotFound
+			return ErrResourceVersionConflict
 		}
 		return err
 	}
@@ -226,7 +227,7 @@ func (r *PostgresEventRepository) ListAdminEventSections(ctx context.Context, ev
 
 	sections := make([]domain.Section, 0, len(records))
 	for _, record := range records {
-		sections = append(sections, *toDomainSection(record))
+		sections = append(sections, *toDomainSectionFromListAdminEventSections(record))
 	}
 
 	return sections, nil
@@ -253,7 +254,7 @@ func (r *PostgresEventRepository) CreateAdminEventSection(ctx context.Context, e
 		return err
 	}
 
-	*section = *toDomainSection(record)
+	*section = *toDomainSectionFromCreateSection(record)
 	return nil
 }
 
@@ -271,15 +272,16 @@ func (r *PostgresEventRepository) UpdateAdminEventSection(ctx context.Context, e
 		PurchaseLimit: int32(section.PurchaseLimit),
 		Status:        int16(section.Status),
 		UpdatedAt:     toPgTimestamp(section.UpdatedAt),
+		Version:       section.Version,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrSectionNotFound
+			return ErrResourceVersionConflict
 		}
 		return err
 	}
 
-	*section = *toDomainSection(record)
+	*section = *toDomainSectionFromUpdateSection(record)
 	return nil
 }
 
@@ -338,7 +340,7 @@ func (r *PostgresSectionRepository) FindByEventAndID(ctx context.Context, eventI
 		return nil, err
 	}
 
-	return toDomainSection(record), nil
+	return toDomainSectionFromGetSectionByEventAndID(record), nil
 }
 
 func (r *PostgresSectionRepository) ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error) {
@@ -349,7 +351,7 @@ func (r *PostgresSectionRepository) ListByEventID(ctx context.Context, eventID i
 
 	sections := make([]domain.Section, 0, len(records))
 	for _, record := range records {
-		sections = append(sections, *toDomainSection(record))
+		sections = append(sections, *toDomainSectionFromListSectionsByEventID(record))
 	}
 
 	return sections, nil
@@ -369,7 +371,7 @@ func (r *PostgresSectionRepository) ReserveInventory(ctx context.Context, eventI
 		return nil, err
 	}
 
-	return toDomainSection(record), nil
+	return toDomainSectionFromReserveSectionInventory(record), nil
 }
 
 func (r *PostgresSectionRepository) ReleaseInventory(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error) {
@@ -386,7 +388,7 @@ func (r *PostgresSectionRepository) ReleaseInventory(ctx context.Context, eventI
 		return nil, err
 	}
 
-	return toDomainSection(record), nil
+	return toDomainSectionFromReleaseSectionInventory(record), nil
 }
 
 func (r *PostgresSectionRepository) ConfirmSale(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error) {
@@ -403,7 +405,7 @@ func (r *PostgresSectionRepository) ConfirmSale(ctx context.Context, eventID, se
 		return nil, err
 	}
 
-	return toDomainSection(record), nil
+	return toDomainSectionFromConfirmSectionSale(record), nil
 }
 
 func (r *PostgresSectionRepository) Save(ctx context.Context, section *domain.Section) error {
@@ -428,7 +430,7 @@ func (r *PostgresSectionRepository) Save(ctx context.Context, section *domain.Se
 			return err
 		}
 
-		*section = *toDomainSection(record)
+		*section = *toDomainSectionFromCreateSection(record)
 		return nil
 	}
 
@@ -856,7 +858,7 @@ func (r *PostgresAdminUserRepository) FindByID(ctx context.Context, adminUserID 
 		return nil, err
 	}
 
-	return toDomainAdminUser(record), nil
+	return toDomainAdminUserFromGetAdminUserByID(record), nil
 }
 
 func (r *PostgresAdminUserRepository) FindByEmail(ctx context.Context, email string) (*domain.AdminUser, error) {
@@ -868,7 +870,7 @@ func (r *PostgresAdminUserRepository) FindByEmail(ctx context.Context, email str
 		return nil, err
 	}
 
-	return toDomainAdminUser(record), nil
+	return toDomainAdminUserFromGetAdminUserByEmail(record), nil
 }
 
 func (r *PostgresAdminUserRepository) List(ctx context.Context) ([]domain.AdminUser, error) {
@@ -879,7 +881,7 @@ func (r *PostgresAdminUserRepository) List(ctx context.Context) ([]domain.AdminU
 
 	adminUsers := make([]domain.AdminUser, 0, len(records))
 	for _, record := range records {
-		adminUsers = append(adminUsers, *toDomainAdminUser(record))
+		adminUsers = append(adminUsers, *toDomainAdminUserFromListAdminUsers(record))
 	}
 
 	return adminUsers, nil
@@ -896,15 +898,16 @@ func (r *PostgresAdminUserRepository) Save(ctx context.Context, adminUser *domai
 			Role:         string(adminUser.Role),
 			Status:       int16(adminUser.Status),
 			UpdatedAt:    toPgTimestamp(adminUser.UpdatedAt),
+			Version:      adminUser.Version,
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrAdminUserNotFound
+				return ErrResourceVersionConflict
 			}
 			return err
 		}
 
-		*adminUser = *toDomainAdminUser(record)
+		*adminUser = *toDomainAdminUserFromUpdateAdminUser(record)
 		return nil
 	}
 
@@ -920,7 +923,7 @@ func (r *PostgresAdminUserRepository) Save(ctx context.Context, adminUser *domai
 		return err
 	}
 
-	*adminUser = *toDomainAdminUser(record)
+	*adminUser = *toDomainAdminUserFromCreateAdminUser(record)
 	return nil
 }
 
@@ -933,7 +936,7 @@ func (r *PostgresOrganizerRepository) FindByID(ctx context.Context, organizerID 
 		return nil, err
 	}
 
-	return toDomainOrganizer(record), nil
+	return toDomainOrganizerFromGetOrganizerByID(record), nil
 }
 
 func (r *PostgresOrganizerRepository) List(ctx context.Context) ([]domain.Organizer, error) {
@@ -944,7 +947,7 @@ func (r *PostgresOrganizerRepository) List(ctx context.Context) ([]domain.Organi
 
 	organizers := make([]domain.Organizer, 0, len(records))
 	for _, record := range records {
-		organizers = append(organizers, *toDomainOrganizer(record))
+		organizers = append(organizers, *toDomainOrganizerFromListOrganizers(record))
 	}
 
 	return organizers, nil
@@ -957,15 +960,16 @@ func (r *PostgresOrganizerRepository) Save(ctx context.Context, organizer *domai
 			Name:      organizer.Name,
 			Status:    int16(organizer.Status),
 			UpdatedAt: toPgTimestamp(organizer.UpdatedAt),
+			Version:   organizer.Version,
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrOrganizerNotFound
+				return ErrResourceVersionConflict
 			}
 			return err
 		}
 
-		*organizer = *toDomainOrganizer(record)
+		*organizer = *toDomainOrganizerFromUpdateOrganizer(record)
 		return nil
 	}
 
@@ -977,7 +981,7 @@ func (r *PostgresOrganizerRepository) Save(ctx context.Context, organizer *domai
 		return err
 	}
 
-	*organizer = *toDomainOrganizer(record)
+	*organizer = *toDomainOrganizerFromCreateOrganizer(record)
 	return nil
 }
 
@@ -1045,6 +1049,7 @@ func toDomainEvent(record db.Event) *domain.Event {
 		SaleEndAt:   record.SaleEndAt.Time,
 		Venue:       record.Venue,
 		Status:      domain.EventStatus(record.Status),
+		Version:     record.Version,
 		CreatedAt:   record.CreatedAt.Time,
 		UpdatedAt:   record.UpdatedAt.Time,
 	}
@@ -1061,6 +1066,7 @@ func toDomainEventFromGetEventByID(record db.GetEventByIDRow) *domain.Event {
 		SaleEndAt:   record.SaleEndAt.Time,
 		Venue:       record.Venue,
 		Status:      domain.EventStatus(record.Status),
+		Version:     record.Version,
 		CreatedAt:   record.CreatedAt.Time,
 		UpdatedAt:   record.UpdatedAt.Time,
 	}
@@ -1077,6 +1083,7 @@ func toDomainEventFromListEvents(record db.ListEventsRow) *domain.Event {
 		SaleEndAt:   record.SaleEndAt.Time,
 		Venue:       record.Venue,
 		Status:      domain.EventStatus(record.Status),
+		Version:     record.Version,
 		CreatedAt:   record.CreatedAt.Time,
 		UpdatedAt:   record.UpdatedAt.Time,
 	}
@@ -1093,6 +1100,7 @@ func toDomainEventFromListAdminEvents(record db.ListAdminEventsRow) *domain.Even
 		SaleEndAt:   record.SaleEndAt.Time,
 		Venue:       record.Venue,
 		Status:      domain.EventStatus(record.Status),
+		Version:     record.Version,
 		CreatedAt:   record.CreatedAt.Time,
 		UpdatedAt:   record.UpdatedAt.Time,
 	}
@@ -1111,6 +1119,7 @@ func toDomainEventFromGetAdminEventByID(record db.GetAdminEventByIDRow) *domain.
 		SaleEndAt:   record.SaleEndAt.Time,
 		Venue:       record.Venue,
 		Status:      domain.EventStatus(record.Status),
+		Version:     record.Version,
 		CreatedAt:   record.CreatedAt.Time,
 		UpdatedAt:   record.UpdatedAt.Time,
 	}
@@ -1129,6 +1138,7 @@ func toDomainEventFromCreateEvent(record db.CreateEventRow) *domain.Event {
 		SaleEndAt:   record.SaleEndAt.Time,
 		Venue:       record.Venue,
 		Status:      domain.EventStatus(record.Status),
+		Version:     record.Version,
 		CreatedAt:   record.CreatedAt.Time,
 		UpdatedAt:   record.UpdatedAt.Time,
 	}
@@ -1139,6 +1149,51 @@ func toDomainOrganizer(record db.Organizer) *domain.Organizer {
 		ID:        record.ID,
 		Name:      record.Name,
 		Status:    domain.OrganizerStatus(record.Status),
+		Version:   record.Version,
+		CreatedAt: record.CreatedAt.Time,
+		UpdatedAt: record.UpdatedAt.Time,
+	}
+}
+
+func toDomainOrganizerFromGetOrganizerByID(record db.GetOrganizerByIDRow) *domain.Organizer {
+	return &domain.Organizer{
+		ID:        record.ID,
+		Name:      record.Name,
+		Status:    domain.OrganizerStatus(record.Status),
+		Version:   record.Version,
+		CreatedAt: record.CreatedAt.Time,
+		UpdatedAt: record.UpdatedAt.Time,
+	}
+}
+
+func toDomainOrganizerFromListOrganizers(record db.ListOrganizersRow) *domain.Organizer {
+	return &domain.Organizer{
+		ID:        record.ID,
+		Name:      record.Name,
+		Status:    domain.OrganizerStatus(record.Status),
+		Version:   record.Version,
+		CreatedAt: record.CreatedAt.Time,
+		UpdatedAt: record.UpdatedAt.Time,
+	}
+}
+
+func toDomainOrganizerFromCreateOrganizer(record db.CreateOrganizerRow) *domain.Organizer {
+	return &domain.Organizer{
+		ID:        record.ID,
+		Name:      record.Name,
+		Status:    domain.OrganizerStatus(record.Status),
+		Version:   record.Version,
+		CreatedAt: record.CreatedAt.Time,
+		UpdatedAt: record.UpdatedAt.Time,
+	}
+}
+
+func toDomainOrganizerFromUpdateOrganizer(record db.UpdateOrganizerRow) *domain.Organizer {
+	return &domain.Organizer{
+		ID:        record.ID,
+		Name:      record.Name,
+		Status:    domain.OrganizerStatus(record.Status),
+		Version:   record.Version,
 		CreatedAt: record.CreatedAt.Time,
 		UpdatedAt: record.UpdatedAt.Time,
 	}
@@ -1167,6 +1222,102 @@ func toDomainAdminUser(record db.AdminUser) *domain.AdminUser {
 		PasswordHash: record.PasswordHash,
 		Role:         domain.AdminRole(record.Role),
 		Status:       domain.AdminUserStatus(record.Status),
+		Version:      record.Version,
+		CreatedAt:    record.CreatedAt.Time,
+		UpdatedAt:    record.UpdatedAt.Time,
+	}
+	if record.OrganizerID.Valid {
+		organizerID := record.OrganizerID.Int64
+		adminUser.OrganizerID = &organizerID
+	}
+	return adminUser
+}
+
+func toDomainAdminUserFromGetAdminUserByID(record db.GetAdminUserByIDRow) *domain.AdminUser {
+	adminUser := &domain.AdminUser{
+		ID:           record.ID,
+		Name:         record.Name,
+		Email:        record.Email,
+		PasswordHash: record.PasswordHash,
+		Role:         domain.AdminRole(record.Role),
+		Status:       domain.AdminUserStatus(record.Status),
+		Version:      record.Version,
+		CreatedAt:    record.CreatedAt.Time,
+		UpdatedAt:    record.UpdatedAt.Time,
+	}
+	if record.OrganizerID.Valid {
+		organizerID := record.OrganizerID.Int64
+		adminUser.OrganizerID = &organizerID
+	}
+	return adminUser
+}
+
+func toDomainAdminUserFromGetAdminUserByEmail(record db.GetAdminUserByEmailRow) *domain.AdminUser {
+	adminUser := &domain.AdminUser{
+		ID:           record.ID,
+		Name:         record.Name,
+		Email:        record.Email,
+		PasswordHash: record.PasswordHash,
+		Role:         domain.AdminRole(record.Role),
+		Status:       domain.AdminUserStatus(record.Status),
+		Version:      record.Version,
+		CreatedAt:    record.CreatedAt.Time,
+		UpdatedAt:    record.UpdatedAt.Time,
+	}
+	if record.OrganizerID.Valid {
+		organizerID := record.OrganizerID.Int64
+		adminUser.OrganizerID = &organizerID
+	}
+	return adminUser
+}
+
+func toDomainAdminUserFromListAdminUsers(record db.ListAdminUsersRow) *domain.AdminUser {
+	adminUser := &domain.AdminUser{
+		ID:           record.ID,
+		Name:         record.Name,
+		Email:        record.Email,
+		PasswordHash: record.PasswordHash,
+		Role:         domain.AdminRole(record.Role),
+		Status:       domain.AdminUserStatus(record.Status),
+		Version:      record.Version,
+		CreatedAt:    record.CreatedAt.Time,
+		UpdatedAt:    record.UpdatedAt.Time,
+	}
+	if record.OrganizerID.Valid {
+		organizerID := record.OrganizerID.Int64
+		adminUser.OrganizerID = &organizerID
+	}
+	return adminUser
+}
+
+func toDomainAdminUserFromCreateAdminUser(record db.CreateAdminUserRow) *domain.AdminUser {
+	adminUser := &domain.AdminUser{
+		ID:           record.ID,
+		Name:         record.Name,
+		Email:        record.Email,
+		PasswordHash: record.PasswordHash,
+		Role:         domain.AdminRole(record.Role),
+		Status:       domain.AdminUserStatus(record.Status),
+		Version:      record.Version,
+		CreatedAt:    record.CreatedAt.Time,
+		UpdatedAt:    record.UpdatedAt.Time,
+	}
+	if record.OrganizerID.Valid {
+		organizerID := record.OrganizerID.Int64
+		adminUser.OrganizerID = &organizerID
+	}
+	return adminUser
+}
+
+func toDomainAdminUserFromUpdateAdminUser(record db.UpdateAdminUserRow) *domain.AdminUser {
+	adminUser := &domain.AdminUser{
+		ID:           record.ID,
+		Name:         record.Name,
+		Email:        record.Email,
+		PasswordHash: record.PasswordHash,
+		Role:         domain.AdminRole(record.Role),
+		Status:       domain.AdminUserStatus(record.Status),
+		Version:      record.Version,
 		CreatedAt:    record.CreatedAt.Time,
 		UpdatedAt:    record.UpdatedAt.Time,
 	}
@@ -1308,6 +1459,7 @@ func toDomainEventFromUpdateEvent(record db.UpdateEventRow) *domain.Event {
 		Name:        record.Name,
 		Venue:       record.Venue,
 		Status:      domain.EventStatus(record.Status),
+		Version:     record.Version,
 		StartAt:     record.StartAt.Time,
 		EndAt:       record.EndAt.Time,
 		SaleStartAt: record.SaleStartAt.Time,
@@ -1317,20 +1469,70 @@ func toDomainEventFromUpdateEvent(record db.UpdateEventRow) *domain.Event {
 	}
 }
 
-func toDomainSection(record db.EventSection) *domain.Section {
+func newDomainSection(
+	id int64,
+	eventID int64,
+	name string,
+	price int64,
+	totalQuantity int32,
+	reservedQuantity int32,
+	soldQuantity int32,
+	purchaseLimit int32,
+	status int16,
+	version int64,
+	createdAt pgtype.Timestamptz,
+	updatedAt pgtype.Timestamptz,
+) *domain.Section {
 	return &domain.Section{
-		ID:               record.ID,
-		EventID:          record.EventID,
-		Name:             record.SectionName,
-		Price:            record.Price,
-		TotalQuantity:    int(record.TotalQuantity),
-		ReservedQuantity: int(record.ReservedQuantity),
-		SoldQuantity:     int(record.SoldQuantity),
-		PurchaseLimit:    int(record.PurchaseLimit),
-		Status:           domain.SectionStatus(record.Status),
-		CreatedAt:        record.CreatedAt.Time,
-		UpdatedAt:        record.UpdatedAt.Time,
+		ID:               id,
+		EventID:          eventID,
+		Name:             name,
+		Price:            price,
+		TotalQuantity:    int(totalQuantity),
+		ReservedQuantity: int(reservedQuantity),
+		SoldQuantity:     int(soldQuantity),
+		PurchaseLimit:    int(purchaseLimit),
+		Status:           domain.SectionStatus(status),
+		Version:          version,
+		CreatedAt:        createdAt.Time,
+		UpdatedAt:        updatedAt.Time,
 	}
+}
+
+func toDomainSection(record db.EventSection) *domain.Section {
+	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
+}
+
+func toDomainSectionFromGetSectionByEventAndID(record db.GetSectionByEventAndIDRow) *domain.Section {
+	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
+}
+
+func toDomainSectionFromListSectionsByEventID(record db.ListSectionsByEventIDRow) *domain.Section {
+	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
+}
+
+func toDomainSectionFromListAdminEventSections(record db.ListAdminEventSectionsRow) *domain.Section {
+	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
+}
+
+func toDomainSectionFromCreateSection(record db.CreateSectionRow) *domain.Section {
+	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
+}
+
+func toDomainSectionFromUpdateSection(record db.UpdateSectionRow) *domain.Section {
+	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
+}
+
+func toDomainSectionFromReserveSectionInventory(record db.ReserveSectionInventoryRow) *domain.Section {
+	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
+}
+
+func toDomainSectionFromReleaseSectionInventory(record db.ReleaseSectionInventoryRow) *domain.Section {
+	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
+}
+
+func toDomainSectionFromConfirmSectionSale(record db.ConfirmSectionSaleRow) *domain.Section {
+	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
 }
 
 func toDomainReservation(record db.Reservation) *domain.Reservation {

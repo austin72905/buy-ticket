@@ -3,6 +3,7 @@ SELECT
     id,
     name,
     status,
+    version,
     created_at,
     updated_at
 FROM organizers
@@ -14,6 +15,7 @@ SELECT
     id,
     name,
     status,
+    version,
     created_at,
     updated_at
 FROM organizers
@@ -30,6 +32,7 @@ RETURNING
     id,
     name,
     status,
+    version,
     created_at,
     updated_at;
 
@@ -38,11 +41,14 @@ UPDATE organizers
 SET
     name = $2,
     status = $3,
+    version = version + 1,
     updated_at = $4
 WHERE id = $1
+  AND version = $5
 RETURNING
     id,
     name,
     status,
+    version,
     created_at,
     updated_at;

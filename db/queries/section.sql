@@ -10,6 +10,7 @@ SELECT
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at
 FROM event_sections
@@ -29,6 +30,7 @@ SELECT
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at
 FROM event_sections
@@ -47,6 +49,7 @@ SELECT
     s.sold_quantity,
     s.purchase_limit,
     s.status,
+    s.version,
     s.created_at,
     s.updated_at
 FROM event_sections s
@@ -83,6 +86,7 @@ RETURNING
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at;
 
@@ -94,9 +98,11 @@ SET
     total_quantity = $5,
     purchase_limit = $6,
     status = $7,
+    version = version + 1,
     updated_at = $8
 WHERE event_id = $1
   AND id = $2
+  AND version = $9
 RETURNING
     id,
     event_id,
@@ -108,6 +114,7 @@ RETURNING
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at;
 
@@ -142,6 +149,7 @@ RETURNING
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at;
 
@@ -169,6 +177,7 @@ RETURNING
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at;
 
@@ -197,5 +206,6 @@ RETURNING
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at;

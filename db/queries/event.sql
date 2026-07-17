@@ -9,6 +9,7 @@ SELECT
     end_at,
     sale_start_at,
     sale_end_at,
+    version,
     created_at,
     updated_at
 FROM events
@@ -26,6 +27,7 @@ SELECT
     end_at,
     sale_start_at,
     sale_end_at,
+    version,
     created_at,
     updated_at
 FROM events
@@ -44,6 +46,7 @@ SELECT
     e.end_at,
     e.sale_start_at,
     e.sale_end_at,
+    e.version,
     e.created_at,
     e.updated_at
 FROM events e
@@ -65,6 +68,7 @@ SELECT
     e.end_at,
     e.sale_start_at,
     e.sale_end_at,
+    e.version,
     e.created_at,
     e.updated_at
 FROM events e
@@ -99,6 +103,7 @@ RETURNING
     end_at,
     sale_start_at,
     sale_end_at,
+    version,
     created_at,
     updated_at;
 
@@ -134,8 +139,10 @@ SET
     end_at = $7,
     sale_start_at = $8,
     sale_end_at = $9,
+    version = version + 1,
     updated_at = $10
 WHERE id = $1
+  AND version = $11
 RETURNING
     id,
     organizer_id,
@@ -146,5 +153,6 @@ RETURNING
     end_at,
     sale_start_at,
     sale_end_at,
+    version,
     created_at,
     updated_at;

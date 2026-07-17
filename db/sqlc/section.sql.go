@@ -36,6 +36,7 @@ RETURNING
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at
 `
@@ -47,14 +48,30 @@ type ConfirmSectionSaleParams struct {
 	ID        int64              `json:"id"`
 }
 
-func (q *Queries) ConfirmSectionSale(ctx context.Context, arg ConfirmSectionSaleParams) (EventSection, error) {
+type ConfirmSectionSaleRow struct {
+	ID               int64              `json:"id"`
+	EventID          int64              `json:"event_id"`
+	EventName        string             `json:"event_name"`
+	SectionName      string             `json:"section_name"`
+	Price            int64              `json:"price"`
+	TotalQuantity    int32              `json:"total_quantity"`
+	ReservedQuantity int32              `json:"reserved_quantity"`
+	SoldQuantity     int32              `json:"sold_quantity"`
+	PurchaseLimit    int32              `json:"purchase_limit"`
+	Status           int16              `json:"status"`
+	Version          int64              `json:"version"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ConfirmSectionSale(ctx context.Context, arg ConfirmSectionSaleParams) (ConfirmSectionSaleRow, error) {
 	row := q.db.QueryRow(ctx, confirmSectionSale,
 		arg.Quantity,
 		arg.UpdatedAt,
 		arg.EventID,
 		arg.ID,
 	)
-	var i EventSection
+	var i ConfirmSectionSaleRow
 	err := row.Scan(
 		&i.ID,
 		&i.EventID,
@@ -66,6 +83,7 @@ func (q *Queries) ConfirmSectionSale(ctx context.Context, arg ConfirmSectionSale
 		&i.SoldQuantity,
 		&i.PurchaseLimit,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -97,6 +115,7 @@ RETURNING
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at
 `
@@ -113,7 +132,23 @@ type CreateSectionParams struct {
 	Status           int16  `json:"status"`
 }
 
-func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) (EventSection, error) {
+type CreateSectionRow struct {
+	ID               int64              `json:"id"`
+	EventID          int64              `json:"event_id"`
+	EventName        string             `json:"event_name"`
+	SectionName      string             `json:"section_name"`
+	Price            int64              `json:"price"`
+	TotalQuantity    int32              `json:"total_quantity"`
+	ReservedQuantity int32              `json:"reserved_quantity"`
+	SoldQuantity     int32              `json:"sold_quantity"`
+	PurchaseLimit    int32              `json:"purchase_limit"`
+	Status           int16              `json:"status"`
+	Version          int64              `json:"version"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) (CreateSectionRow, error) {
 	row := q.db.QueryRow(ctx, createSection,
 		arg.EventID,
 		arg.EventName,
@@ -125,7 +160,7 @@ func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) (E
 		arg.PurchaseLimit,
 		arg.Status,
 	)
-	var i EventSection
+	var i CreateSectionRow
 	err := row.Scan(
 		&i.ID,
 		&i.EventID,
@@ -137,6 +172,7 @@ func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) (E
 		&i.SoldQuantity,
 		&i.PurchaseLimit,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -155,6 +191,7 @@ SELECT
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at
 FROM event_sections
@@ -168,9 +205,25 @@ type GetSectionByEventAndIDParams struct {
 	ID      int64 `json:"id"`
 }
 
-func (q *Queries) GetSectionByEventAndID(ctx context.Context, arg GetSectionByEventAndIDParams) (EventSection, error) {
+type GetSectionByEventAndIDRow struct {
+	ID               int64              `json:"id"`
+	EventID          int64              `json:"event_id"`
+	EventName        string             `json:"event_name"`
+	SectionName      string             `json:"section_name"`
+	Price            int64              `json:"price"`
+	TotalQuantity    int32              `json:"total_quantity"`
+	ReservedQuantity int32              `json:"reserved_quantity"`
+	SoldQuantity     int32              `json:"sold_quantity"`
+	PurchaseLimit    int32              `json:"purchase_limit"`
+	Status           int16              `json:"status"`
+	Version          int64              `json:"version"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetSectionByEventAndID(ctx context.Context, arg GetSectionByEventAndIDParams) (GetSectionByEventAndIDRow, error) {
 	row := q.db.QueryRow(ctx, getSectionByEventAndID, arg.EventID, arg.ID)
-	var i EventSection
+	var i GetSectionByEventAndIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.EventID,
@@ -182,6 +235,7 @@ func (q *Queries) GetSectionByEventAndID(ctx context.Context, arg GetSectionByEv
 		&i.SoldQuantity,
 		&i.PurchaseLimit,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -200,6 +254,7 @@ SELECT
     s.sold_quantity,
     s.purchase_limit,
     s.status,
+    s.version,
     s.created_at,
     s.updated_at
 FROM event_sections s
@@ -217,15 +272,31 @@ type ListAdminEventSectionsParams struct {
 	OrganizerID int64 `json:"organizer_id"`
 }
 
-func (q *Queries) ListAdminEventSections(ctx context.Context, arg ListAdminEventSectionsParams) ([]EventSection, error) {
+type ListAdminEventSectionsRow struct {
+	ID               int64              `json:"id"`
+	EventID          int64              `json:"event_id"`
+	EventName        string             `json:"event_name"`
+	SectionName      string             `json:"section_name"`
+	Price            int64              `json:"price"`
+	TotalQuantity    int32              `json:"total_quantity"`
+	ReservedQuantity int32              `json:"reserved_quantity"`
+	SoldQuantity     int32              `json:"sold_quantity"`
+	PurchaseLimit    int32              `json:"purchase_limit"`
+	Status           int16              `json:"status"`
+	Version          int64              `json:"version"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListAdminEventSections(ctx context.Context, arg ListAdminEventSectionsParams) ([]ListAdminEventSectionsRow, error) {
 	rows, err := q.db.Query(ctx, listAdminEventSections, arg.EventID, arg.OrganizerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []EventSection{}
+	items := []ListAdminEventSectionsRow{}
 	for rows.Next() {
-		var i EventSection
+		var i ListAdminEventSectionsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.EventID,
@@ -237,6 +308,7 @@ func (q *Queries) ListAdminEventSections(ctx context.Context, arg ListAdminEvent
 			&i.SoldQuantity,
 			&i.PurchaseLimit,
 			&i.Status,
+			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -262,6 +334,7 @@ SELECT
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at
 FROM event_sections
@@ -269,15 +342,31 @@ WHERE event_id = $1
 ORDER BY id
 `
 
-func (q *Queries) ListSectionsByEventID(ctx context.Context, eventID int64) ([]EventSection, error) {
+type ListSectionsByEventIDRow struct {
+	ID               int64              `json:"id"`
+	EventID          int64              `json:"event_id"`
+	EventName        string             `json:"event_name"`
+	SectionName      string             `json:"section_name"`
+	Price            int64              `json:"price"`
+	TotalQuantity    int32              `json:"total_quantity"`
+	ReservedQuantity int32              `json:"reserved_quantity"`
+	SoldQuantity     int32              `json:"sold_quantity"`
+	PurchaseLimit    int32              `json:"purchase_limit"`
+	Status           int16              `json:"status"`
+	Version          int64              `json:"version"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListSectionsByEventID(ctx context.Context, eventID int64) ([]ListSectionsByEventIDRow, error) {
 	rows, err := q.db.Query(ctx, listSectionsByEventID, eventID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []EventSection{}
+	items := []ListSectionsByEventIDRow{}
 	for rows.Next() {
-		var i EventSection
+		var i ListSectionsByEventIDRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.EventID,
@@ -289,6 +378,7 @@ func (q *Queries) ListSectionsByEventID(ctx context.Context, eventID int64) ([]E
 			&i.SoldQuantity,
 			&i.PurchaseLimit,
 			&i.Status,
+			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -326,6 +416,7 @@ RETURNING
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at
 `
@@ -337,14 +428,30 @@ type ReleaseSectionInventoryParams struct {
 	ID        int64              `json:"id"`
 }
 
-func (q *Queries) ReleaseSectionInventory(ctx context.Context, arg ReleaseSectionInventoryParams) (EventSection, error) {
+type ReleaseSectionInventoryRow struct {
+	ID               int64              `json:"id"`
+	EventID          int64              `json:"event_id"`
+	EventName        string             `json:"event_name"`
+	SectionName      string             `json:"section_name"`
+	Price            int64              `json:"price"`
+	TotalQuantity    int32              `json:"total_quantity"`
+	ReservedQuantity int32              `json:"reserved_quantity"`
+	SoldQuantity     int32              `json:"sold_quantity"`
+	PurchaseLimit    int32              `json:"purchase_limit"`
+	Status           int16              `json:"status"`
+	Version          int64              `json:"version"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ReleaseSectionInventory(ctx context.Context, arg ReleaseSectionInventoryParams) (ReleaseSectionInventoryRow, error) {
 	row := q.db.QueryRow(ctx, releaseSectionInventory,
 		arg.Quantity,
 		arg.UpdatedAt,
 		arg.EventID,
 		arg.ID,
 	)
-	var i EventSection
+	var i ReleaseSectionInventoryRow
 	err := row.Scan(
 		&i.ID,
 		&i.EventID,
@@ -356,6 +463,7 @@ func (q *Queries) ReleaseSectionInventory(ctx context.Context, arg ReleaseSectio
 		&i.SoldQuantity,
 		&i.PurchaseLimit,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -384,6 +492,7 @@ RETURNING
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at
 `
@@ -395,14 +504,30 @@ type ReserveSectionInventoryParams struct {
 	ID        int64              `json:"id"`
 }
 
-func (q *Queries) ReserveSectionInventory(ctx context.Context, arg ReserveSectionInventoryParams) (EventSection, error) {
+type ReserveSectionInventoryRow struct {
+	ID               int64              `json:"id"`
+	EventID          int64              `json:"event_id"`
+	EventName        string             `json:"event_name"`
+	SectionName      string             `json:"section_name"`
+	Price            int64              `json:"price"`
+	TotalQuantity    int32              `json:"total_quantity"`
+	ReservedQuantity int32              `json:"reserved_quantity"`
+	SoldQuantity     int32              `json:"sold_quantity"`
+	PurchaseLimit    int32              `json:"purchase_limit"`
+	Status           int16              `json:"status"`
+	Version          int64              `json:"version"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ReserveSectionInventory(ctx context.Context, arg ReserveSectionInventoryParams) (ReserveSectionInventoryRow, error) {
 	row := q.db.QueryRow(ctx, reserveSectionInventory,
 		arg.Quantity,
 		arg.UpdatedAt,
 		arg.EventID,
 		arg.ID,
 	)
-	var i EventSection
+	var i ReserveSectionInventoryRow
 	err := row.Scan(
 		&i.ID,
 		&i.EventID,
@@ -414,6 +539,7 @@ func (q *Queries) ReserveSectionInventory(ctx context.Context, arg ReserveSectio
 		&i.SoldQuantity,
 		&i.PurchaseLimit,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -428,9 +554,11 @@ SET
     total_quantity = $5,
     purchase_limit = $6,
     status = $7,
+    version = version + 1,
     updated_at = $8
 WHERE event_id = $1
   AND id = $2
+  AND version = $9
 RETURNING
     id,
     event_id,
@@ -442,6 +570,7 @@ RETURNING
     sold_quantity,
     purchase_limit,
     status,
+    version,
     created_at,
     updated_at
 `
@@ -455,9 +584,26 @@ type UpdateSectionParams struct {
 	PurchaseLimit int32              `json:"purchase_limit"`
 	Status        int16              `json:"status"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Version       int64              `json:"version"`
 }
 
-func (q *Queries) UpdateSection(ctx context.Context, arg UpdateSectionParams) (EventSection, error) {
+type UpdateSectionRow struct {
+	ID               int64              `json:"id"`
+	EventID          int64              `json:"event_id"`
+	EventName        string             `json:"event_name"`
+	SectionName      string             `json:"section_name"`
+	Price            int64              `json:"price"`
+	TotalQuantity    int32              `json:"total_quantity"`
+	ReservedQuantity int32              `json:"reserved_quantity"`
+	SoldQuantity     int32              `json:"sold_quantity"`
+	PurchaseLimit    int32              `json:"purchase_limit"`
+	Status           int16              `json:"status"`
+	Version          int64              `json:"version"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateSection(ctx context.Context, arg UpdateSectionParams) (UpdateSectionRow, error) {
 	row := q.db.QueryRow(ctx, updateSection,
 		arg.EventID,
 		arg.ID,
@@ -467,8 +613,9 @@ func (q *Queries) UpdateSection(ctx context.Context, arg UpdateSectionParams) (E
 		arg.PurchaseLimit,
 		arg.Status,
 		arg.UpdatedAt,
+		arg.Version,
 	)
-	var i EventSection
+	var i UpdateSectionRow
 	err := row.Scan(
 		&i.ID,
 		&i.EventID,
@@ -480,6 +627,7 @@ func (q *Queries) UpdateSection(ctx context.Context, arg UpdateSectionParams) (E
 		&i.SoldQuantity,
 		&i.PurchaseLimit,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -52,12 +52,13 @@ type CreateAdminUserRequest struct {
 }
 
 type UpdateAdminUserRequest struct {
-	OrganizerID *int64  `json:"organizer_id,omitempty"`
-	Name        *string `json:"name,omitempty"`
-	Email       *string `json:"email,omitempty"`
-	Password    *string `json:"password,omitempty"`
-	Role        *string `json:"role,omitempty"`
-	Status      *int8   `json:"status,omitempty"`
+	ExpectedVersion *int64  `json:"expected_version"`
+	OrganizerID     *int64  `json:"organizer_id,omitempty"`
+	Name            *string `json:"name,omitempty"`
+	Email           *string `json:"email,omitempty"`
+	Password        *string `json:"password,omitempty"`
+	Role            *string `json:"role,omitempty"`
+	Status          *int8   `json:"status,omitempty"`
 }
 
 type CreateOrganizerRequest struct {
@@ -65,8 +66,9 @@ type CreateOrganizerRequest struct {
 }
 
 type UpdateOrganizerRequest struct {
-	Name   *string `json:"name,omitempty"`
-	Status *int8   `json:"status,omitempty"`
+	ExpectedVersion *int64  `json:"expected_version"`
+	Name            *string `json:"name,omitempty"`
+	Status          *int8   `json:"status,omitempty"`
 }
 
 type CreateAdminEventRequest struct {
@@ -81,14 +83,15 @@ type CreateAdminEventRequest struct {
 }
 
 type UpdateAdminEventRequest struct {
-	OrganizerID *int64  `json:"organizer_id,omitempty"`
-	Name        *string `json:"name,omitempty"`
-	Venue       *string `json:"venue,omitempty"`
-	Status      *int8   `json:"status,omitempty"`
-	StartAt     *string `json:"start_at,omitempty"`
-	EndAt       *string `json:"end_at,omitempty"`
-	SaleStartAt *string `json:"sale_start_at,omitempty"`
-	SaleEndAt   *string `json:"sale_end_at,omitempty"`
+	ExpectedVersion *int64  `json:"expected_version"`
+	OrganizerID     *int64  `json:"organizer_id,omitempty"`
+	Name            *string `json:"name,omitempty"`
+	Venue           *string `json:"venue,omitempty"`
+	Status          *int8   `json:"status,omitempty"`
+	StartAt         *string `json:"start_at,omitempty"`
+	EndAt           *string `json:"end_at,omitempty"`
+	SaleStartAt     *string `json:"sale_start_at,omitempty"`
+	SaleEndAt       *string `json:"sale_end_at,omitempty"`
 }
 
 type CreateAdminSectionRequest struct {
@@ -100,11 +103,12 @@ type CreateAdminSectionRequest struct {
 }
 
 type UpdateAdminSectionRequest struct {
-	Name          *string `json:"name,omitempty"`
-	Price         *int64  `json:"price,omitempty"`
-	TotalQuantity *int    `json:"total_quantity,omitempty"`
-	PurchaseLimit *int    `json:"purchase_limit,omitempty"`
-	Status        *int8   `json:"status,omitempty"`
+	ExpectedVersion *int64  `json:"expected_version"`
+	Name            *string `json:"name,omitempty"`
+	Price           *int64  `json:"price,omitempty"`
+	TotalQuantity   *int    `json:"total_quantity,omitempty"`
+	PurchaseLimit   *int    `json:"purchase_limit,omitempty"`
+	Status          *int8   `json:"status,omitempty"`
 }
 
 type CreateOrderRequest struct {
@@ -196,6 +200,7 @@ type AdminUserResponse struct {
 	Email       string `json:"email"`
 	Role        string `json:"role"`
 	Status      string `json:"status"`
+	Version     int64  `json:"version"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 }
@@ -204,6 +209,7 @@ type OrganizerResponse struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`
 	Status    string `json:"status"`
+	Version   int64  `json:"version"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
@@ -230,6 +236,7 @@ type AdminEventResponse struct {
 	EndAt       string                  `json:"end_at"`
 	SaleStartAt string                  `json:"sale_start_at"`
 	SaleEndAt   string                  `json:"sale_end_at"`
+	Version     int64                   `json:"version"`
 	CreatedAt   string                  `json:"created_at"`
 	UpdatedAt   string                  `json:"updated_at"`
 }
@@ -245,6 +252,7 @@ type AdminSectionResponse struct {
 	AvailableQuantity int    `json:"available_quantity"`
 	PurchaseLimit     int    `json:"purchase_limit"`
 	Status            string `json:"status"`
+	Version           int64  `json:"version"`
 	CreatedAt         string `json:"created_at"`
 	UpdatedAt         string `json:"updated_at"`
 }
@@ -645,6 +653,7 @@ func newAdminUserResponse(adminUser *domain.AdminUser) AdminUserResponse {
 		Email:       adminUser.Email,
 		Role:        string(adminUser.Role),
 		Status:      adminUserStatusText(adminUser.Status),
+		Version:     adminUser.Version,
 		CreatedAt:   adminUser.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:   adminUser.UpdatedAt.Format(time.RFC3339),
 	}
@@ -664,6 +673,7 @@ func newOrganizerResponse(organizer *domain.Organizer) OrganizerResponse {
 		ID:        organizer.ID,
 		Name:      organizer.Name,
 		Status:    organizerStatusText(organizer.Status),
+		Version:   organizer.Version,
 		CreatedAt: organizer.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: organizer.UpdatedAt.Format(time.RFC3339),
 	}
@@ -689,6 +699,7 @@ func newAdminEventResponse(event domain.Event) AdminEventResponse {
 		EndAt:       event.EndAt.Format(time.RFC3339),
 		SaleStartAt: event.SaleStartAt.Format(time.RFC3339),
 		SaleEndAt:   event.SaleEndAt.Format(time.RFC3339),
+		Version:     event.Version,
 		CreatedAt:   event.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:   event.UpdatedAt.Format(time.RFC3339),
 	}
@@ -721,6 +732,7 @@ func newAdminSectionResponse(section domain.Section) AdminSectionResponse {
 		AvailableQuantity: section.AvailableQuantity(),
 		PurchaseLimit:     section.PurchaseLimit,
 		Status:            sectionStatusText(section.Status),
+		Version:           section.Version,
 		CreatedAt:         section.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:         section.UpdatedAt.Format(time.RFC3339),
 	}

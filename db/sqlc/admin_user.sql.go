@@ -30,6 +30,7 @@ RETURNING
     password_hash,
     role,
     status,
+    version,
     created_at,
     updated_at
 `
@@ -43,7 +44,20 @@ type CreateAdminUserParams struct {
 	Status       int16       `json:"status"`
 }
 
-func (q *Queries) CreateAdminUser(ctx context.Context, arg CreateAdminUserParams) (AdminUser, error) {
+type CreateAdminUserRow struct {
+	ID           int64              `json:"id"`
+	OrganizerID  pgtype.Int8        `json:"organizer_id"`
+	Name         string             `json:"name"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	Role         string             `json:"role"`
+	Status       int16              `json:"status"`
+	Version      int64              `json:"version"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) CreateAdminUser(ctx context.Context, arg CreateAdminUserParams) (CreateAdminUserRow, error) {
 	row := q.db.QueryRow(ctx, createAdminUser,
 		arg.OrganizerID,
 		arg.Name,
@@ -52,7 +66,7 @@ func (q *Queries) CreateAdminUser(ctx context.Context, arg CreateAdminUserParams
 		arg.Role,
 		arg.Status,
 	)
-	var i AdminUser
+	var i CreateAdminUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizerID,
@@ -61,6 +75,7 @@ func (q *Queries) CreateAdminUser(ctx context.Context, arg CreateAdminUserParams
 		&i.PasswordHash,
 		&i.Role,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -76,6 +91,7 @@ SELECT
     password_hash,
     role,
     status,
+    version,
     created_at,
     updated_at
 FROM admin_users
@@ -83,9 +99,22 @@ WHERE email = $1
 LIMIT 1
 `
 
-func (q *Queries) GetAdminUserByEmail(ctx context.Context, email string) (AdminUser, error) {
+type GetAdminUserByEmailRow struct {
+	ID           int64              `json:"id"`
+	OrganizerID  pgtype.Int8        `json:"organizer_id"`
+	Name         string             `json:"name"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	Role         string             `json:"role"`
+	Status       int16              `json:"status"`
+	Version      int64              `json:"version"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetAdminUserByEmail(ctx context.Context, email string) (GetAdminUserByEmailRow, error) {
 	row := q.db.QueryRow(ctx, getAdminUserByEmail, email)
-	var i AdminUser
+	var i GetAdminUserByEmailRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizerID,
@@ -94,6 +123,7 @@ func (q *Queries) GetAdminUserByEmail(ctx context.Context, email string) (AdminU
 		&i.PasswordHash,
 		&i.Role,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -109,6 +139,7 @@ SELECT
     password_hash,
     role,
     status,
+    version,
     created_at,
     updated_at
 FROM admin_users
@@ -116,9 +147,22 @@ WHERE id = $1
 LIMIT 1
 `
 
-func (q *Queries) GetAdminUserByID(ctx context.Context, id int64) (AdminUser, error) {
+type GetAdminUserByIDRow struct {
+	ID           int64              `json:"id"`
+	OrganizerID  pgtype.Int8        `json:"organizer_id"`
+	Name         string             `json:"name"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	Role         string             `json:"role"`
+	Status       int16              `json:"status"`
+	Version      int64              `json:"version"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetAdminUserByID(ctx context.Context, id int64) (GetAdminUserByIDRow, error) {
 	row := q.db.QueryRow(ctx, getAdminUserByID, id)
-	var i AdminUser
+	var i GetAdminUserByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizerID,
@@ -127,6 +171,7 @@ func (q *Queries) GetAdminUserByID(ctx context.Context, id int64) (AdminUser, er
 		&i.PasswordHash,
 		&i.Role,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -142,21 +187,35 @@ SELECT
     password_hash,
     role,
     status,
+    version,
     created_at,
     updated_at
 FROM admin_users
 ORDER BY id
 `
 
-func (q *Queries) ListAdminUsers(ctx context.Context) ([]AdminUser, error) {
+type ListAdminUsersRow struct {
+	ID           int64              `json:"id"`
+	OrganizerID  pgtype.Int8        `json:"organizer_id"`
+	Name         string             `json:"name"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	Role         string             `json:"role"`
+	Status       int16              `json:"status"`
+	Version      int64              `json:"version"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListAdminUsers(ctx context.Context) ([]ListAdminUsersRow, error) {
 	rows, err := q.db.Query(ctx, listAdminUsers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AdminUser{}
+	items := []ListAdminUsersRow{}
 	for rows.Next() {
-		var i AdminUser
+		var i ListAdminUsersRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizerID,
@@ -165,6 +224,7 @@ func (q *Queries) ListAdminUsers(ctx context.Context) ([]AdminUser, error) {
 			&i.PasswordHash,
 			&i.Role,
 			&i.Status,
+			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -187,8 +247,10 @@ SET
     password_hash = $5,
     role = $6,
     status = $7,
+    version = version + 1,
     updated_at = $8
 WHERE id = $1
+  AND version = $9
 RETURNING
     id,
     organizer_id,
@@ -197,6 +259,7 @@ RETURNING
     password_hash,
     role,
     status,
+    version,
     created_at,
     updated_at
 `
@@ -210,9 +273,23 @@ type UpdateAdminUserParams struct {
 	Role         string             `json:"role"`
 	Status       int16              `json:"status"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	Version      int64              `json:"version"`
 }
 
-func (q *Queries) UpdateAdminUser(ctx context.Context, arg UpdateAdminUserParams) (AdminUser, error) {
+type UpdateAdminUserRow struct {
+	ID           int64              `json:"id"`
+	OrganizerID  pgtype.Int8        `json:"organizer_id"`
+	Name         string             `json:"name"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	Role         string             `json:"role"`
+	Status       int16              `json:"status"`
+	Version      int64              `json:"version"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateAdminUser(ctx context.Context, arg UpdateAdminUserParams) (UpdateAdminUserRow, error) {
 	row := q.db.QueryRow(ctx, updateAdminUser,
 		arg.ID,
 		arg.OrganizerID,
@@ -222,8 +299,9 @@ func (q *Queries) UpdateAdminUser(ctx context.Context, arg UpdateAdminUserParams
 		arg.Role,
 		arg.Status,
 		arg.UpdatedAt,
+		arg.Version,
 	)
-	var i AdminUser
+	var i UpdateAdminUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizerID,
@@ -232,6 +310,7 @@ func (q *Queries) UpdateAdminUser(ctx context.Context, arg UpdateAdminUserParams
 		&i.PasswordHash,
 		&i.Role,
 		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

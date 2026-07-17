@@ -64,6 +64,7 @@ RETURNING
     end_at,
     sale_start_at,
     sale_end_at,
+    version,
     created_at,
     updated_at
 `
@@ -89,6 +90,7 @@ type CreateEventRow struct {
 	EndAt       pgtype.Timestamptz `json:"end_at"`
 	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
 	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
+	Version     int64              `json:"version"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -115,6 +117,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (Creat
 		&i.EndAt,
 		&i.SaleStartAt,
 		&i.SaleEndAt,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -134,6 +137,7 @@ SELECT
     e.end_at,
     e.sale_start_at,
     e.sale_end_at,
+    e.version,
     e.created_at,
     e.updated_at
 FROM events e
@@ -163,6 +167,7 @@ type GetAdminEventByIDRow struct {
 	EndAt           pgtype.Timestamptz `json:"end_at"`
 	SaleStartAt     pgtype.Timestamptz `json:"sale_start_at"`
 	SaleEndAt       pgtype.Timestamptz `json:"sale_end_at"`
+	Version         int64              `json:"version"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
@@ -182,6 +187,7 @@ func (q *Queries) GetAdminEventByID(ctx context.Context, arg GetAdminEventByIDPa
 		&i.EndAt,
 		&i.SaleStartAt,
 		&i.SaleEndAt,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -199,6 +205,7 @@ SELECT
     end_at,
     sale_start_at,
     sale_end_at,
+    version,
     created_at,
     updated_at
 FROM events
@@ -216,6 +223,7 @@ type GetEventByIDRow struct {
 	EndAt       pgtype.Timestamptz `json:"end_at"`
 	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
 	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
+	Version     int64              `json:"version"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -233,6 +241,7 @@ func (q *Queries) GetEventByID(ctx context.Context, id int64) (GetEventByIDRow, 
 		&i.EndAt,
 		&i.SaleStartAt,
 		&i.SaleEndAt,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -252,6 +261,7 @@ SELECT
     e.end_at,
     e.sale_start_at,
     e.sale_end_at,
+    e.version,
     e.created_at,
     e.updated_at
 FROM events e
@@ -273,6 +283,7 @@ type ListAdminEventsRow struct {
 	EndAt           pgtype.Timestamptz `json:"end_at"`
 	SaleStartAt     pgtype.Timestamptz `json:"sale_start_at"`
 	SaleEndAt       pgtype.Timestamptz `json:"sale_end_at"`
+	Version         int64              `json:"version"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
@@ -298,6 +309,7 @@ func (q *Queries) ListAdminEvents(ctx context.Context, organizerID int64) ([]Lis
 			&i.EndAt,
 			&i.SaleStartAt,
 			&i.SaleEndAt,
+			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -322,6 +334,7 @@ SELECT
     end_at,
     sale_start_at,
     sale_end_at,
+    version,
     created_at,
     updated_at
 FROM events
@@ -338,6 +351,7 @@ type ListEventsRow struct {
 	EndAt       pgtype.Timestamptz `json:"end_at"`
 	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
 	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
+	Version     int64              `json:"version"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -361,6 +375,7 @@ func (q *Queries) ListEvents(ctx context.Context) ([]ListEventsRow, error) {
 			&i.EndAt,
 			&i.SaleStartAt,
 			&i.SaleEndAt,
+			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -385,8 +400,10 @@ SET
     end_at = $7,
     sale_start_at = $8,
     sale_end_at = $9,
+    version = version + 1,
     updated_at = $10
 WHERE id = $1
+  AND version = $11
 RETURNING
     id,
     organizer_id,
@@ -397,6 +414,7 @@ RETURNING
     end_at,
     sale_start_at,
     sale_end_at,
+    version,
     created_at,
     updated_at
 `
@@ -412,6 +430,7 @@ type UpdateEventParams struct {
 	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
 	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Version     int64              `json:"version"`
 }
 
 type UpdateEventRow struct {
@@ -424,6 +443,7 @@ type UpdateEventRow struct {
 	EndAt       pgtype.Timestamptz `json:"end_at"`
 	SaleStartAt pgtype.Timestamptz `json:"sale_start_at"`
 	SaleEndAt   pgtype.Timestamptz `json:"sale_end_at"`
+	Version     int64              `json:"version"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -440,6 +460,7 @@ func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Updat
 		arg.SaleStartAt,
 		arg.SaleEndAt,
 		arg.UpdatedAt,
+		arg.Version,
 	)
 	var i UpdateEventRow
 	err := row.Scan(
@@ -452,6 +473,7 @@ func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Updat
 		&i.EndAt,
 		&i.SaleStartAt,
 		&i.SaleEndAt,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

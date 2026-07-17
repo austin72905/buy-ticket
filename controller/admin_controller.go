@@ -117,6 +117,7 @@ func (c *AdminController) CreateAdminUser(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Router /admin/users/{adminUserId} [patch]
 func (c *AdminController) UpdateAdminUser(ctx *gin.Context) {
 	adminUserID, err := strconv.ParseInt(ctx.Param("adminUserId"), 10, 64)
@@ -128,6 +129,10 @@ func (c *AdminController) UpdateAdminUser(ctx *gin.Context) {
 	var request UpdateAdminUserRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
 		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+	if request.ExpectedVersion == nil || *request.ExpectedVersion <= 0 {
+		writeError(ctx, http.StatusBadRequest, service.ErrInvalidAdminInput)
 		return
 	}
 
@@ -144,16 +149,17 @@ func (c *AdminController) UpdateAdminUser(ctx *gin.Context) {
 
 	adminUser, _ := CurrentAdmin(ctx)
 	updated, err := c.AdminService.UpdateAdminUser(ctx.Request.Context(), service.UpdateAdminUserInput{
-		AdminUser:   adminUser,
-		ID:          adminUserID,
-		OrganizerID: request.OrganizerID,
-		Name:        request.Name,
-		Email:       request.Email,
-		Password:    request.Password,
-		Role:        role,
-		Status:      status,
-		IPAddress:   clientIP(ctx),
-		UserAgent:   headerPtr(ctx, "User-Agent"),
+		AdminUser:       adminUser,
+		ID:              adminUserID,
+		ExpectedVersion: *request.ExpectedVersion,
+		OrganizerID:     request.OrganizerID,
+		Name:            request.Name,
+		Email:           request.Email,
+		Password:        request.Password,
+		Role:            role,
+		Status:          status,
+		IPAddress:       clientIP(ctx),
+		UserAgent:       headerPtr(ctx, "User-Agent"),
 	})
 	if err != nil {
 		writeAdminError(ctx, err)
@@ -228,6 +234,7 @@ func (c *AdminController) CreateOrganizer(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Router /admin/organizers/{organizerId} [patch]
 func (c *AdminController) UpdateOrganizer(ctx *gin.Context) {
 	organizerID, err := strconv.ParseInt(ctx.Param("organizerId"), 10, 64)
@@ -241,6 +248,10 @@ func (c *AdminController) UpdateOrganizer(ctx *gin.Context) {
 		writeError(ctx, http.StatusBadRequest, err)
 		return
 	}
+	if request.ExpectedVersion == nil || *request.ExpectedVersion <= 0 {
+		writeError(ctx, http.StatusBadRequest, service.ErrInvalidAdminInput)
+		return
+	}
 
 	var status *domain.OrganizerStatus
 	if request.Status != nil {
@@ -250,12 +261,13 @@ func (c *AdminController) UpdateOrganizer(ctx *gin.Context) {
 
 	adminUser, _ := CurrentAdmin(ctx)
 	organizer, err := c.AdminService.UpdateOrganizer(ctx.Request.Context(), service.UpdateOrganizerInput{
-		AdminUser: adminUser,
-		ID:        organizerID,
-		Name:      request.Name,
-		Status:    status,
-		IPAddress: clientIP(ctx),
-		UserAgent: headerPtr(ctx, "User-Agent"),
+		AdminUser:       adminUser,
+		ID:              organizerID,
+		ExpectedVersion: *request.ExpectedVersion,
+		Name:            request.Name,
+		Status:          status,
+		IPAddress:       clientIP(ctx),
+		UserAgent:       headerPtr(ctx, "User-Agent"),
 	})
 	if err != nil {
 		writeAdminError(ctx, err)
@@ -532,6 +544,7 @@ func (c *AdminController) GetEvent(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Router /admin/events/{eventId} [patch]
 func (c *AdminController) UpdateEvent(ctx *gin.Context) {
 	eventID, err := strconv.ParseInt(ctx.Param("eventId"), 10, 64)
@@ -543,6 +556,10 @@ func (c *AdminController) UpdateEvent(ctx *gin.Context) {
 	var request UpdateAdminEventRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
 		writeError(ctx, http.StatusBadRequest, err)
+		return
+	}
+	if request.ExpectedVersion == nil || *request.ExpectedVersion <= 0 {
+		writeError(ctx, http.StatusBadRequest, service.ErrInvalidAdminInput)
 		return
 	}
 
@@ -575,18 +592,19 @@ func (c *AdminController) UpdateEvent(ctx *gin.Context) {
 
 	adminUser, _ := CurrentAdmin(ctx)
 	event, err := c.AdminService.UpdateEvent(ctx.Request.Context(), service.UpdateAdminEventInput{
-		AdminUser:   adminUser,
-		EventID:     eventID,
-		OrganizerID: request.OrganizerID,
-		Name:        request.Name,
-		Venue:       request.Venue,
-		Status:      status,
-		StartAt:     startAt,
-		EndAt:       endAt,
-		SaleStartAt: saleStartAt,
-		SaleEndAt:   saleEndAt,
-		IPAddress:   clientIP(ctx),
-		UserAgent:   headerPtr(ctx, "User-Agent"),
+		AdminUser:       adminUser,
+		EventID:         eventID,
+		ExpectedVersion: *request.ExpectedVersion,
+		OrganizerID:     request.OrganizerID,
+		Name:            request.Name,
+		Venue:           request.Venue,
+		Status:          status,
+		StartAt:         startAt,
+		EndAt:           endAt,
+		SaleStartAt:     saleStartAt,
+		SaleEndAt:       saleEndAt,
+		IPAddress:       clientIP(ctx),
+		UserAgent:       headerPtr(ctx, "User-Agent"),
 	})
 	if err != nil {
 		writeAdminError(ctx, err)
@@ -691,6 +709,7 @@ func (c *AdminController) CreateEventSection(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Router /admin/events/{eventId}/sections/{sectionId} [patch]
 func (c *AdminController) UpdateEventSection(ctx *gin.Context) {
 	eventID, err := strconv.ParseInt(ctx.Param("eventId"), 10, 64)
@@ -709,6 +728,10 @@ func (c *AdminController) UpdateEventSection(ctx *gin.Context) {
 		writeError(ctx, http.StatusBadRequest, err)
 		return
 	}
+	if request.ExpectedVersion == nil || *request.ExpectedVersion <= 0 {
+		writeError(ctx, http.StatusBadRequest, service.ErrInvalidAdminInput)
+		return
+	}
 
 	var status *domain.SectionStatus
 	if request.Status != nil {
@@ -718,16 +741,17 @@ func (c *AdminController) UpdateEventSection(ctx *gin.Context) {
 
 	adminUser, _ := CurrentAdmin(ctx)
 	section, err := c.AdminService.UpdateEventSection(ctx.Request.Context(), service.UpdateAdminSectionInput{
-		AdminUser:     adminUser,
-		EventID:       eventID,
-		SectionID:     sectionID,
-		Name:          request.Name,
-		Price:         request.Price,
-		TotalQuantity: request.TotalQuantity,
-		PurchaseLimit: request.PurchaseLimit,
-		Status:        status,
-		IPAddress:     clientIP(ctx),
-		UserAgent:     headerPtr(ctx, "User-Agent"),
+		AdminUser:       adminUser,
+		EventID:         eventID,
+		SectionID:       sectionID,
+		ExpectedVersion: *request.ExpectedVersion,
+		Name:            request.Name,
+		Price:           request.Price,
+		TotalQuantity:   request.TotalQuantity,
+		PurchaseLimit:   request.PurchaseLimit,
+		Status:          status,
+		IPAddress:       clientIP(ctx),
+		UserAgent:       headerPtr(ctx, "User-Agent"),
 	})
 	if err != nil {
 		writeAdminError(ctx, err)
@@ -871,6 +895,8 @@ func writeAdminError(ctx *gin.Context, err error) {
 		errors.Is(err, repository.ErrAdminUserNotFound),
 		errors.Is(err, repository.ErrSectionNotFound):
 		writeError(ctx, http.StatusNotFound, err)
+	case errors.Is(err, repository.ErrResourceVersionConflict):
+		writeError(ctx, http.StatusConflict, err)
 	default:
 		writeError(ctx, http.StatusInternalServerError, err)
 	}

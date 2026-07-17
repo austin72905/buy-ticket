@@ -7,6 +7,7 @@ SELECT
     password_hash,
     role,
     status,
+    version,
     created_at,
     updated_at
 FROM admin_users
@@ -22,6 +23,7 @@ SELECT
     password_hash,
     role,
     status,
+    version,
     created_at,
     updated_at
 FROM admin_users
@@ -37,6 +39,7 @@ SELECT
     password_hash,
     role,
     status,
+    version,
     created_at,
     updated_at
 FROM admin_users
@@ -61,6 +64,7 @@ RETURNING
     password_hash,
     role,
     status,
+    version,
     created_at,
     updated_at;
 
@@ -73,8 +77,10 @@ SET
     password_hash = $5,
     role = $6,
     status = $7,
+    version = version + 1,
     updated_at = $8
 WHERE id = $1
+  AND version = $9
 RETURNING
     id,
     organizer_id,
@@ -83,5 +89,6 @@ RETURNING
     password_hash,
     role,
     status,
+    version,
     created_at,
     updated_at;

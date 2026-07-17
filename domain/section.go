@@ -20,6 +20,7 @@ type Section struct {
 	SoldQuantity     int
 	PurchaseLimit    int
 	Status           SectionStatus
+	Version          int64
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }

@@ -54,12 +54,13 @@ type CreateOrganizerInput struct {
 }
 
 type UpdateOrganizerInput struct {
-	AdminUser *domain.AdminUser
-	ID        int64
-	Name      *string
-	Status    *domain.OrganizerStatus
-	IPAddress *string
-	UserAgent *string
+	AdminUser       *domain.AdminUser
+	ID              int64
+	ExpectedVersion int64
+	Name            *string
+	Status          *domain.OrganizerStatus
+	IPAddress       *string
+	UserAgent       *string
 }
 
 type CreateAdminUserInput struct {
@@ -72,16 +73,17 @@ type CreateAdminUserInput struct {
 }
 
 type UpdateAdminUserInput struct {
-	AdminUser   *domain.AdminUser
-	ID          int64
-	OrganizerID *int64
-	Name        *string
-	Email       *string
-	Password    *string
-	Role        *domain.AdminRole
-	Status      *domain.AdminUserStatus
-	IPAddress   *string
-	UserAgent   *string
+	AdminUser       *domain.AdminUser
+	ID              int64
+	ExpectedVersion int64
+	OrganizerID     *int64
+	Name            *string
+	Email           *string
+	Password        *string
+	Role            *domain.AdminRole
+	Status          *domain.AdminUserStatus
+	IPAddress       *string
+	UserAgent       *string
 }
 
 type CreateAdminEventInput struct {
@@ -97,18 +99,19 @@ type CreateAdminEventInput struct {
 }
 
 type UpdateAdminEventInput struct {
-	AdminUser   *domain.AdminUser
-	EventID     int64
-	OrganizerID *int64
-	Name        *string
-	Venue       *string
-	Status      *domain.EventStatus
-	StartAt     *time.Time
-	EndAt       *time.Time
-	SaleStartAt *time.Time
-	SaleEndAt   *time.Time
-	IPAddress   *string
-	UserAgent   *string
+	AdminUser       *domain.AdminUser
+	EventID         int64
+	ExpectedVersion int64
+	OrganizerID     *int64
+	Name            *string
+	Venue           *string
+	Status          *domain.EventStatus
+	StartAt         *time.Time
+	EndAt           *time.Time
+	SaleStartAt     *time.Time
+	SaleEndAt       *time.Time
+	IPAddress       *string
+	UserAgent       *string
 }
 
 type CreateAdminSectionInput struct {
@@ -122,16 +125,17 @@ type CreateAdminSectionInput struct {
 }
 
 type UpdateAdminSectionInput struct {
-	AdminUser     *domain.AdminUser
-	EventID       int64
-	SectionID     int64
-	Name          *string
-	Price         *int64
-	TotalQuantity *int
-	PurchaseLimit *int
-	Status        *domain.SectionStatus
-	IPAddress     *string
-	UserAgent     *string
+	AdminUser       *domain.AdminUser
+	EventID         int64
+	SectionID       int64
+	ExpectedVersion int64
+	Name            *string
+	Price           *int64
+	TotalQuantity   *int
+	PurchaseLimit   *int
+	Status          *domain.SectionStatus
+	IPAddress       *string
+	UserAgent       *string
 }
 
 func NewAdminService(
@@ -224,10 +228,16 @@ func (s *AdminService) UpdateAdminUser(ctx context.Context, input UpdateAdminUse
 	if input.ID == 0 {
 		return nil, ErrInvalidAdminInput
 	}
+	if input.ExpectedVersion <= 0 {
+		return nil, ErrInvalidAdminInput
+	}
 
 	adminUser, err := s.AdminUserRepo.FindByID(ctx, input.ID)
 	if err != nil {
 		return nil, err
+	}
+	if adminUser.Version != input.ExpectedVersion {
+		return nil, repository.ErrResourceVersionConflict
 	}
 	if input.Name != nil {
 		name := strings.TrimSpace(*input.Name)
@@ -347,10 +357,16 @@ func (s *AdminService) UpdateOrganizer(ctx context.Context, input UpdateOrganize
 	if input.ID == 0 {
 		return nil, ErrInvalidAdminInput
 	}
+	if input.ExpectedVersion <= 0 {
+		return nil, ErrInvalidAdminInput
+	}
 
 	organizer, err := s.OrganizerRepo.FindByID(ctx, input.ID)
 	if err != nil {
 		return nil, err
+	}
+	if organizer.Version != input.ExpectedVersion {
+		return nil, repository.ErrResourceVersionConflict
 	}
 	if input.Name != nil {
 		name := strings.TrimSpace(*input.Name)
@@ -464,10 +480,16 @@ func (s *AdminService) UpdateEvent(ctx context.Context, input UpdateAdminEventIn
 	if input.EventID == 0 {
 		return nil, ErrInvalidAdminInput
 	}
+	if input.ExpectedVersion <= 0 {
+		return nil, ErrInvalidAdminInput
+	}
 
 	event, err := s.AdminEventRepo.FindAdminEventByID(ctx, input.EventID, organizerID)
 	if err != nil {
 		return nil, err
+	}
+	if event.Version != input.ExpectedVersion {
+		return nil, repository.ErrResourceVersionConflict
 	}
 
 	if input.Name != nil {
@@ -588,6 +610,9 @@ func (s *AdminService) UpdateEventSection(ctx context.Context, input UpdateAdmin
 	if input.EventID == 0 || input.SectionID == 0 {
 		return nil, ErrInvalidAdminInput
 	}
+	if input.ExpectedVersion <= 0 {
+		return nil, ErrInvalidAdminInput
+	}
 
 	if _, err := s.AdminEventRepo.FindAdminEventByID(ctx, input.EventID, organizerID); err != nil {
 		return nil, err
@@ -606,6 +631,9 @@ func (s *AdminService) UpdateEventSection(ctx context.Context, input UpdateAdmin
 	}
 	if section == nil {
 		return nil, repository.ErrSectionNotFound
+	}
+	if section.Version != input.ExpectedVersion {
+		return nil, repository.ErrResourceVersionConflict
 	}
 
 	if input.Name != nil {

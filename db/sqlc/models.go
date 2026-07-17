@@ -30,6 +30,7 @@ type AdminUser struct {
 	Status       int16              `json:"status"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	Version      int64              `json:"version"`
 }
 
 type Event struct {
@@ -44,6 +45,7 @@ type Event struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	OrganizerID int64              `json:"organizer_id"`
+	Version     int64              `json:"version"`
 }
 
 type EventSection struct {
@@ -59,6 +61,7 @@ type EventSection struct {
 	Status           int16              `json:"status"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Version          int64              `json:"version"`
 }
 
 type IdempotencyKey struct {
@@ -103,6 +106,7 @@ type Organizer struct {
 	Status    int16              `json:"status"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	Version   int64              `json:"version"`
 }
 
 type Payment struct {

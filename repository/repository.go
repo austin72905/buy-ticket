@@ -12,6 +12,7 @@ var ErrIdempotencyKeyNotFound = errors.New("idempotency key not found")
 var ErrPaymentAttemptNotFound = errors.New("payment attempt not found")
 var ErrAdminUserNotFound = errors.New("admin user not found")
 var ErrOrganizerNotFound = errors.New("organizer not found")
+var ErrResourceVersionConflict = errors.New("resource has been modified, please reload")
 
 type AdminUserRepository interface {
 	FindByID(ctx context.Context, adminUserID int64) (*domain.AdminUser, error)

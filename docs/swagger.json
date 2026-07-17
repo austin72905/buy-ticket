@@ -323,6 +323,12 @@
                         "schema": {
                             "$ref": "#/definitions/controller.ErrorResponse"
                         }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -511,6 +517,12 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/controller.ErrorResponse"
                         }
@@ -831,6 +843,12 @@
                         "schema": {
                             "$ref": "#/definitions/controller.ErrorResponse"
                         }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -978,6 +996,12 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/controller.ErrorResponse"
                         }
@@ -1952,6 +1976,9 @@
                 },
                 "venue": {
                     "type": "string"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
@@ -2119,6 +2146,9 @@
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
@@ -2162,6 +2192,9 @@
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
@@ -2446,6 +2479,9 @@
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
@@ -2770,6 +2806,9 @@
                 "end_at": {
                     "type": "string"
                 },
+                "expected_version": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -2796,6 +2835,9 @@
         "controller.UpdateAdminSectionRequest": {
             "type": "object",
             "properties": {
+                "expected_version": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -2819,6 +2861,9 @@
                 "email": {
                     "type": "string"
                 },
+                "expected_version": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -2839,6 +2884,9 @@
         "controller.UpdateOrganizerRequest": {
             "type": "object",
             "properties": {
+                "expected_version": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
                 },

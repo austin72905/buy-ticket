@@ -110,13 +110,26 @@ func (r *MemoryAdminUserRepository) Save(ctx context.Context, adminUser *domain.
 	if cloned.ID == 0 {
 		cloned.ID = r.nextID
 		r.nextID++
+		if cloned.Version == 0 {
+			cloned.Version = 1
+		}
 		adminUser.ID = cloned.ID
 	} else if existing, ok := r.adminUsers[cloned.ID]; ok && existing.Email != cloned.Email {
+		if existing.Version != cloned.Version {
+			return ErrResourceVersionConflict
+		}
+		cloned.Version++
 		delete(r.emailIndex, existing.Email)
+	} else if existing, ok := r.adminUsers[cloned.ID]; ok {
+		if existing.Version != cloned.Version {
+			return ErrResourceVersionConflict
+		}
+		cloned.Version++
 	}
 
 	r.adminUsers[cloned.ID] = &cloned
 	r.emailIndex[cloned.Email] = cloned.ID
+	*adminUser = cloned
 	return nil
 }
 
@@ -183,10 +196,19 @@ func (r *MemoryOrganizerRepository) Save(ctx context.Context, organizer *domain.
 	if cloned.ID == 0 {
 		cloned.ID = r.nextID
 		r.nextID++
+		if cloned.Version == 0 {
+			cloned.Version = 1
+		}
 		organizer.ID = cloned.ID
+	} else if existing, ok := r.organizers[cloned.ID]; ok {
+		if existing.Version != cloned.Version {
+			return ErrResourceVersionConflict
+		}
+		cloned.Version++
 	}
 
 	r.organizers[cloned.ID] = &cloned
+	*organizer = cloned
 	return nil
 }
 
@@ -418,6 +440,9 @@ func (r *MemoryEventRepository) CreateAdminEvent(ctx context.Context, event *dom
 		r.nextID++
 		event.ID = cloned.ID
 	}
+	if cloned.Version == 0 {
+		cloned.Version = 1
+	}
 	if cloned.CreatedAt.IsZero() {
 		cloned.CreatedAt = time.Now()
 	}
@@ -438,8 +463,12 @@ func (r *MemoryEventRepository) UpdateAdminEvent(ctx context.Context, event *dom
 	if !ok {
 		return ErrEventNotFound
 	}
+	if existing.Version != event.Version {
+		return ErrResourceVersionConflict
+	}
 
 	cloned := *event
+	cloned.Version++
 	cloned.CreatedAt = existing.CreatedAt
 	r.events[event.ID] = &cloned
 	*event = cloned
@@ -516,6 +545,9 @@ func (r *MemoryEventRepository) CreateAdminEventSection(ctx context.Context, eve
 		cloned.ID = maxID + 1
 		section.ID = cloned.ID
 	}
+	if cloned.Version == 0 {
+		cloned.Version = 1
+	}
 	if cloned.CreatedAt.IsZero() {
 		cloned.CreatedAt = time.Now()
 	}
@@ -544,10 +576,14 @@ func (r *MemoryEventRepository) UpdateAdminEventSection(ctx context.Context, eve
 		if event.Sections[index].ID != section.ID {
 			continue
 		}
+		if event.Sections[index].Version != section.Version {
+			return ErrResourceVersionConflict
+		}
 
 		cloned := *section
 		cloned.EventID = eventID
 		cloned.CreatedAt = event.Sections[index].CreatedAt
+		cloned.Version++
 		event.Sections[index] = cloned
 		*section = cloned
 		return nil

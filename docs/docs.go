@@ -330,6 +330,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/controller.ErrorResponse"
                         }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -518,6 +524,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/controller.ErrorResponse"
                         }
@@ -838,6 +850,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/controller.ErrorResponse"
                         }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -985,6 +1003,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/controller.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/controller.ErrorResponse"
                         }
@@ -1959,6 +1983,9 @@ const docTemplate = `{
                 },
                 "venue": {
                     "type": "string"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
@@ -2126,6 +2153,9 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
@@ -2169,6 +2199,9 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
@@ -2453,6 +2486,9 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
@@ -2777,6 +2813,9 @@ const docTemplate = `{
                 "end_at": {
                     "type": "string"
                 },
+                "expected_version": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -2803,6 +2842,9 @@ const docTemplate = `{
         "controller.UpdateAdminSectionRequest": {
             "type": "object",
             "properties": {
+                "expected_version": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -2826,6 +2868,9 @@ const docTemplate = `{
                 "email": {
                     "type": "string"
                 },
+                "expected_version": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -2846,6 +2891,9 @@ const docTemplate = `{
         "controller.UpdateOrganizerRequest": {
             "type": "object",
             "properties": {
+                "expected_version": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
                 },
