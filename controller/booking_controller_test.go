@@ -18,41 +18,50 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func newTestBookingServiceForController(
-	eventRepo repository.EventRepository,
-	sectionRepo repository.SectionRepository,
-	reservationRepo repository.ReservationRepository,
-	orderRepo repository.OrderRepository,
-	paymentRepo repository.PaymentRepository,
-	paymentAttemptRepo repository.PaymentAttemptRepository,
-	idempotencyRepos ...repository.IdempotencyRepository,
-) *service.BookingService {
-	if eventRepo == nil {
-		eventRepo = &fakeEventRepositoryForController{}
+type testBookingControllerDeps struct {
+	EventRepo          repository.EventRepository
+	SectionRepo        repository.SectionRepository
+	ReservationRepo    repository.ReservationRepository
+	OrderRepo          repository.OrderRepository
+	PaymentRepo        repository.PaymentRepository
+	PaymentAttemptRepo repository.PaymentAttemptRepository
+	IdempotencyRepo    repository.IdempotencyRepository
+}
+
+func newTestBookingServiceForController(deps testBookingControllerDeps) *service.BookingService {
+	if deps.EventRepo == nil {
+		deps.EventRepo = &fakeEventRepositoryForController{}
 	}
-	if sectionRepo == nil {
-		sectionRepo = &fakeSectionRepositoryForController{}
+	if deps.SectionRepo == nil {
+		deps.SectionRepo = &fakeSectionRepositoryForController{}
 	}
-	if reservationRepo == nil {
-		reservationRepo = &fakeReservationRepositoryForController{}
+	if deps.ReservationRepo == nil {
+		deps.ReservationRepo = &fakeReservationRepositoryForController{}
 	}
-	if orderRepo == nil {
-		orderRepo = &fakeOrderRepositoryForController{}
+	if deps.OrderRepo == nil {
+		deps.OrderRepo = &fakeOrderRepositoryForController{}
 	}
-	if paymentRepo == nil {
-		paymentRepo = &fakePaymentRepositoryForController{}
+	if deps.PaymentRepo == nil {
+		deps.PaymentRepo = &fakePaymentRepositoryForController{}
 	}
-	if paymentAttemptRepo == nil {
-		paymentAttemptRepo = &fakePaymentAttemptRepositoryForController{}
+	if deps.PaymentAttemptRepo == nil {
+		deps.PaymentAttemptRepo = &fakePaymentAttemptRepositoryForController{}
 	}
-	idempotencyRepo := repository.IdempotencyRepository(&fakeIdempotencyRepositoryForController{
-		records: map[string]*domain.IdempotencyKey{},
-	})
-	if len(idempotencyRepos) > 0 && idempotencyRepos[0] != nil {
-		idempotencyRepo = idempotencyRepos[0]
+	if deps.IdempotencyRepo == nil {
+		deps.IdempotencyRepo = &fakeIdempotencyRepositoryForController{
+			records: map[string]*domain.IdempotencyKey{},
+		}
 	}
 
-	return service.NewBookingService(eventRepo, sectionRepo, reservationRepo, orderRepo, paymentRepo, paymentAttemptRepo, idempotencyRepo)
+	return service.NewBookingService(
+		deps.EventRepo,
+		deps.SectionRepo,
+		deps.ReservationRepo,
+		deps.OrderRepo,
+		deps.PaymentRepo,
+		deps.PaymentAttemptRepo,
+		deps.IdempotencyRepo,
+	)
 }
 
 func TestBookingControllerGetQueueStatus(t *testing.T) {
@@ -60,8 +69,9 @@ func TestBookingControllerGetQueueStatus(t *testing.T) {
 
 	t.Run("查得到 queue token 時應回傳 200", func(t *testing.T) {
 		now := time.Now()
-		bookingService := newTestBookingServiceForController(nil, nil, nil, nil, nil,
-			repository.NewMemoryPaymentAttemptRepository(nil))
+		bookingService := newTestBookingServiceForController(testBookingControllerDeps{
+			PaymentAttemptRepo: repository.NewMemoryPaymentAttemptRepository(nil),
+		})
 		bookingService.SaveQueueStatus(service.QueueStatusSnapshot{
 			QueueToken:           "qt_001",
 			QueueSequence:        1,
@@ -101,8 +111,9 @@ func TestBookingControllerGetQueueStatus(t *testing.T) {
 	})
 
 	t.Run("查不到 queue token 時應回傳 404", func(t *testing.T) {
-		controller := NewBookingController(newTestBookingServiceForController(nil, nil, nil, nil, nil,
-			repository.NewMemoryPaymentAttemptRepository(nil)))
+		controller := NewBookingController(newTestBookingServiceForController(testBookingControllerDeps{
+			PaymentAttemptRepo: repository.NewMemoryPaymentAttemptRepository(nil),
+		}))
 		router := gin.New()
 		controller.RegisterRoutes(router)
 
@@ -121,18 +132,14 @@ func TestBookingControllerJoinQueue(t *testing.T) {
 
 	t.Run("加入排隊成功時應回傳 201", func(t *testing.T) {
 		now := time.Now()
-		bookingService := newTestBookingServiceForController(
-			&fakeEventRepositoryForController{
+		bookingService := newTestBookingServiceForController(testBookingControllerDeps{
+			EventRepo: &fakeEventRepositoryForController{
 				eventID:     1,
 				saleStartAt: now.Add(-time.Hour),
 				saleEndAt:   now.Add(time.Hour),
 			},
-			nil,
-			nil,
-			nil,
-			nil,
-			repository.NewMemoryPaymentAttemptRepository(nil),
-		)
+			PaymentAttemptRepo: repository.NewMemoryPaymentAttemptRepository(nil),
+		})
 
 		controller := NewBookingController(bookingService)
 		router := gin.New()
@@ -182,9 +189,9 @@ func TestBookingControllerHandleECPayCallback(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("成功回呼會回 1|OK", func(t *testing.T) {
-		bookingService := newTestBookingServiceForController(
-			&fakeEventRepositoryForController{},
-			&fakeSectionRepositoryForController{
+		bookingService := newTestBookingServiceForController(testBookingControllerDeps{
+			EventRepo: &fakeEventRepositoryForController{},
+			SectionRepo: &fakeSectionRepositoryForController{
 				section: &domain.Section{
 					ID:               2,
 					EventID:          1,
@@ -193,7 +200,7 @@ func TestBookingControllerHandleECPayCallback(t *testing.T) {
 					Status:           domain.SectionStatusActive,
 				},
 			},
-			&fakeReservationRepositoryForController{
+			ReservationRepo: &fakeReservationRepositoryForController{
 				reservations: map[int64]*domain.Reservation{
 					10: {
 						ID:          10,
@@ -208,7 +215,7 @@ func TestBookingControllerHandleECPayCallback(t *testing.T) {
 					},
 				},
 			},
-			&fakeOrderRepositoryForController{
+			OrderRepo: &fakeOrderRepositoryForController{
 				orders: map[int64]*domain.Order{
 					20: {
 						ID:            20,
@@ -225,8 +232,8 @@ func TestBookingControllerHandleECPayCallback(t *testing.T) {
 					},
 				},
 			},
-			&fakePaymentRepositoryForController{},
-			&fakePaymentAttemptRepositoryForController{
+			PaymentRepo: &fakePaymentRepositoryForController{},
+			PaymentAttemptRepo: &fakePaymentAttemptRepositoryForController{
 				attempts: map[int64]*domain.PaymentAttempt{
 					30: {
 						ID:              30,
@@ -241,7 +248,7 @@ func TestBookingControllerHandleECPayCallback(t *testing.T) {
 					},
 				},
 			},
-		)
+		})
 
 		controller := NewBookingController(bookingService)
 		router := gin.New()
@@ -273,11 +280,11 @@ func TestBookingControllerStartPayment(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("creates payment attempt for pending order", func(t *testing.T) {
-		bookingService := newTestBookingServiceForController(
-			&fakeEventRepositoryForController{},
-			&fakeSectionRepositoryForController{},
-			&fakeReservationRepositoryForController{},
-			&fakeOrderRepositoryForController{
+		bookingService := newTestBookingServiceForController(testBookingControllerDeps{
+			EventRepo:       &fakeEventRepositoryForController{},
+			SectionRepo:     &fakeSectionRepositoryForController{},
+			ReservationRepo: &fakeReservationRepositoryForController{},
+			OrderRepo: &fakeOrderRepositoryForController{
 				orders: map[int64]*domain.Order{
 					20: {
 						ID:          20,
@@ -287,9 +294,9 @@ func TestBookingControllerStartPayment(t *testing.T) {
 					},
 				},
 			},
-			&fakePaymentRepositoryForController{},
-			&fakePaymentAttemptRepositoryForController{},
-		)
+			PaymentRepo:        &fakePaymentRepositoryForController{},
+			PaymentAttemptRepo: &fakePaymentAttemptRepositoryForController{},
+		})
 
 		controller := NewBookingController(bookingService)
 		router := gin.New()
