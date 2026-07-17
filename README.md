@@ -20,6 +20,24 @@ Vue Frontend
       -> stock reconciliation
 ```
 
+### System Diagram
+
+```mermaid
+flowchart LR
+  FE["Vue Frontend"] --> API["Go API (APP_ROLE=api)"]
+  API --> PG["PostgreSQL"]
+  API --> Redis["Redis Queue / Stock / Session"]
+  API --> Pay["Mock Payment Service"]
+
+  Scheduler["Go Scheduler (APP_ROLE=scheduler)"] --> PG
+  Scheduler --> Redis
+  Scheduler --> Pay
+
+  PG --> Outbox["outbox_events"]
+  Scheduler --> Outbox
+  Scheduler --> Notify["Payment Success Notification (log first)"]
+```
+
 ### Runtime Roles
 
 | Role | 說明 |
@@ -52,6 +70,28 @@ buy-ticket-scheduler  APP_ROLE=scheduler
 - `doc/redis-queue-model.md`
 - `doc/queue-purchase-token-design.md`
 - `doc/queue-api.md`
+
+### Booking Sequence
+
+```mermaid
+sequenceDiagram
+  participant FE as Vue Frontend
+  participant API as Go API
+  participant Redis as Redis Queue/Stock
+  participant PG as PostgreSQL
+  participant Sch as Scheduler
+
+  FE->>API: POST /queue/join
+  API->>Redis: ZADD waiting queue
+  Sch->>Redis: promote waiting -> ready
+  FE->>API: GET /queue/status
+  API->>Redis: read ready token + purchase_token
+  FE->>API: POST /reservations
+  API->>Redis: reserve stock
+  API->>PG: create reservation
+  FE->>API: POST /orders
+  API->>PG: create pending order
+```
 
 ### Inventory
 
@@ -93,6 +133,43 @@ POST /payments/start
 - `doc/mock-payment-callback.md`
 - `doc/payment-reconciliation.md`
 
+### Payment Sequence
+
+```mermaid
+sequenceDiagram
+  participant FE as Vue Frontend
+  participant API as Go API
+  participant Pay as Mock Payment Service
+  participant PG as PostgreSQL
+  participant Sch as Scheduler
+
+  FE->>API: POST /payments/start
+  API->>PG: create payment_attempt
+  API->>Pay: POST /api/payment/process
+  Pay-->>API: callback /payments/provider/ecpay/callback
+  API->>PG: payment + order PAID + reservation CONFIRMED
+  API->>PG: insert outbox_events PAYMENT_SUCCEEDED
+  Sch->>PG: poll pending outbox_events
+  Sch->>Sch: log payment success notification
+```
+
+### Payment Reconciliation Sequence
+
+```mermaid
+sequenceDiagram
+  participant API as Go API
+  participant Pay as Mock Payment Service
+  participant PG as PostgreSQL
+  participant Sch as Scheduler
+
+  API->>Pay: POST /api/payment/process
+  Pay--xAPI: callback failed after retries
+  Sch->>PG: find stale PROCESSING/TIMEOUT attempts
+  Sch->>Pay: GET /api/payment/query
+  Pay-->>Sch: SUCCESS
+  Sch->>PG: complete payment + order PAID
+  Sch->>PG: insert outbox_events PAYMENT_SUCCEEDED
+```
 ### Outbox
 
 付款成功後會在同一個 DB transaction 寫入 `outbox_events`：
