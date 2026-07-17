@@ -42,8 +42,7 @@ func TestBookingServiceAdvanceEventStatuses(t *testing.T) {
 		},
 	})
 	svc := newTestBookingService(testBookingDeps{
-		EventRepo:          eventRepo,
-		PaymentAttemptRepo: repository.NewMemoryPaymentAttemptRepository(nil),
+		EventRepo: eventRepo,
 	})
 
 	count, err := svc.AdvanceEventStatuses(context.Background(), now)
