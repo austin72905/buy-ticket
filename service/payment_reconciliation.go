@@ -18,6 +18,12 @@ type ReconcilePaymentAttemptsInput struct {
 	MaxAttempts int
 }
 
+// 定期找太久沒完成的 payment_attempts
+/*
+payment_attempt = PROCESSING / TIMEOUT
+order = PENDING_PAYMENT
+reservation = HOLDING
+*/
 func (s *BookingService) ReconcilePaymentAttempts(ctx context.Context, input ReconcilePaymentAttemptsInput) (int, error) {
 	if s.PaymentAttemptRepo == nil {
 		return 0, ErrPaymentAttemptRepositoryNotConfigured
@@ -26,22 +32,27 @@ func (s *BookingService) ReconcilePaymentAttempts(ctx context.Context, input Rec
 		return 0, ErrPaymentProviderNotConfigured
 	}
 
+	// 補預設值，手動測試才會用到
 	now := input.Now
 	if now.IsZero() {
 		now = time.Now()
 	}
+	// 預設等 2 分鐘，避免 callback 還沒來就太早主動查
 	delay := input.Delay
 	if delay <= 0 {
 		delay = 2 * time.Minute
 	}
+	// 預設 30 秒，避免一直狂打 payment service。
 	retryAfter := input.RetryAfter
 	if retryAfter <= 0 {
 		retryAfter = 30 * time.Second
 	}
+	// 預設 100，避免一次撈太多打爆 DB / payment service。
 	limit := input.Limit
 	if limit <= 0 {
 		limit = 100
 	}
+	// 預設 5 次，超過就不再查，避免死循環。
 	maxAttempts := input.MaxAttempts
 	if maxAttempts <= 0 {
 		maxAttempts = 5

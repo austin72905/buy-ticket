@@ -54,6 +54,16 @@ type MockPaymentQueryResult struct {
 	FailureReason   string
 }
 
+type MockPaymentQueryResponse struct {
+	MerchantTradeNo string `json:"merchant_trade_no"`
+	ProviderTradeNo string `json:"provider_trade_no"`
+	Status          string `json:"status"`
+	Amount          int64  `json:"amount"`
+	PaidAt          string `json:"paid_at"`
+	Method          string `json:"method"`
+	FailureReason   string `json:"failure_reason"`
+}
+
 var ErrPaymentProviderCircuitOpen = errors.New("payment provider circuit breaker is open")
 var ErrPaymentProviderNotConfigured = errors.New("payment provider is not configured")
 
@@ -316,26 +326,28 @@ func mockPaymentProviderAvailable(provider MockPaymentProvider) bool {
 }
 
 func parseMockPaymentQueryResult(body []byte, fallbackMerchantTradeNo string) (*MockPaymentQueryResult, error) {
-	var raw map[string]interface{}
-	if err := json.Unmarshal(body, &raw); err != nil {
+	var response MockPaymentQueryResponse
+	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, err
 	}
-	if data, ok := raw["data"].(map[string]interface{}); ok {
-		raw = data
-	}
 
-	status := normalizeMockPaymentQueryStatus(firstString(raw, "status", "paymentStatus", "tradeStatus", "returnStatus", "rtnCode", "RtnCode"))
+	merchantTradeNo := strings.TrimSpace(response.MerchantTradeNo)
+	if merchantTradeNo == "" {
+		merchantTradeNo = fallbackMerchantTradeNo
+	}
+	method := strings.TrimSpace(response.Method)
+	if method == "" {
+		method = "ecpay"
+	}
 	result := &MockPaymentQueryResult{
-		MerchantTradeNo: firstNonEmpty(firstString(raw, "merchantTradeNo", "MerchantTradeNo", "recordNo"), fallbackMerchantTradeNo),
-		ProviderTradeNo: firstString(raw, "tradeNo", "TradeNo", "providerTradeNo", "paymentNo"),
-		Method:          firstNonEmpty(firstString(raw, "paymentType", "PaymentType", "method", "payType"), "ecpay"),
-		Status:          status,
-		FailureReason:   firstString(raw, "rtnMsg", "RtnMsg", "message", "failureReason"),
+		MerchantTradeNo: merchantTradeNo,
+		ProviderTradeNo: strings.TrimSpace(response.ProviderTradeNo),
+		Method:          method,
+		Status:          normalizeMockPaymentQueryStatus(response.Status),
+		Amount:          response.Amount,
+		FailureReason:   strings.TrimSpace(response.FailureReason),
 	}
-	if amount, ok := firstInt64(raw, "amount", "tradeAmt", "TradeAmt"); ok {
-		result.Amount = amount
-	}
-	if paidAt, ok := firstTime(raw, "paidAt", "paymentDate", "PaymentDate", "tradeDate", "TradeDate"); ok {
+	if paidAt, ok := parseMockPaymentPaidAt(response.PaidAt); ok {
 		result.PaidAt = paidAt
 	}
 	return result, nil
@@ -343,61 +355,19 @@ func parseMockPaymentQueryResult(body []byte, fallbackMerchantTradeNo string) (*
 
 func normalizeMockPaymentQueryStatus(value string) MockPaymentQueryStatus {
 	switch strings.ToUpper(strings.TrimSpace(value)) {
-	case "1", "SUCCESS", "SUCCEEDED", "PAID", "OK":
+	case "SUCCESS":
 		return MockPaymentQueryStatusSuccess
-	case "0", "PENDING", "PROCESSING":
+	case "PENDING":
 		return MockPaymentQueryStatusPending
-	case "2", "FAILED", "FAIL", "CANCELLED", "CANCELED":
+	case "FAILED":
 		return MockPaymentQueryStatusFailed
 	default:
 		return MockPaymentQueryStatusUnknown
 	}
 }
 
-func firstString(values map[string]interface{}, keys ...string) string {
-	for _, key := range keys {
-		value, ok := values[key]
-		if !ok || value == nil {
-			continue
-		}
-		switch typed := value.(type) {
-		case string:
-			if strings.TrimSpace(typed) != "" {
-				return strings.TrimSpace(typed)
-			}
-		case json.Number:
-			return typed.String()
-		case float64:
-			return strconv.FormatInt(int64(typed), 10)
-		case int64:
-			return strconv.FormatInt(typed, 10)
-		case int:
-			return strconv.Itoa(typed)
-		}
-	}
-	return ""
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
-}
-
-func firstInt64(values map[string]interface{}, keys ...string) (int64, bool) {
-	text := firstString(values, keys...)
-	if text == "" {
-		return 0, false
-	}
-	value, err := strconv.ParseInt(text, 10, 64)
-	return value, err == nil
-}
-
-func firstTime(values map[string]interface{}, keys ...string) (time.Time, bool) {
-	text := firstString(values, keys...)
+func parseMockPaymentPaidAt(value string) (time.Time, bool) {
+	text := strings.TrimSpace(value)
 	if text == "" {
 		return time.Time{}, false
 	}

@@ -61,26 +61,25 @@ payment-attempt-reconcile
 GET /api/payment/query?recordNo={merchant_trade_no}&merchantTradeNo={merchant_trade_no}
 ```
 
-支援回傳欄位別名：
+回傳格式固定為：
 
 ```json
 {
-  "merchantTradeNo": "MT-xxx",
-  "tradeNo": "TRADE-xxx",
+  "merchant_trade_no": "MT-xxx",
+  "provider_trade_no": "TRADE-xxx",
+  "status": "SUCCESS",
   "amount": 2800,
-  "paidAt": "2026-07-18T12:00:00+08:00",
-  "paymentType": "Credit",
-  "status": "SUCCESS"
+  "paid_at": "2026-07-18T12:00:00+08:00",
+  "method": "Credit",
+  "failure_reason": ""
 }
 ```
 
-`status` 判斷：
-
+`status` 固定使用：
 ```text
-SUCCESS / SUCCEEDED / PAID / 1 -> 補入帳
-FAILED / FAIL / CANCELLED / 2 -> attempt 標記 failed
-PENDING / PROCESSING / 0 -> 記錄錯誤並排下次查詢
-UNKNOWN -> 記錄錯誤並排下次查詢
+SUCCESS -> 補入帳
+FAILED -> attempt 標記 failed
+PENDING -> 記錄錯誤並排下次查詢
 ```
 
 ## 成功補償會做什麼
