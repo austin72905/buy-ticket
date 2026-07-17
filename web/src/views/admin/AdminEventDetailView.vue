@@ -98,7 +98,10 @@ async function submitSection() {
     }
 
     if (editingSection.value) {
-      await backoffice.editSection(eventId.value, editingSection.value.id, payload)
+      await backoffice.editSection(eventId.value, editingSection.value.id, {
+        ...payload,
+        expected_version: editingSection.value.version,
+      })
     } else {
       await backoffice.saveSection(eventId.value, payload)
     }

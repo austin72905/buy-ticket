@@ -66,6 +66,7 @@ async function submitOrganizer() {
   try {
     if (editingOrganizer.value) {
       await backoffice.editOrganizer(editingOrganizer.value.id, {
+        expected_version: editingOrganizer.value.version,
         name: form.value.name,
         status: form.value.status,
       })
