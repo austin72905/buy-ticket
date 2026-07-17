@@ -663,7 +663,7 @@ func (c *BookingController) StartPayment(ctx *gin.Context) {
 		writeError(ctx, http.StatusBadRequest, err)
 		return
 	}
-
+	// 開始一次支付流程
 	attempt, err := c.BookingService.StartMockPaymentAttempt(ctx.Request.Context(), service.CreatePaymentAttemptInput{
 		OrderID:        request.OrderID,
 		IdempotencyKey: idempotencyKey,

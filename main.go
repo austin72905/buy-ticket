@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -80,18 +80,20 @@ type envConfig struct {
 }
 
 type appRepositories struct {
-	user          repository.UserRepository
-	adminUser     repository.AdminUserRepository
-	organizer     repository.OrganizerRepository
-	adminAuditLog repository.AdminAuditLogRepository
-	event         repository.EventRepository
-	adminEvent    repository.AdminEventRepository
-	section       repository.SectionRepository
-	reservation   repository.ReservationRepository
-	order         repository.OrderRepository
-	adminOrder    repository.AdminOrderRepository
-	payment       repository.PaymentRepository
-	dbPool        *pgxpool.Pool
+	user           repository.UserRepository
+	adminUser      repository.AdminUserRepository
+	organizer      repository.OrganizerRepository
+	adminAuditLog  repository.AdminAuditLogRepository
+	event          repository.EventRepository
+	adminEvent     repository.AdminEventRepository
+	section        repository.SectionRepository
+	reservation    repository.ReservationRepository
+	order          repository.OrderRepository
+	adminOrder     repository.AdminOrderRepository
+	payment        repository.PaymentRepository
+	paymentAttempt repository.PaymentAttemptRepository
+	idempotency    repository.IdempotencyRepository
+	dbPool         *pgxpool.Pool
 }
 
 func (app *BuyTicketApp) Initialize() {
@@ -235,6 +237,8 @@ func buildBookingService(runtime *infraapp.Runtime, repos *appRepositories) *ser
 		repos.reservation,
 		repos.order,
 		repos.payment,
+		repos.paymentAttempt,
+		repos.idempotency,
 	)
 	bookingService.DB = repos.dbPool
 	bookingService.OrderPaymentTTL = orderPaymentTTL(runtime)
@@ -246,10 +250,6 @@ func buildBookingService(runtime *infraapp.Runtime, repos *appRepositories) *ser
 		HashKey:    runtime.Property.Property("payment.mock.hash_key"),
 		HashIV:     runtime.Property.Property("payment.mock.hash_iv"),
 	}
-
-	queries := db.New(repos.dbPool)
-	bookingService.PaymentAttemptRepo = repository.NewPostgresPaymentAttemptRepository(queries)
-	bookingService.IdempotencyRepo = repository.NewPostgresIdempotencyRepository(queries)
 
 	paymentBreakerConfig := paymentCircuitBreakerConfig(runtime)
 	if mockPaymentRouter := buildMockPaymentProviderRouter(runtime, paymentBreakerConfig); mockPaymentRouter != nil {
@@ -606,20 +606,31 @@ func buildRepositories(runtime *infraapp.Runtime) *appRepositories {
 	pg.LoadFromPrefix("postgres")                 // 從 property 裡讀 postgres.* 這組設定
 	pool := pg.Pool()
 	queries := db.New(pool)
+	userRepo := repository.NewPostgresUserRepository(queries)
+	adminUserRepo := repository.NewPostgresAdminUserRepository(queries)
+	organizerRepo := repository.NewPostgresOrganizerRepository(queries)
+	adminAuditLogRepo := repository.NewPostgresAdminAuditLogRepository(queries)
 	eventRepo := repository.NewPostgresEventRepository(queries)
+	sectionRepo := repository.NewPostgresSectionRepository(queries)
+	reservationRepo := repository.NewPostgresReservationRepository(queries)
 	orderRepo := repository.NewPostgresOrderRepository(queries)
+	paymentRepo := repository.NewPostgresPaymentRepository(queries)
+	paymentAttemptRepo := repository.NewPostgresPaymentAttemptRepository(queries)
+	idempotencyRepo := repository.NewPostgresIdempotencyRepository(queries)
 	return &appRepositories{
-		user:          repository.NewPostgresUserRepository(queries),
-		adminUser:     repository.NewPostgresAdminUserRepository(queries),
-		organizer:     repository.NewPostgresOrganizerRepository(queries),
-		adminAuditLog: repository.NewPostgresAdminAuditLogRepository(queries),
-		event:         eventRepo,
-		adminEvent:    eventRepo,
-		section:       repository.NewPostgresSectionRepository(queries),
-		reservation:   repository.NewPostgresReservationRepository(queries),
-		order:         orderRepo,
-		adminOrder:    orderRepo,
-		payment:       repository.NewPostgresPaymentRepository(queries),
-		dbPool:        pool,
+		user:           userRepo,
+		adminUser:      adminUserRepo,
+		organizer:      organizerRepo,
+		adminAuditLog:  adminAuditLogRepo,
+		event:          eventRepo,
+		adminEvent:     eventRepo,
+		section:        sectionRepo,
+		reservation:    reservationRepo,
+		order:          orderRepo,
+		adminOrder:     orderRepo,
+		payment:        paymentRepo,
+		paymentAttempt: paymentAttemptRepo,
+		idempotency:    idempotencyRepo,
+		dbPool:         pool,
 	}
 }

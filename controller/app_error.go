@@ -93,8 +93,6 @@ func errorCodeForError(fallbackStatus int, err error) string {
 		return "PAYMENT_PROVIDER_CIRCUIT_OPEN"
 	case errors.Is(err, service.ErrPaymentProviderNotConfigured), errors.Is(err, service.ErrMockPaymentClientNotConfigured):
 		return "PAYMENT_PROVIDER_NOT_CONFIGURED"
-	case errors.Is(err, service.ErrPaymentAttemptRepositoryNotConfigured):
-		return "PAYMENT_ATTEMPT_REPOSITORY_NOT_CONFIGURED"
 	case errors.Is(err, service.ErrInvalidPaymentCallback):
 		return "INVALID_PAYMENT_CALLBACK"
 	case errors.Is(err, service.ErrInvalidPaymentSignature):

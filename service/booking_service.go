@@ -151,14 +151,39 @@ func NewBookingService(
 	reservationRepo repository.ReservationRepository,
 	orderRepo repository.OrderRepository,
 	paymentRepo repository.PaymentRepository,
+	paymentAttemptRepo repository.PaymentAttemptRepository,
+	idempotencyRepo repository.IdempotencyRepository,
 ) *BookingService {
+	if eventRepo == nil {
+		panic("event repository is required")
+	}
+	if sectionRepo == nil {
+		panic("section repository is required")
+	}
+	if reservationRepo == nil {
+		panic("reservation repository is required")
+	}
+	if orderRepo == nil {
+		panic("order repository is required")
+	}
+	if paymentRepo == nil {
+		panic("payment repository is required")
+	}
+	if paymentAttemptRepo == nil {
+		panic("payment attempt repository is required")
+	}
+	if idempotencyRepo == nil {
+		panic("idempotency repository is required")
+	}
+
 	bookingService := &BookingService{
 		EventRepo:          eventRepo,
 		SectionRepo:        sectionRepo,
 		ReservationRepo:    reservationRepo,
 		OrderRepo:          orderRepo,
 		PaymentRepo:        paymentRepo,
-		PaymentAttemptRepo: repository.NewMemoryPaymentAttemptRepository(nil),
+		PaymentAttemptRepo: paymentAttemptRepo,
+		IdempotencyRepo:    idempotencyRepo,
 		QueueStore:         NewMemoryQueueStore(1),
 		OrderPaymentTTL:    10 * time.Minute,
 	}

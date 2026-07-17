@@ -13,7 +13,7 @@ import (
 func TestBookingServicePaymentIdempotency(t *testing.T) {
 	t.Run("new key creates processing record", func(t *testing.T) {
 		repo := newFakeIdempotencyRepository()
-		svc := &BookingService{IdempotencyRepo: repo}
+		svc := newTestBookingService(nil, nil, nil, nil, nil, nil, repo)
 
 		record, replay, err := svc.BeginPaymentIdempotency(context.Background(), BeginIdempotencyInput{
 			Key:         "pay-key-001",
@@ -35,7 +35,7 @@ func TestBookingServicePaymentIdempotency(t *testing.T) {
 
 	t.Run("completed key replays stored response", func(t *testing.T) {
 		repo := newFakeIdempotencyRepository()
-		svc := &BookingService{IdempotencyRepo: repo}
+		svc := newTestBookingService(nil, nil, nil, nil, nil, nil, repo)
 		now := time.Date(2026, 6, 14, 20, 0, 0, 0, time.UTC)
 
 		_, _, err := svc.BeginPaymentIdempotency(context.Background(), BeginIdempotencyInput{
@@ -72,7 +72,7 @@ func TestBookingServicePaymentIdempotency(t *testing.T) {
 
 	t.Run("same key with different request hash is conflict", func(t *testing.T) {
 		repo := newFakeIdempotencyRepository()
-		svc := &BookingService{IdempotencyRepo: repo}
+		svc := newTestBookingService(nil, nil, nil, nil, nil, nil, repo)
 
 		_, _, err := svc.BeginPaymentIdempotency(context.Background(), BeginIdempotencyInput{
 			Key:         "pay-key-003",

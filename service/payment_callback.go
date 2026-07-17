@@ -132,10 +132,6 @@ func (s *BookingService) HandleECPayCallback(ctx context.Context, input HandleEC
 }
 
 func (s *BookingService) findPaymentAttemptForCallback(ctx context.Context, merchantTradeNo string) (*domain.PaymentAttempt, error) {
-	if s.PaymentAttemptRepo == nil {
-		return nil, nil
-	}
-
 	attempt, err := s.PaymentAttemptRepo.FindByMerchantTradeNo(ctx, merchantTradeNo)
 	if err == nil {
 		return attempt, nil

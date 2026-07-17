@@ -25,7 +25,7 @@ type BeginIdempotencyInput struct {
 }
 
 func (s *BookingService) BeginPaymentIdempotency(ctx context.Context, input BeginIdempotencyInput) (*domain.IdempotencyKey, bool, error) {
-	if s.IdempotencyRepo == nil || input.Key == "" {
+	if input.Key == "" {
 		return nil, false, nil
 	}
 
@@ -77,7 +77,7 @@ func (s *BookingService) BeginPaymentIdempotency(ctx context.Context, input Begi
 }
 
 func (s *BookingService) CompletePaymentIdempotency(ctx context.Context, key, endpoint string, responseStatus int, responseBody []byte, now time.Time) error {
-	if s.IdempotencyRepo == nil || key == "" {
+	if key == "" {
 		return nil
 	}
 	if now.IsZero() {
