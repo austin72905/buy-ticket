@@ -5,7 +5,7 @@ sql:
     schema:
       - "migrations"
     queries:
-      - "db/query.sql"
+      - "db/queries"
     gen:
       go:
         package: "db"
