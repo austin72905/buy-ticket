@@ -390,6 +390,15 @@ func buildMockPaymentProviderRouter(runtime *infraapp.Runtime, breakerConfig ser
 func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.BookingService) {
 	scheduler := infrascheduler.Register(runtime, "")
 	scheduler.SetPanicOnAnyAddError(true)
+	orderExpireLimit := orderExpireBatchSize(runtime)
+	paymentReconcileJobEnabled := paymentReconcileEnabled(runtime)
+	paymentReconcileJobDelay := paymentReconcileDelay(runtime)
+	paymentReconcileJobRetryAfter := paymentReconcileRetryAfter(runtime)
+	paymentReconcileJobLimit := paymentReconcileBatchSize(runtime)
+	paymentReconcileJobMaxAttempts := paymentReconcileMaxAttempts(runtime)
+	outboxPublishJobEnabled := outboxPublishEnabled(runtime)
+	outboxPublishJobLimit := outboxPublishBatchSize(runtime)
+	outboxPublishJobRetryAfter := outboxPublishRetryAfter(runtime)
 	// 每秒  把排隊中的使用者從 waiting 推進成 ready，並發給他一個 purchaseToken
 	_, err := scheduler.AddFuncJobWithName("*/1 * * * * *", "queue-promote-ready", func(ctx context.Context) {
 		now := time.Now()
@@ -404,7 +413,7 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	_, err = scheduler.AddFuncJobWithName("*/5 * * * * *", "order-expire-sweep", func(ctx context.Context) {
 		count, err := bookingService.SweepExpiredOrders(ctx, service.SweepExpiredOrdersInput{
 			Now:   time.Now(),
-			Limit: orderExpireBatchSize(runtime),
+			Limit: orderExpireLimit,
 		})
 		if err != nil {
 			observability.Error(ctx, "scheduler job failed", err, "job_name", "order-expire-sweep")
@@ -474,14 +483,14 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 		fatalLog("register scheduler job failed", "job_name", "stock-reconcile", "error", err)
 	}
 
-	if paymentReconcileEnabled(runtime) {
+	if paymentReconcileJobEnabled {
 		_, err = scheduler.AddFuncJobWithName("*/30 * * * * *", "payment-attempt-reconcile", func(ctx context.Context) {
 			count, err := bookingService.ReconcilePaymentAttempts(ctx, service.ReconcilePaymentAttemptsInput{
 				Now:         time.Now(),
-				Delay:       paymentReconcileDelay(runtime),
-				RetryAfter:  paymentReconcileRetryAfter(runtime),
-				Limit:       paymentReconcileBatchSize(runtime),
-				MaxAttempts: paymentReconcileMaxAttempts(runtime),
+				Delay:       paymentReconcileJobDelay,
+				RetryAfter:  paymentReconcileJobRetryAfter,
+				Limit:       paymentReconcileJobLimit,
+				MaxAttempts: paymentReconcileJobMaxAttempts,
 			})
 			if err != nil {
 				observability.Error(ctx, "scheduler job failed", err, "job_name", "payment-attempt-reconcile")
@@ -496,12 +505,12 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 		}
 	}
 
-	if outboxPublishEnabled(runtime) {
+	if outboxPublishJobEnabled {
 		_, err = scheduler.AddFuncJobWithName("*/10 * * * * *", "outbox-publish", func(ctx context.Context) {
 			count, err := bookingService.PublishOutboxEvents(ctx, service.PublishOutboxEventsInput{
 				Now:        time.Now(),
-				Limit:      outboxPublishBatchSize(runtime),
-				RetryAfter: outboxPublishRetryAfter(runtime),
+				Limit:      outboxPublishJobLimit,
+				RetryAfter: outboxPublishJobRetryAfter,
 			})
 			if err != nil {
 				observability.Error(ctx, "scheduler job failed", err, "job_name", "outbox-publish")
