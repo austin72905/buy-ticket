@@ -203,14 +203,16 @@ func NewCircuitBreakerMockPaymentClient(client MockPaymentClient, config Payment
 	if config.HalfOpenMaxRequests == 0 {
 		config.HalfOpenMaxRequests = 1
 	}
-
+	// 把原本的 payment client 包一層 circuit breaker
 	breaker := gobreaker.NewCircuitBreaker[[]byte](gobreaker.Settings{
 		Name:        "mock_payment",
 		MaxRequests: config.HalfOpenMaxRequests,
 		Timeout:     config.OpenTimeout,
+		// 連續失敗次數達到門檻就打開 breaker。
 		ReadyToTrip: func(counts gobreaker.Counts) bool {
 			return counts.ConsecutiveFailures >= config.ConsecutiveFailures
 		},
+		// HTTP 4xx 不算 provider 故障。因為 4xx 通常是 request 資料錯，不代表支付服務掛了。
 		IsExcluded: func(err error) bool {
 			var statusErr *MockPaymentHTTPStatusError
 			return errors.As(err, &statusErr) && statusErr.StatusCode >= 400 && statusErr.StatusCode < 500

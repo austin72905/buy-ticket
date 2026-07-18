@@ -512,6 +512,80 @@ func TestBookingServicePayOrder(t *testing.T) {
 		}
 	})
 
+	t.Run("付款成功必須設定 outbox repository", func(t *testing.T) {
+		now := time.Now()
+		orderRepo := &fakeOrderRepository{
+			orders: map[int64]*domain.Order{
+				20: {
+					ID:            20,
+					OrderNo:       "ORD-001",
+					ReservationID: 10,
+					UserID:        3,
+					EventID:       1,
+					SectionID:     2,
+					Quantity:      2,
+					UnitPrice:     1800,
+					TotalAmount:   3600,
+					Status:        domain.OrderStatusPendingPayment,
+					ExpiresAt:     now.Add(10 * time.Minute),
+				},
+			},
+			nextID: 20,
+		}
+		reservationRepo := &fakeReservationRepository{
+			reservations: map[int64]*domain.Reservation{
+				10: {
+					ID:          10,
+					EventID:     1,
+					SectionID:   2,
+					UserID:      3,
+					Quantity:    2,
+					UnitPrice:   1800,
+					TotalAmount: 3600,
+					Status:      domain.ReservationStatusHolding,
+					ExpiresAt:   now.Add(5 * time.Minute),
+				},
+			},
+			nextID: 10,
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:               2,
+				EventID:          1,
+				ReservedQuantity: 2,
+				SoldQuantity:     3,
+				TotalQuantity:    10,
+				Status:           domain.SectionStatusActive,
+			},
+		}
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     sectionRepo,
+			ReservationRepo: reservationRepo,
+			OrderRepo:       orderRepo,
+			PaymentRepo:     &fakePaymentRepository{},
+		})
+		svc.OutboxRepo = nil
+
+		_, err := svc.PayOrder(context.Background(), PayOrderInput{
+			OrderID:   20,
+			PaymentNo: "PAY-001",
+			Method:    "credit_card",
+			Amount:    3600,
+			PaidAt:    now,
+		})
+
+		if !errors.Is(err, ErrOutboxRepositoryNotConfigured) {
+			t.Fatalf("預期錯誤為 ErrOutboxRepositoryNotConfigured，實際為 %v", err)
+		}
+		if orderRepo.orders[20].Status != domain.OrderStatusPendingPayment {
+			t.Fatalf("預期 order 狀態不變，實際為 %v", orderRepo.orders[20].Status)
+		}
+		if reservationRepo.reservations[10].Status != domain.ReservationStatusHolding {
+			t.Fatalf("預期 reservation 狀態不變，實際為 %v", reservationRepo.reservations[10].Status)
+		}
+	})
+
 	t.Run("付款金額不一致時應回傳錯誤", func(t *testing.T) {
 		now := time.Now()
 		orderRepo := &fakeOrderRepository{

@@ -14,22 +14,23 @@ import (
 )
 
 var (
-	ErrEventNotOnSale          = errors.New("event is not on sale")
-	ErrSectionNotReservable    = errors.New("section cannot reserve requested quantity")
-	ErrReservationNotActive    = errors.New("reservation is not active")
-	ErrActiveReservationExists = errors.New("active reservation already exists")
-	ErrReservationAlreadyUsed  = errors.New("reservation already confirmed or closed")
-	ErrReservationCannotClose  = errors.New("reservation cannot be expired or cancelled")
-	ErrOrderCannotBePaid       = errors.New("order cannot be paid")
-	ErrOrderCannotExpire       = errors.New("order cannot be expired")
-	ErrPaymentAmountMismatch   = errors.New("payment amount mismatch")
-	ErrQueueTokenNotFound      = errors.New("queue token not found")
-	ErrUserAlreadyJoinedQueue  = errors.New("user already joined queue")
-	ErrPurchaseTokenRequired   = errors.New("purchase token is required")
-	ErrPurchaseTokenNotFound   = errors.New("purchase token not found")
-	ErrPurchaseTokenExpired    = errors.New("purchase token expired")
-	ErrPurchaseTokenUsed       = errors.New("purchase token already used")
-	ErrPurchaseTokenMismatch   = errors.New("purchase token does not match user or event")
+	ErrEventNotOnSale                = errors.New("event is not on sale")
+	ErrSectionNotReservable          = errors.New("section cannot reserve requested quantity")
+	ErrReservationNotActive          = errors.New("reservation is not active")
+	ErrActiveReservationExists       = errors.New("active reservation already exists")
+	ErrReservationAlreadyUsed        = errors.New("reservation already confirmed or closed")
+	ErrReservationCannotClose        = errors.New("reservation cannot be expired or cancelled")
+	ErrOrderCannotBePaid             = errors.New("order cannot be paid")
+	ErrOrderCannotExpire             = errors.New("order cannot be expired")
+	ErrPaymentAmountMismatch         = errors.New("payment amount mismatch")
+	ErrQueueTokenNotFound            = errors.New("queue token not found")
+	ErrUserAlreadyJoinedQueue        = errors.New("user already joined queue")
+	ErrPurchaseTokenRequired         = errors.New("purchase token is required")
+	ErrPurchaseTokenNotFound         = errors.New("purchase token not found")
+	ErrPurchaseTokenExpired          = errors.New("purchase token expired")
+	ErrPurchaseTokenUsed             = errors.New("purchase token already used")
+	ErrPurchaseTokenMismatch         = errors.New("purchase token does not match user or event")
+	ErrOutboxRepositoryNotConfigured = errors.New("outbox repository is not configured")
 )
 
 type BookingService struct {
@@ -350,6 +351,10 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 	var payment *domain.Payment
 
 	err := s.withTx(ctx, func(repos bookingRepos) error {
+		if repos.outbox == nil {
+			return ErrOutboxRepositoryNotConfigured
+		}
+
 		order, err := repos.order.FindByID(ctx, input.OrderID)
 		if err != nil {
 			return err
@@ -429,15 +434,11 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 			return err
 		}
 
-		if repos.outbox != nil {
-			event, err := newPaymentSucceededOutboxEvent(order, reservation, payment, paidAt)
-			if err != nil {
-				return err
-			}
-			return repos.outbox.Create(ctx, event)
+		event, err := newPaymentSucceededOutboxEvent(order, reservation, payment, paidAt)
+		if err != nil {
+			return err
 		}
-
-		return nil
+		return repos.outbox.Create(ctx, event)
 	})
 	if err != nil {
 		return nil, err
