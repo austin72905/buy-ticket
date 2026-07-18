@@ -84,9 +84,9 @@ redis:
 
 payment:
   mock:
-    merchantID: TEST_MERCHANT
-    hashKey: TEST_SECRET
-    hashIV: TEST_HASH_IV
+    merchantID: "3002607"
+    hashKey: pwFHCqoQZGmho4w6
+    hashIV: EkRm7iFT261dpevs
     baseURL: "http://host.k3d.internal:8081"
     backupBaseURL: ""
     callbackURL: "http://buy-ticket.local/payments/provider/ecpay/callback"
