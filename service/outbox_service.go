@@ -6,10 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 
 	"buy-ticket/domain"
+	"buy-ticket/observability"
 )
 
 const OutboxEventPaymentSucceeded = "PAYMENT_SUCCEEDED"
@@ -121,10 +121,17 @@ func (s *BookingService) PublishOutboxEvents(ctx context.Context, input PublishO
 
 // 之後可以改成真的用email 通知
 func publishOutboxEvent(ctx context.Context, event domain.OutboxEvent) error {
-	_ = ctx
 	switch event.EventType {
 	case OutboxEventPaymentSucceeded:
-		log.Printf("outbox notification payment succeeded event_id=%s payload=%s", event.EventID, string(event.Payload))
+		observability.Info(
+			ctx,
+			"outbox notification payment succeeded",
+			"event_id", event.EventID,
+			"event_type", event.EventType,
+			"aggregate_type", event.AggregateType,
+			"aggregate_id", event.AggregateID,
+			"payload", string(event.Payload),
+		)
 		return nil
 	default:
 		return fmt.Errorf("unsupported outbox event type: %s", event.EventType)

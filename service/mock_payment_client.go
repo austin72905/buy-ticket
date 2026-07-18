@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -228,7 +228,12 @@ func NewCircuitBreakerMockPaymentClient(client MockPaymentClient, config Payment
 			return errors.As(err, &statusErr) && statusErr.StatusCode >= 400 && statusErr.StatusCode < 500
 		},
 		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
-			log.Printf("payment circuit breaker %s changed from %s to %s", name, from, to)
+			slog.Info(
+				"payment circuit breaker state changed",
+				"name", name,
+				"from", from.String(),
+				"to", to.String(),
+			)
 		},
 	})
 

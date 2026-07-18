@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"embed"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strconv"
@@ -13,6 +13,7 @@ import (
 	"buy-ticket/controller"
 	db "buy-ticket/db/sqlc"
 	docs "buy-ticket/docs"
+	"buy-ticket/observability"
 	"buy-ticket/repository"
 	"buy-ticket/service"
 
@@ -45,7 +46,17 @@ var prodConfigFiles embed.FS
 // @description 搶票系統 API
 // @BasePath /
 func main() {
+	configureLogging()
 	infraapp.Start(&BuyTicketApp{})
+}
+
+func configureLogging() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+}
+
+func fatalLog(message string, attrs ...any) {
+	slog.Error(message, attrs...)
+	os.Exit(1)
 }
 
 func (app *BuyTicketApp) Start() {
@@ -115,7 +126,7 @@ func (app *BuyTicketApp) Initialize() {
 		"config/default/app.properties",
 		defaultConfigFiles,
 	); err != nil {
-		log.Fatalf("load default app.properties failed: %v", err)
+		fatalLog("load default app.properties failed", "error", err)
 	}
 
 	envConfigs := map[string]envConfig{
@@ -135,7 +146,7 @@ func (app *BuyTicketApp) Initialize() {
 
 	config, ok := envConfigs[env]
 	if !ok {
-		log.Fatalf("unsupported APP_ENV %q", env)
+		fatalLog("unsupported APP_ENV", "env", env)
 	}
 
 	if err := app.Runtime.Property.LoadPropertiesByFS(
@@ -143,7 +154,7 @@ func (app *BuyTicketApp) Initialize() {
 		config.fileName,
 		defaultConfigFiles,
 	); err != nil {
-		log.Fatalf("load %s app.properties failed: %v", env, err)
+		fatalLog("load app.properties failed", "env", env, "file", config.fileName, "error", err)
 	}
 	applyEnvOverrides(app.Runtime)
 
@@ -157,22 +168,22 @@ func (app *BuyTicketApp) Initialize() {
 	if role == appRoleAll || role == appRoleScheduler {
 		// Run once on startup so stale event statuses are corrected before the periodic scheduler.
 		if count, err := bookingService.AdvanceEventStatuses(context.Background(), time.Now()); err != nil {
-			log.Fatalf("advance event statuses failed: %v", err)
+			fatalLog("advance event statuses failed", "error", err)
 		} else if count > 0 {
-			log.Printf("event status scheduler advanced %d events", count)
+			slog.Info("event status advanced on startup", "count", count)
 		}
 		if err := bookingService.RebuildStock(context.Background()); err != nil {
-			log.Fatalf("rebuild stock failed: %v", err)
+			fatalLog("rebuild stock failed", "error", err)
 		}
 		registerBackgroundJobs(app.Runtime, bookingService)
-		log.Printf("scheduler configured")
+		slog.Info("scheduler configured")
 	}
 
 	if role == appRoleAll || role == appRoleAPI {
 		registerHTTPServer(app.Runtime, repos.user, repos.adminUser, repos.organizer, repos.adminAuditLog, repos.adminOrder, repos.adminEvent, bookingService, sessionStore, sessionTTL)
 	}
 
-	log.Printf("app role configured: %s", role)
+	slog.Info("app role configured", "role", role)
 }
 
 func parseAppRole() appRole {
@@ -186,7 +197,7 @@ func parseAppRole() appRole {
 	case appRoleAll, appRoleAPI, appRoleScheduler:
 		return role
 	default:
-		log.Fatalf("unsupported APP_ROLE %q", value)
+		fatalLog("unsupported APP_ROLE", "role", value)
 		return ""
 	}
 }
@@ -230,7 +241,7 @@ func registerHTTPServer(
 
 	addr := runtime.Property.RequiredProperty("server.addr")
 	runtime.Web.Listen(addr)
-	log.Printf("server configured at %s", addr)
+	slog.Info("server configured", "addr", addr)
 }
 
 func buildBookingService(runtime *infraapp.Runtime, repos *appRepositories) *service.BookingService {
@@ -383,11 +394,11 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 	_, err := scheduler.AddFuncJobWithName("*/1 * * * * *", "queue-promote-ready", func(ctx context.Context) {
 		now := time.Now()
 		if err := bookingService.QueueStore.PromoteReady(ctx, now); err != nil {
-			log.Printf("queue scheduler promote failed: %v", err)
+			observability.Error(ctx, "scheduler job failed", err, "job_name", "queue-promote-ready")
 		}
 	})
 	if err != nil {
-		log.Fatalf("register queue scheduler failed: %v", err)
+		fatalLog("register scheduler job failed", "job_name", "queue-promote-ready", "error", err)
 	}
 	// 每 5 秒 找出已超過付款期限、但還是 pending payment 的訂單，將它們過期
 	_, err = scheduler.AddFuncJobWithName("*/5 * * * * *", "order-expire-sweep", func(ctx context.Context) {
@@ -396,71 +407,71 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 			Limit: orderExpireBatchSize(runtime),
 		})
 		if err != nil {
-			log.Printf("order expire scheduler sweep failed: %v", err)
+			observability.Error(ctx, "scheduler job failed", err, "job_name", "order-expire-sweep")
 			return
 		}
 		if count > 0 {
-			log.Printf("order expire scheduler expired %d orders", count)
+			observability.Info(ctx, "scheduler job completed", "job_name", "order-expire-sweep", "expired_count", count)
 		}
 	})
 	if err != nil {
-		log.Fatalf("register order expire scheduler failed: %v", err)
+		fatalLog("register scheduler job failed", "job_name", "order-expire-sweep", "error", err)
 	}
 	// 每 5 秒  活動到了開賣時間、結束時間，就更新 event status
 	_, err = scheduler.AddFuncJobWithName("*/5 * * * * *", "event-status-advance", func(ctx context.Context) {
 		count, err := bookingService.AdvanceEventStatuses(ctx, time.Now())
 		if err != nil {
-			log.Printf("event status scheduler advance failed: %v", err)
+			observability.Error(ctx, "scheduler job failed", err, "job_name", "event-status-advance")
 			return
 		}
 		if count > 0 {
-			log.Printf("event status scheduler advanced %d events", count)
+			observability.Info(ctx, "scheduler job completed", "job_name", "event-status-advance", "advanced_count", count)
 		}
 	})
 	if err != nil {
-		log.Fatalf("register event status scheduler failed: %v", err)
+		fatalLog("register scheduler job failed", "job_name", "event-status-advance", "error", err)
 	}
 	// 每 1 秒  清掉已經過期的 purchaseToken
 	_, err = scheduler.AddFuncJobWithName("*/1 * * * * *", "purchase-token-cleanup", func(ctx context.Context) {
 		count, err := bookingService.CleanupExpiredPurchaseTokens(ctx, time.Now())
 		if err != nil {
-			log.Printf("purchase token cleanup failed: %v", err)
+			observability.Error(ctx, "scheduler job failed", err, "job_name", "purchase-token-cleanup")
 			return
 		}
 		if count > 0 {
-			log.Printf("purchase token cleanup expired %d tokens", count)
+			observability.Info(ctx, "scheduler job completed", "job_name", "purchase-token-cleanup", "expired_count", count)
 		}
 	})
 	if err != nil {
-		log.Fatalf("register purchase token cleanup failed: %v", err)
+		fatalLog("register scheduler job failed", "job_name", "purchase-token-cleanup", "error", err)
 	}
 	// 每 10 秒  清掉整個 queue token 已過期的排隊紀錄
 	_, err = scheduler.AddFuncJobWithName("*/10 * * * * *", "queue-timeout-cleanup", func(ctx context.Context) {
 		count, err := bookingService.CleanupExpiredQueues(ctx, time.Now())
 		if err != nil {
-			log.Printf("queue timeout cleanup failed: %v", err)
+			observability.Error(ctx, "scheduler job failed", err, "job_name", "queue-timeout-cleanup")
 			return
 		}
 		if count > 0 {
-			log.Printf("queue timeout cleanup expired %d queues", count)
+			observability.Info(ctx, "scheduler job completed", "job_name", "queue-timeout-cleanup", "expired_count", count)
 		}
 	})
 	if err != nil {
-		log.Fatalf("register queue timeout cleanup failed: %v", err)
+		fatalLog("register scheduler job failed", "job_name", "queue-timeout-cleanup", "error", err)
 	}
 	// 每分鐘第 0 秒跑一次  校正 Redis stock 和資料庫 section inventory 的差異。
 	_, err = scheduler.AddFuncJobWithName("0 * * * * *", "stock-reconcile", func(ctx context.Context) {
 		result, err := bookingService.ReconcileStock(ctx)
 		if err != nil {
-			log.Printf("stock reconcile failed: %v", err)
+			observability.Error(ctx, "scheduler job failed", err, "job_name", "stock-reconcile")
 			return
 		}
 		if result.Fixed > 0 {
-			log.Printf("stock reconcile fixed %d/%d sections", result.Fixed, result.Checked)
+			observability.Info(ctx, "scheduler job completed", "job_name", "stock-reconcile", "fixed_count", result.Fixed, "checked_count", result.Checked)
 		}
 	})
 	if err != nil {
-		log.Fatalf("register stock reconcile failed: %v", err)
+		fatalLog("register scheduler job failed", "job_name", "stock-reconcile", "error", err)
 	}
 
 	if paymentReconcileEnabled(runtime) {
@@ -473,15 +484,15 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 				MaxAttempts: paymentReconcileMaxAttempts(runtime),
 			})
 			if err != nil {
-				log.Printf("payment attempt reconcile failed: %v", err)
+				observability.Error(ctx, "scheduler job failed", err, "job_name", "payment-attempt-reconcile")
 				return
 			}
 			if count > 0 {
-				log.Printf("payment attempt reconcile completed %d attempts", count)
+				observability.Info(ctx, "scheduler job completed", "job_name", "payment-attempt-reconcile", "completed_count", count)
 			}
 		})
 		if err != nil {
-			log.Fatalf("register payment attempt reconcile failed: %v", err)
+			fatalLog("register scheduler job failed", "job_name", "payment-attempt-reconcile", "error", err)
 		}
 	}
 
@@ -493,15 +504,15 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.B
 				RetryAfter: outboxPublishRetryAfter(runtime),
 			})
 			if err != nil {
-				log.Printf("outbox publish failed: %v", err)
+				observability.Error(ctx, "scheduler job failed", err, "job_name", "outbox-publish")
 				return
 			}
 			if count > 0 {
-				log.Printf("outbox published %d events", count)
+				observability.Info(ctx, "scheduler job completed", "job_name", "outbox-publish", "published_count", count)
 			}
 		})
 		if err != nil {
-			log.Fatalf("register outbox publish failed: %v", err)
+			fatalLog("register scheduler job failed", "job_name", "outbox-publish", "error", err)
 		}
 	}
 }
