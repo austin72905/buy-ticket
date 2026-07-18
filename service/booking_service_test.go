@@ -10,6 +10,72 @@ import (
 	"buy-ticket/repository"
 )
 
+type testBookingDeps struct {
+	EventRepo          repository.EventRepository
+	SectionRepo        repository.SectionRepository
+	ReservationRepo    repository.ReservationRepository
+	OrderRepo          repository.OrderRepository
+	PaymentRepo        repository.PaymentRepository
+	PaymentAttemptRepo repository.PaymentAttemptRepository
+	OutboxRepo         repository.OutboxEventRepository
+	IdempotencyRepo    repository.IdempotencyRepository
+}
+
+type fakeMockPaymentQueryClient struct {
+	result  *MockPaymentQueryResult
+	payload []byte
+	err     error
+}
+
+func (f *fakeMockPaymentQueryClient) Process(ctx context.Context, input MockPaymentProcessInput) ([]byte, error) {
+	return []byte(`{"accepted":true}`), nil
+}
+
+func (f *fakeMockPaymentQueryClient) Query(ctx context.Context, input MockPaymentQueryInput) (*MockPaymentQueryResult, []byte, error) {
+	if f.err != nil {
+		return nil, f.payload, f.err
+	}
+	return f.result, f.payload, nil
+}
+
+func newTestBookingService(deps testBookingDeps) *BookingService {
+	if deps.EventRepo == nil {
+		deps.EventRepo = &fakeEventRepository{}
+	}
+	if deps.SectionRepo == nil {
+		deps.SectionRepo = &fakeSectionRepository{}
+	}
+	if deps.ReservationRepo == nil {
+		deps.ReservationRepo = &fakeReservationRepository{}
+	}
+	if deps.OrderRepo == nil {
+		deps.OrderRepo = &fakeOrderRepository{}
+	}
+	if deps.PaymentRepo == nil {
+		deps.PaymentRepo = &fakePaymentRepository{}
+	}
+	if deps.PaymentAttemptRepo == nil {
+		deps.PaymentAttemptRepo = &fakePaymentAttemptRepository{}
+	}
+	if deps.OutboxRepo == nil {
+		deps.OutboxRepo = repository.NewMemoryOutboxEventRepository()
+	}
+	if deps.IdempotencyRepo == nil {
+		deps.IdempotencyRepo = newFakeIdempotencyRepository()
+	}
+
+	return NewBookingService(
+		deps.EventRepo,
+		deps.SectionRepo,
+		deps.ReservationRepo,
+		deps.OrderRepo,
+		deps.PaymentRepo,
+		deps.PaymentAttemptRepo,
+		deps.OutboxRepo,
+		deps.IdempotencyRepo,
+	)
+}
+
 func TestBookingServiceReserveTicket(t *testing.T) {
 	t.Run("驗證 purchase token 後成功建立 reservation", func(t *testing.T) {
 		now := time.Now()
@@ -34,7 +100,13 @@ func TestBookingServiceReserveTicket(t *testing.T) {
 			},
 		}
 		reservationRepo := &fakeReservationRepository{}
-		svc := NewBookingService(eventRepo, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       eventRepo,
+			SectionRepo:     sectionRepo,
+			ReservationRepo: reservationRepo,
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 		svc.SaveQueueStatus(QueueStatusSnapshot{
 			QueueToken:             "qt_reserve_ok",
 			QueueSequence:          1,
@@ -94,7 +166,13 @@ func TestBookingServiceReserveTicket(t *testing.T) {
 				Status:        domain.SectionStatusActive,
 			},
 		}
-		svc := NewBookingService(eventRepo, sectionRepo, &fakeReservationRepository{}, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       eventRepo,
+			SectionRepo:     sectionRepo,
+			ReservationRepo: &fakeReservationRepository{},
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 		svc.SaveQueueStatus(QueueStatusSnapshot{
 			QueueToken:             "qt_event_not_on_sale",
 			QueueSequence:          1,
@@ -147,7 +225,13 @@ func TestBookingServiceReserveTicket(t *testing.T) {
 				Status:        domain.SectionStatusActive,
 			},
 		}
-		svc := NewBookingService(eventRepo, sectionRepo, &fakeReservationRepository{}, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       eventRepo,
+			SectionRepo:     sectionRepo,
+			ReservationRepo: &fakeReservationRepository{},
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 		svc.SaveQueueStatus(QueueStatusSnapshot{
 			QueueToken:             "qt_used_once",
 			QueueSequence:          1,
@@ -210,7 +294,13 @@ func TestBookingServiceCreateOrder(t *testing.T) {
 			nextID: 10,
 		}
 		orderRepo := &fakeOrderRepository{}
-		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, reservationRepo, orderRepo, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     &fakeSectionRepository{},
+			ReservationRepo: reservationRepo,
+			OrderRepo:       orderRepo,
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 		queueStatus, err := svc.QueueStore.Join(context.Background(), JoinQueueInput{
 			EventID:   1,
 			UserID:    3,
@@ -257,8 +347,8 @@ func TestBookingServiceCreateOrder(t *testing.T) {
 func TestBookingServiceJoinQueue(t *testing.T) {
 	t.Run("活動開賣時應建立 queue token 並回 ready", func(t *testing.T) {
 		now := time.Now()
-		svc := NewBookingService(
-			&fakeEventRepository{
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo: &fakeEventRepository{
 				event: &domain.Event{
 					ID:          1,
 					Status:      domain.EventStatusOnSale,
@@ -266,11 +356,11 @@ func TestBookingServiceJoinQueue(t *testing.T) {
 					SaleEndAt:   now.Add(time.Hour),
 				},
 			},
-			&fakeSectionRepository{},
-			&fakeReservationRepository{},
-			&fakeOrderRepository{},
-			&fakePaymentRepository{},
-		)
+			SectionRepo:     &fakeSectionRepository{},
+			ReservationRepo: &fakeReservationRepository{},
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 
 		snapshot, err := svc.JoinQueue(context.Background(), JoinQueueInput{
 			EventID:   1,
@@ -295,8 +385,8 @@ func TestBookingServiceJoinQueue(t *testing.T) {
 
 	t.Run("同一使用者重複加入有效 queue 時應回錯誤", func(t *testing.T) {
 		now := time.Now()
-		svc := NewBookingService(
-			&fakeEventRepository{
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo: &fakeEventRepository{
 				event: &domain.Event{
 					ID:          1,
 					Status:      domain.EventStatusOnSale,
@@ -304,11 +394,11 @@ func TestBookingServiceJoinQueue(t *testing.T) {
 					SaleEndAt:   now.Add(time.Hour),
 				},
 			},
-			&fakeSectionRepository{},
-			&fakeReservationRepository{},
-			&fakeOrderRepository{},
-			&fakePaymentRepository{},
-		)
+			SectionRepo:     &fakeSectionRepository{},
+			ReservationRepo: &fakeReservationRepository{},
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 
 		_, err := svc.JoinQueue(context.Background(), JoinQueueInput{
 			EventID:   1,
@@ -382,7 +472,15 @@ func TestBookingServicePayOrder(t *testing.T) {
 			},
 		}
 		paymentRepo := &fakePaymentRepository{}
-		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, orderRepo, paymentRepo)
+		outboxRepo := repository.NewMemoryOutboxEventRepository()
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     sectionRepo,
+			ReservationRepo: reservationRepo,
+			OrderRepo:       orderRepo,
+			PaymentRepo:     paymentRepo,
+		})
+		svc.OutboxRepo = outboxRepo
 
 		payment, err := svc.PayOrder(context.Background(), PayOrderInput{
 			OrderID:   20,
@@ -407,6 +505,84 @@ func TestBookingServicePayOrder(t *testing.T) {
 		if sectionRepo.section.ReservedQuantity != 0 || sectionRepo.section.SoldQuantity != 5 {
 			t.Fatalf("預期 reserved=0 sold=5，實際為 reserved=%d sold=%d", sectionRepo.section.ReservedQuantity, sectionRepo.section.SoldQuantity)
 		}
+		events, err := outboxRepo.ListPending(context.Background(), now, 10)
+		if err != nil {
+			t.Fatalf("expected outbox list pending success: %v", err)
+		}
+		if len(events) != 1 {
+			t.Fatalf("expected 1 outbox event, got %d", len(events))
+		}
+		if events[0].EventType != OutboxEventPaymentSucceeded {
+			t.Fatalf("expected payment succeeded outbox event, got %s", events[0].EventType)
+		}
+	})
+
+	t.Run("付款成功必須設定 outbox repository", func(t *testing.T) {
+		now := time.Now()
+		orderRepo := &fakeOrderRepository{
+			orders: map[int64]*domain.Order{
+				20: {
+					ID:            20,
+					OrderNo:       "ORD-001",
+					ReservationID: 10,
+					UserID:        3,
+					EventID:       1,
+					SectionID:     2,
+					Quantity:      2,
+					UnitPrice:     1800,
+					TotalAmount:   3600,
+					Status:        domain.OrderStatusPendingPayment,
+					ExpiresAt:     now.Add(10 * time.Minute),
+				},
+			},
+			nextID: 20,
+		}
+		reservationRepo := &fakeReservationRepository{
+			reservations: map[int64]*domain.Reservation{
+				10: {
+					ID:          10,
+					EventID:     1,
+					SectionID:   2,
+					UserID:      3,
+					Quantity:    2,
+					UnitPrice:   1800,
+					TotalAmount: 3600,
+					Status:      domain.ReservationStatusHolding,
+					ExpiresAt:   now.Add(5 * time.Minute),
+				},
+			},
+			nextID: 10,
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:               2,
+				EventID:          1,
+				ReservedQuantity: 2,
+				SoldQuantity:     3,
+				TotalQuantity:    10,
+				Status:           domain.SectionStatusActive,
+			},
+		}
+		defer func() {
+			recovered := recover()
+			if recovered == nil {
+				t.Fatal("預期建立 service 時因 outbox repository 缺失而 panic")
+			}
+			if recovered != "outbox repository is required" {
+				t.Fatalf("預期 panic 訊息為 outbox repository is required，實際為 %v", recovered)
+			}
+		}()
+
+		_ = NewBookingService(
+			&fakeEventRepository{},
+			sectionRepo,
+			reservationRepo,
+			orderRepo,
+			&fakePaymentRepository{},
+			&fakePaymentAttemptRepository{},
+			nil,
+			newFakeIdempotencyRepository(),
+		)
 	})
 
 	t.Run("付款金額不一致時應回傳錯誤", func(t *testing.T) {
@@ -422,7 +598,13 @@ func TestBookingServicePayOrder(t *testing.T) {
 				},
 			},
 		}
-		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, &fakeReservationRepository{}, orderRepo, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     &fakeSectionRepository{},
+			ReservationRepo: &fakeReservationRepository{},
+			OrderRepo:       orderRepo,
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 
 		_, err := svc.PayOrder(context.Background(), PayOrderInput{
 			OrderID:   20,
@@ -483,19 +665,25 @@ func TestBookingServiceHandleECPayCallback(t *testing.T) {
 			},
 		}
 		paymentRepo := &fakePaymentRepository{}
-		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, orderRepo, paymentRepo)
-		svc.PaymentAttemptRepo = repository.NewMemoryPaymentAttemptRepository([]*domain.PaymentAttempt{
-			{
-				ID:              30,
-				OrderID:         20,
-				Provider:        "mock_ecpay",
-				MerchantTradeNo: "MT-CB-001",
-				Method:          "credit_card",
-				Amount:          3600,
-				Status:          domain.PaymentAttemptStatusProcessing,
-				CreatedAt:       time.Now(),
-				UpdatedAt:       time.Now(),
-			},
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     sectionRepo,
+			ReservationRepo: reservationRepo,
+			OrderRepo:       orderRepo,
+			PaymentRepo:     paymentRepo,
+			PaymentAttemptRepo: repository.NewMemoryPaymentAttemptRepository([]*domain.PaymentAttempt{
+				{
+					ID:              30,
+					OrderID:         20,
+					Provider:        "mock_ecpay",
+					MerchantTradeNo: "MT-CB-001",
+					Method:          "credit_card",
+					Amount:          3600,
+					Status:          domain.PaymentAttemptStatusProcessing,
+					CreatedAt:       time.Now(),
+					UpdatedAt:       time.Now(),
+				},
+			}),
 		})
 		callback := VerifyMockPaymentCallbackInput{
 			MerchantID:      "TEST_MERCHANT",
@@ -563,7 +751,13 @@ func TestBookingServiceHandleECPayCallback(t *testing.T) {
 			},
 		}
 		paymentRepo := &fakePaymentRepository{}
-		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, &fakeReservationRepository{}, orderRepo, paymentRepo)
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     &fakeSectionRepository{},
+			ReservationRepo: &fakeReservationRepository{},
+			OrderRepo:       orderRepo,
+			PaymentRepo:     paymentRepo,
+		})
 		callback := VerifyMockPaymentCallbackInput{
 			MerchantID:      "TEST_MERCHANT",
 			MerchantTradeNo: "ORD-CB-002",
@@ -610,9 +804,120 @@ func TestBookingServiceHandleECPayCallback(t *testing.T) {
 	})
 }
 
+func TestBookingServiceReconcilePaymentAttempts(t *testing.T) {
+	now := time.Now()
+	orderRepo := &fakeOrderRepository{
+		orders: map[int64]*domain.Order{
+			20: {
+				ID:            20,
+				OrderNo:       "ORD-RC-001",
+				ReservationID: 10,
+				UserID:        3,
+				EventID:       1,
+				SectionID:     2,
+				Quantity:      2,
+				UnitPrice:     1800,
+				TotalAmount:   3600,
+				Status:        domain.OrderStatusPendingPayment,
+				ExpiresAt:     now.Add(10 * time.Minute),
+			},
+		},
+	}
+	reservationRepo := &fakeReservationRepository{
+		reservations: map[int64]*domain.Reservation{
+			10: {
+				ID:          10,
+				EventID:     1,
+				SectionID:   2,
+				UserID:      3,
+				Quantity:    2,
+				UnitPrice:   1800,
+				TotalAmount: 3600,
+				Status:      domain.ReservationStatusHolding,
+				ExpiresAt:   now.Add(5 * time.Minute),
+			},
+		},
+	}
+	sectionRepo := &fakeSectionRepository{
+		section: &domain.Section{
+			ID:               2,
+			EventID:          1,
+			ReservedQuantity: 2,
+			SoldQuantity:     0,
+			TotalQuantity:    10,
+			Status:           domain.SectionStatusActive,
+		},
+	}
+	attemptRepo := repository.NewMemoryPaymentAttemptRepository([]*domain.PaymentAttempt{
+		{
+			ID:              30,
+			OrderID:         20,
+			Provider:        "mock_ecpay_primary",
+			MerchantTradeNo: "MT-RC-001",
+			Method:          "credit_card",
+			Amount:          3600,
+			Status:          domain.PaymentAttemptStatusProcessing,
+			CreatedAt:       now.Add(-3 * time.Minute),
+			UpdatedAt:       now.Add(-3 * time.Minute),
+		},
+	})
+	svc := newTestBookingService(testBookingDeps{
+		EventRepo:          &fakeEventRepository{},
+		SectionRepo:        sectionRepo,
+		ReservationRepo:    reservationRepo,
+		OrderRepo:          orderRepo,
+		PaymentRepo:        &fakePaymentRepository{},
+		PaymentAttemptRepo: attemptRepo,
+	})
+	svc.MockPaymentClient = &fakeMockPaymentQueryClient{
+		result: &MockPaymentQueryResult{
+			MerchantTradeNo: "MT-RC-001",
+			ProviderTradeNo: "TRADE-RC-001",
+			Amount:          3600,
+			PaidAt:          now,
+			Method:          "Credit",
+			Status:          MockPaymentQueryStatusSuccess,
+		},
+		payload: []byte(`{"status":"SUCCESS"}`),
+	}
+
+	count, err := svc.ReconcilePaymentAttempts(context.Background(), ReconcilePaymentAttemptsInput{
+		Now:         now,
+		Delay:       2 * time.Minute,
+		RetryAfter:  30 * time.Second,
+		Limit:       100,
+		MaxAttempts: 5,
+	})
+	if err != nil {
+		t.Fatalf("reconcile payment attempts should not fail: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 reconciled attempt, got %d", count)
+	}
+	if orderRepo.orders[20].Status != domain.OrderStatusPaid {
+		t.Fatalf("expected order paid, got %d", orderRepo.orders[20].Status)
+	}
+	if reservationRepo.reservations[10].Status != domain.ReservationStatusConfirmed {
+		t.Fatalf("expected reservation confirmed, got %d", reservationRepo.reservations[10].Status)
+	}
+	attempt, err := attemptRepo.FindByMerchantTradeNo(context.Background(), "MT-RC-001")
+	if err != nil {
+		t.Fatalf("expected attempt exists: %v", err)
+	}
+	if attempt.Status != domain.PaymentAttemptStatusSucceeded {
+		t.Fatalf("expected attempt succeeded, got %d", attempt.Status)
+	}
+}
+
 func TestBookingServiceVerifyMockPaymentCallback(t *testing.T) {
 	t.Run("簽章正確可通過驗證", func(t *testing.T) {
-		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, &fakeReservationRepository{}, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     &fakeSectionRepository{},
+			ReservationRepo: &fakeReservationRepository{},
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 		svc.MockPaymentSignature = MockPaymentSignatureConfig{
 			MerchantID: "TEST_MERCHANT",
 			HashKey:    "TEST_SECRET",
@@ -639,7 +944,13 @@ func TestBookingServiceVerifyMockPaymentCallback(t *testing.T) {
 	})
 
 	t.Run("簽章錯誤會被拒絕", func(t *testing.T) {
-		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, &fakeReservationRepository{}, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     &fakeSectionRepository{},
+			ReservationRepo: &fakeReservationRepository{},
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 		svc.MockPaymentSignature = MockPaymentSignatureConfig{
 			MerchantID: "TEST_MERCHANT",
 			HashKey:    "TEST_SECRET",
@@ -712,7 +1023,13 @@ func TestBookingServiceExpireOrder(t *testing.T) {
 				Status:           domain.SectionStatusActive,
 			},
 		}
-		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, orderRepo, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     sectionRepo,
+			ReservationRepo: reservationRepo,
+			OrderRepo:       orderRepo,
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 
 		order, err := svc.ExpireOrder(context.Background(), ExpireOrderInput{
 			OrderID:   30,
@@ -744,7 +1061,13 @@ func TestBookingServiceExpireOrder(t *testing.T) {
 				},
 			},
 		}
-		svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, &fakeReservationRepository{}, orderRepo, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     &fakeSectionRepository{},
+			ReservationRepo: &fakeReservationRepository{},
+			OrderRepo:       orderRepo,
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 
 		_, err := svc.ExpireOrder(context.Background(), ExpireOrderInput{
 			OrderID:   31,
@@ -802,7 +1125,13 @@ func TestBookingServiceSweepExpiredOrders(t *testing.T) {
 				Status:           domain.SectionStatusActive,
 			},
 		}
-		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, orderRepo, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     sectionRepo,
+			ReservationRepo: reservationRepo,
+			OrderRepo:       orderRepo,
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 
 		count, err := svc.SweepExpiredOrders(context.Background(), SweepExpiredOrdersInput{
 			Now:   now,
@@ -846,7 +1175,13 @@ func TestBookingServiceCloseReservation(t *testing.T) {
 				Status:           domain.SectionStatusActive,
 			},
 		}
-		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     sectionRepo,
+			ReservationRepo: reservationRepo,
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 
 		reservation, err := svc.ExpireReservation(context.Background(), ExpireReservationInput{
 			ReservationID: 10,
@@ -886,7 +1221,13 @@ func TestBookingServiceCloseReservation(t *testing.T) {
 				Status:           domain.SectionStatusActive,
 			},
 		}
-		svc := NewBookingService(&fakeEventRepository{}, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     sectionRepo,
+			ReservationRepo: reservationRepo,
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 
 		reservation, err := svc.CancelReservation(context.Background(), CancelReservationInput{
 			ReservationID: 11,
@@ -911,13 +1252,13 @@ func TestBookingServiceGetQueueStatus(t *testing.T) {
 		purchaseToken := "pt_001"
 		purchaseTokenExpiresAt := now.Add(5 * time.Minute)
 
-		svc := NewBookingService(
-			&fakeEventRepository{},
-			&fakeSectionRepository{},
-			&fakeReservationRepository{},
-			&fakeOrderRepository{},
-			&fakePaymentRepository{},
-		)
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     &fakeSectionRepository{},
+			ReservationRepo: &fakeReservationRepository{},
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 		svc.SaveQueueStatus(QueueStatusSnapshot{
 			QueueToken:             "qt_001",
 			QueueSequence:          1,
@@ -947,13 +1288,13 @@ func TestBookingServiceGetQueueStatus(t *testing.T) {
 	})
 
 	t.Run("查不到 queue token 時應回傳錯誤", func(t *testing.T) {
-		svc := NewBookingService(
-			&fakeEventRepository{},
-			&fakeSectionRepository{},
-			&fakeReservationRepository{},
-			&fakeOrderRepository{},
-			&fakePaymentRepository{},
-		)
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       &fakeEventRepository{},
+			SectionRepo:     &fakeSectionRepository{},
+			ReservationRepo: &fakeReservationRepository{},
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 
 		_, err := svc.GetQueueStatus(context.Background(), "qt_not_found")
 		if !errors.Is(err, ErrQueueTokenNotFound) {
@@ -981,7 +1322,13 @@ func TestBookingServiceCreateOrderUsesServerSideTTL(t *testing.T) {
 		},
 	}
 	orderRepo := &fakeOrderRepository{}
-	svc := NewBookingService(&fakeEventRepository{}, &fakeSectionRepository{}, reservationRepo, orderRepo, &fakePaymentRepository{})
+	svc := newTestBookingService(testBookingDeps{
+		EventRepo:       &fakeEventRepository{},
+		SectionRepo:     &fakeSectionRepository{},
+		ReservationRepo: reservationRepo,
+		OrderRepo:       orderRepo,
+		PaymentRepo:     &fakePaymentRepository{},
+	})
 	svc.OrderPaymentTTL = 3 * time.Minute
 	_ = svc.QueueStore.SaveSnapshot(context.Background(), QueueStatusSnapshot{
 		QueueToken:             "qt_order_ttl",
@@ -1241,7 +1588,13 @@ func TestBookingServiceReserveTicketWithStockStore(t *testing.T) {
 			},
 		}
 		reservationRepo := &fakeReservationRepository{}
-		svc := NewBookingService(eventRepo, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       eventRepo,
+			SectionRepo:     sectionRepo,
+			ReservationRepo: reservationRepo,
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 		svc.StockStore = stockStore
 		svc.SaveQueueStatus(QueueStatusSnapshot{
 			QueueToken:             "qt_stock_ok",
@@ -1302,7 +1655,13 @@ func TestBookingServiceReserveTicketWithStockStore(t *testing.T) {
 			},
 		}
 		reservationRepo := &fakeReservationRepository{saveErr: errors.New("save reservation failed")}
-		svc := NewBookingService(eventRepo, sectionRepo, reservationRepo, &fakeOrderRepository{}, &fakePaymentRepository{})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:       eventRepo,
+			SectionRepo:     sectionRepo,
+			ReservationRepo: reservationRepo,
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 		svc.StockStore = stockStore
 		svc.SaveQueueStatus(QueueStatusSnapshot{
 			QueueToken:             "qt_stock_restore",
@@ -1344,8 +1703,8 @@ func TestBookingServiceRebuildStock(t *testing.T) {
 	t.Run("應將所有 event section 重建到 stock store", func(t *testing.T) {
 		now := time.Now()
 		stockStore := &fakeStockStore{}
-		svc := NewBookingService(
-			&fakeEventRepository{
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo: &fakeEventRepository{
 				events: []domain.Event{
 					{
 						ID:          1,
@@ -1356,7 +1715,7 @@ func TestBookingServiceRebuildStock(t *testing.T) {
 					},
 				},
 			},
-			&fakeSectionRepository{
+			SectionRepo: &fakeSectionRepository{
 				sections: []domain.Section{
 					{
 						ID:               2,
@@ -1380,10 +1739,10 @@ func TestBookingServiceRebuildStock(t *testing.T) {
 					},
 				},
 			},
-			&fakeReservationRepository{},
-			&fakeOrderRepository{},
-			&fakePaymentRepository{},
-		)
+			ReservationRepo: &fakeReservationRepository{},
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 		svc.StockStore = stockStore
 
 		if err := svc.RebuildStock(context.Background()); err != nil {
@@ -1399,8 +1758,8 @@ func TestBookingServiceReconcileStock(t *testing.T) {
 	t.Run("reconcile stock should check all event sections", func(t *testing.T) {
 		now := time.Now()
 		stockStore := &fakeStockStore{reconcileResult: StockReconcileResult{Checked: 2, Fixed: 1}}
-		svc := NewBookingService(
-			&fakeEventRepository{
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo: &fakeEventRepository{
 				events: []domain.Event{
 					{
 						ID:          1,
@@ -1411,7 +1770,7 @@ func TestBookingServiceReconcileStock(t *testing.T) {
 					},
 				},
 			},
-			&fakeSectionRepository{
+			SectionRepo: &fakeSectionRepository{
 				sections: []domain.Section{
 					{
 						ID:            2,
@@ -1429,10 +1788,10 @@ func TestBookingServiceReconcileStock(t *testing.T) {
 					},
 				},
 			},
-			&fakeReservationRepository{},
-			&fakeOrderRepository{},
-			&fakePaymentRepository{},
-		)
+			ReservationRepo: &fakeReservationRepository{},
+			OrderRepo:       &fakeOrderRepository{},
+			PaymentRepo:     &fakePaymentRepository{},
+		})
 		svc.StockStore = stockStore
 
 		result, err := svc.ReconcileStock(context.Background())

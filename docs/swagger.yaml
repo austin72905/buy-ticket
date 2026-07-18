@@ -67,6 +67,8 @@ definitions:
         type: string
       venue:
         type: string
+      version:
+        type: integer
     type: object
   controller.AdminLoginRequest:
     properties:
@@ -176,6 +178,8 @@ definitions:
         type: integer
       updated_at:
         type: string
+      version:
+        type: integer
     type: object
   controller.AdminTargetReferenceResponse:
     properties:
@@ -204,6 +208,8 @@ definitions:
         type: string
       updated_at:
         type: string
+      version:
+        type: integer
     type: object
   controller.CancelReservationRequest:
     properties:
@@ -389,6 +395,8 @@ definitions:
         type: string
       updated_at:
         type: string
+      version:
+        type: integer
     type: object
   controller.PayOrderRequest:
     properties:
@@ -602,6 +610,8 @@ definitions:
     properties:
       end_at:
         type: string
+      expected_version:
+        type: integer
       name:
         type: string
       organizer_id:
@@ -619,6 +629,8 @@ definitions:
     type: object
   controller.UpdateAdminSectionRequest:
     properties:
+      expected_version:
+        type: integer
       name:
         type: string
       price:
@@ -634,6 +646,8 @@ definitions:
     properties:
       email:
         type: string
+      expected_version:
+        type: integer
       name:
         type: string
       organizer_id:
@@ -647,6 +661,8 @@ definitions:
     type: object
   controller.UpdateOrganizerRequest:
     properties:
+      expected_version:
+        type: integer
       name:
         type: string
       status:
@@ -870,6 +886,10 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
       summary: Update admin event
       tags:
       - admin-events
@@ -996,6 +1016,10 @@ paths:
             $ref: '#/definitions/controller.ErrorResponse'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
       summary: Update admin event section
@@ -1209,6 +1233,10 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
       summary: Update organizer
       tags:
       - admin-organizers
@@ -1306,6 +1334,10 @@ paths:
             $ref: '#/definitions/controller.ErrorResponse'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/controller.ErrorResponse'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/controller.ErrorResponse'
       summary: Update admin user

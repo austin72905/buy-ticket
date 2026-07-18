@@ -12,6 +12,7 @@ export interface AdminUserResponse {
   organizer_id?: number
   created_at: string
   updated_at: string
+  version: number
 }
 
 export interface CreateAdminUserRequest {
@@ -23,6 +24,7 @@ export interface CreateAdminUserRequest {
 }
 
 export interface UpdateAdminUserRequest {
+  expected_version: number
   organizer_id?: number
   name?: string
   email?: string
@@ -37,6 +39,7 @@ export interface OrganizerResponse {
   status: string
   created_at: string
   updated_at: string
+  version: number
 }
 
 export interface CreateOrganizerRequest {
@@ -44,6 +47,7 @@ export interface CreateOrganizerRequest {
 }
 
 export interface UpdateOrganizerRequest {
+  expected_version: number
   name?: string
   status?: number
 }
@@ -130,6 +134,7 @@ export interface AdminEventResponse {
   sale_end_at: string
   created_at: string
   updated_at: string
+  version: number
 }
 
 export interface CreateAdminEventRequest {
@@ -144,6 +149,7 @@ export interface CreateAdminEventRequest {
 }
 
 export interface UpdateAdminEventRequest {
+  expected_version: number
   organizer_id?: number
   name?: string
   venue?: string
@@ -167,6 +173,7 @@ export interface AdminSectionResponse {
   status: string
   created_at: string
   updated_at: string
+  version: number
 }
 
 export interface CreateAdminSectionRequest {
@@ -178,6 +185,7 @@ export interface CreateAdminSectionRequest {
 }
 
 export interface UpdateAdminSectionRequest {
+  expected_version: number
   name?: string
   price?: number
   total_quantity?: number

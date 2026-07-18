@@ -16,6 +16,9 @@ service:
   type: NodePort
   port: 8080
 
+app:
+  pprofEnabled: true
+
 ingress:
   enabled: false
 
@@ -38,6 +41,18 @@ payment:
     consecutiveFailures: 5
     openTimeoutSeconds: 30
     halfOpenMaxRequests: 1
+  reconcile:
+    enabled: true
+    batchSize: 100
+    delaySeconds: 120
+    retryAfterSeconds: 30
+    maxAttempts: 5
+
+outbox:
+  publish:
+    enabled: true
+    batchSize: 100
+    retryAfterSeconds: 30
 
 scheduler:
   enabled: true

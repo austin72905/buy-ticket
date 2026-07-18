@@ -45,6 +45,7 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 	router.GET("/payments/:paymentNo", c.GetPaymentByPaymentNo)
 	router.POST("/payments/provider/ecpay/callback", c.HandleECPayCallback)
 
+	// 以下掛在 authenticated 上的 route 都會先經過 RequireAuth()
 	authenticated := router.Group("/")
 	authenticated.Use(RequireAuth())
 	authenticated.GET("/me/reservations", c.ListUserReservations)
@@ -56,7 +57,7 @@ func (c *BookingController) RegisterRoutes(router gin.IRouter) {
 			QueueJoinBackpressure(c.QueueJoinMaxInFlight, c.QueueJoinRetryAfter),
 		}, queueJoinHandlers...)
 	}
-	authenticated.POST("/queue/join", queueJoinHandlers...)
+	authenticated.POST("/queue/join", queueJoinHandlers...) // 可以接多個handler  router.POST("/queue/join", RequireAuth(), QueueJoinBackpressure(...), c.JoinQueue)
 	authenticated.POST("/reservations", c.ReserveTicket)
 	authenticated.POST("/orders", c.CreateOrder)
 	authenticated.POST("/payments", c.PayOrder)
@@ -662,7 +663,7 @@ func (c *BookingController) StartPayment(ctx *gin.Context) {
 		writeError(ctx, http.StatusBadRequest, err)
 		return
 	}
-
+	// 開始一次支付流程
 	attempt, err := c.BookingService.StartMockPaymentAttempt(ctx.Request.Context(), service.CreatePaymentAttemptInput{
 		OrderID:        request.OrderID,
 		IdempotencyKey: idempotencyKey,
@@ -835,6 +836,8 @@ func hashPaymentRequest(request PayOrderRequest) (string, error) {
 func writeError(ctx *gin.Context, statusCode int, err error) {
 	appErr := newAppError(statusCode, err)
 	appErr.RequestID = requestID(ctx)
+	ctx.Set(contextErrorCodeKey, appErr.Code)
+	ctx.Set(contextErrorMessageKey, appErr.Message)
 	ctx.JSON(appErr.HTTPStatus, ErrorResponse{
 		Code:      appErr.Code,
 		Message:   appErr.Message,

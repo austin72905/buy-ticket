@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	"embed"
-	"log"
+	"log/slog"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"buy-ticket/controller"
 	db "buy-ticket/db/sqlc"
 	docs "buy-ticket/docs"
+	"buy-ticket/observability"
 	"buy-ticket/repository"
 	"buy-ticket/service"
 
@@ -25,6 +27,8 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
+
+// 這些檔案一起打包進去binary
 
 //go:embed config/default/app.properties
 var defaultConfigFiles embed.FS
@@ -43,7 +47,17 @@ var prodConfigFiles embed.FS
 // @description 搶票系統 API
 // @BasePath /
 func main() {
+	configureLogging()
 	infraapp.Start(&BuyTicketApp{})
+}
+
+func configureLogging() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+}
+
+func fatalLog(message string, attrs ...any) {
+	slog.Error(message, attrs...)
+	os.Exit(1)
 }
 
 func (app *BuyTicketApp) Start() {
@@ -72,7 +86,31 @@ const (
 	appRoleScheduler appRole = "scheduler"
 )
 
+type envConfig struct {
+	fileName string
+	fs       embed.FS
+}
+
+type appRepositories struct {
+	user           repository.UserRepository
+	adminUser      repository.AdminUserRepository
+	organizer      repository.OrganizerRepository
+	adminAuditLog  repository.AdminAuditLogRepository
+	event          repository.EventRepository
+	adminEvent     repository.AdminEventRepository
+	section        repository.SectionRepository
+	reservation    repository.ReservationRepository
+	order          repository.OrderRepository
+	adminOrder     repository.AdminOrderRepository
+	payment        repository.PaymentRepository
+	paymentAttempt repository.PaymentAttemptRepository
+	outbox         repository.OutboxEventRepository
+	idempotency    repository.IdempotencyRepository
+	dbPool         *pgxpool.Pool
+}
+
 func (app *BuyTicketApp) Initialize() {
+	// 目前將 程式分 api  、 scheduler 兩個image 部屬， 用 環境變數區分
 	role := parseAppRole()
 	if role == appRoleScheduler {
 		app.Runtime.Lifecycle.Startup.Serve = nil
@@ -83,88 +121,70 @@ func (app *BuyTicketApp) Initialize() {
 		env = "local"
 	}
 
+	// 先載入 config/default/app.properties，把共用預設設定放進 runtime.Property.Store
 	if err := app.Runtime.Property.LoadPropertiesByFS(
 		defaultConfigFiles,
 		"config/default/app.properties",
 		defaultConfigFiles,
 	); err != nil {
-		log.Fatalf("load default app.properties failed: %v", err)
+		fatalLog("load default app.properties failed", "error", err)
 	}
 
-	envConfigFile := map[string]string{
-		"local": "config/local/app.properties",
-		"dev":   "config/dev/app.properties",
-		"prod":  "config/prod/app.properties",
+	envConfigs := map[string]envConfig{
+		"local": {
+			fileName: "config/local/app.properties",
+			fs:       localConfigFiles,
+		},
+		"dev": {
+			fileName: "config/dev/app.properties",
+			fs:       devConfigFiles,
+		},
+		"prod": {
+			fileName: "config/prod/app.properties",
+			fs:       prodConfigFiles,
+		},
 	}
-	envFile, ok := envConfigFile[env]
+
+	config, ok := envConfigs[env]
 	if !ok {
-		log.Fatalf("unsupported APP_ENV %q", env)
-	}
-
-	envConfigFS := map[string]embed.FS{
-		"local": localConfigFiles,
-		"dev":   devConfigFiles,
-		"prod":  prodConfigFiles,
+		fatalLog("unsupported APP_ENV", "env", env)
 	}
 
 	if err := app.Runtime.Property.LoadPropertiesByFS(
-		envConfigFS[env],
-		envFile,
+		config.fs,
+		config.fileName,
 		defaultConfigFiles,
 	); err != nil {
-		log.Fatalf("load %s app.properties failed: %v", env, err)
+		fatalLog("load app.properties failed", "env", env, "file", config.fileName, "error", err)
 	}
 	applyEnvOverrides(app.Runtime)
 
-	userRepo, adminUserRepo, organizerRepo, adminAuditLogRepo, eventRepo, adminEventRepo, sectionRepo, reservationRepo, orderRepo, adminOrderRepo, paymentRepo, dbPool := buildRepositories(app.Runtime)
-
-	bookingService := service.NewBookingService(
-		eventRepo,
-		sectionRepo,
-		reservationRepo,
-		orderRepo,
-		paymentRepo,
-	)
-	bookingService.DB = dbPool
-	bookingService.OrderPaymentTTL = orderPaymentTTL(app.Runtime)
-	if dbPool != nil {
-		bookingService.PaymentAttemptRepo = repository.NewPostgresPaymentAttemptRepository(db.New(dbPool))
-		bookingService.IdempotencyRepo = repository.NewPostgresIdempotencyRepository(db.New(dbPool))
-	}
-	bookingService.MockPaymentCallbackURL = app.Runtime.Property.Property("payment.mock.callback_url")
-	paymentBreakerConfig := paymentCircuitBreakerConfig(app.Runtime)
-	if mockPaymentRouter := buildMockPaymentProviderRouter(app.Runtime, paymentBreakerConfig); mockPaymentRouter != nil {
-		bookingService.MockPaymentRouter = mockPaymentRouter
-		bookingService.MockPaymentClient = mockPaymentRouter.PrimaryClient()
-	}
-	bookingService.QueueStore = buildQueueStore(app.Runtime)
-	bookingService.StockStore = buildStockStore(app.Runtime)
-	bookingService.MockPaymentSignature = service.MockPaymentSignatureConfig{
-		MerchantID: app.Runtime.Property.Property("payment.mock.merchant_id"),
-		HashKey:    app.Runtime.Property.Property("payment.mock.hash_key"),
-		HashIV:     app.Runtime.Property.Property("payment.mock.hash_iv"),
-	}
+	// Build app dependencies after properties and env overrides are loaded.
+	repos := buildRepositories(app.Runtime)
+	// 同時被api scheduler 依賴所以放這
+	bookingService := buildBookingService(app.Runtime, repos)
 	sessionStore := buildSessionStore(app.Runtime)
 	sessionTTL := sessionTTL(app.Runtime)
 
 	if role == appRoleAll || role == appRoleScheduler {
+		// Run once on startup so stale event statuses are corrected before the periodic scheduler.
 		if count, err := bookingService.AdvanceEventStatuses(context.Background(), time.Now()); err != nil {
-			log.Fatalf("advance event statuses failed: %v", err)
+			fatalLog("advance event statuses failed", "error", err)
 		} else if count > 0 {
-			log.Printf("event status scheduler advanced %d events", count)
+			slog.Info("event status advanced on startup", "count", count)
 		}
 		if err := bookingService.RebuildStock(context.Background()); err != nil {
-			log.Fatalf("rebuild stock failed: %v", err)
+			fatalLog("rebuild stock failed", "error", err)
 		}
 		registerBackgroundJobs(app.Runtime, bookingService)
-		log.Printf("scheduler configured")
+		slog.Info("scheduler configured")
 	}
 
 	if role == appRoleAll || role == appRoleAPI {
-		registerHTTPServer(app.Runtime, userRepo, adminUserRepo, organizerRepo, adminAuditLogRepo, adminOrderRepo, adminEventRepo, bookingService, sessionStore, sessionTTL)
+		registerHTTPServer(app.Runtime, repos.user, repos.adminUser, repos.organizer, repos.adminAuditLog, repos.adminOrder, repos.adminEvent, bookingService, sessionStore, sessionTTL)
 	}
 
-	log.Printf("app role configured: %s", role)
+	slog.Info("app role configured", "role", role)
 }
 
 func parseAppRole() appRole {
@@ -178,7 +198,7 @@ func parseAppRole() appRole {
 	case appRoleAll, appRoleAPI, appRoleScheduler:
 		return role
 	default:
-		log.Fatalf("unsupported APP_ROLE %q", value)
+		fatalLog("unsupported APP_ROLE", "role", value)
 		return ""
 	}
 }
@@ -207,11 +227,17 @@ func registerHTTPServer(
 
 	router := runtime.Web.Router()
 	router.Use(controller.RecoveryMiddleware())
+	router.Use(controller.RequestIDMiddleware())
+	router.Use(controller.RequestLoggingMiddleware())
 	router.Use(controller.AttachCurrentUser(authService, sessionStore))
 	docs.SwaggerInfo.BasePath = "/"
 	router.GET("/healthz", func(ctx *gin.Context) {
 		ctx.JSON(200, gin.H{"status": "ok"})
 	})
+	if pprofEnabled(runtime) {
+		registerPprofRoutes(router)
+		slog.Info("pprof routes enabled")
+	}
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	authController.RegisterRoutes(router)
 	adminAuthController.RegisterRoutes(router)
@@ -220,13 +246,59 @@ func registerHTTPServer(
 
 	addr := runtime.Property.RequiredProperty("server.addr")
 	runtime.Web.Listen(addr)
-	log.Printf("server configured at %s", addr)
+	slog.Info("server configured", "addr", addr)
 }
 
+func registerPprofRoutes(router gin.IRouter) {
+	router.GET("/debug/pprof/", gin.WrapF(pprof.Index))
+	router.GET("/debug/pprof/cmdline", gin.WrapF(pprof.Cmdline))
+	router.GET("/debug/pprof/profile", gin.WrapF(pprof.Profile))
+	router.GET("/debug/pprof/symbol", gin.WrapF(pprof.Symbol))
+	router.POST("/debug/pprof/symbol", gin.WrapF(pprof.Symbol))
+	router.GET("/debug/pprof/trace", gin.WrapF(pprof.Trace))
+	router.GET("/debug/pprof/:profile", func(ctx *gin.Context) {
+		pprof.Handler(ctx.Param("profile")).ServeHTTP(ctx.Writer, ctx.Request)
+	})
+}
+
+func buildBookingService(runtime *infraapp.Runtime, repos *appRepositories) *service.BookingService {
+	bookingService := service.NewBookingService(
+		repos.event,
+		repos.section,
+		repos.reservation,
+		repos.order,
+		repos.payment,
+		repos.paymentAttempt,
+		repos.outbox,
+		repos.idempotency,
+	)
+	bookingService.DB = repos.dbPool
+	bookingService.OrderPaymentTTL = orderPaymentTTL(runtime)
+	bookingService.MockPaymentCallbackURL = runtime.Property.Property("payment.mock.callback_url")
+	bookingService.QueueStore = buildQueueStore(runtime)
+	bookingService.StockStore = buildStockStore(runtime)
+	bookingService.MockPaymentSignature = service.MockPaymentSignatureConfig{
+		MerchantID: runtime.Property.Property("payment.mock.merchant_id"),
+		HashKey:    runtime.Property.Property("payment.mock.hash_key"),
+		HashIV:     runtime.Property.Property("payment.mock.hash_iv"),
+	}
+
+	paymentBreakerConfig := paymentCircuitBreakerConfig(runtime)
+	if mockPaymentRouter := buildMockPaymentProviderRouter(runtime, paymentBreakerConfig); mockPaymentRouter != nil {
+		bookingService.MockPaymentRouter = mockPaymentRouter
+		bookingService.MockPaymentClient = mockPaymentRouter.PrimaryClient()
+	}
+
+	return bookingService
+}
+
+// 環境變數覆寫邏輯: 先從 embed 進 binary 的 config/default/app.properties 和 config/{APP_ENV}/app.properties 載入。
+// 再用部署環境給的環境變數覆蓋掉 properties 裡的值。
+// 主要是讓 Helm/Kubernetes 的 ConfigMap / Secret 能真的生效
 func applyEnvOverrides(runtime *infraapp.Runtime) {
 	envOverrides := map[string]string{
 		"SERVER_ADDR":                            "server.addr",
-		"APP_STORE":                              "app.store",
+		"PPROF_ENABLED":                          "pprof.enabled",
 		"QUEUE_STORE":                            "queue.store",
 		"QUEUE_RELEASE_LIMIT":                    "queue.release.limit",
 		"QUEUE_JOIN_MAX_IN_FLIGHT":               "queue.join.max_in_flight",
@@ -253,10 +325,18 @@ func applyEnvOverrides(runtime *infraapp.Runtime) {
 		"PAYMENT_BREAKER_CONSECUTIVE_FAILURES":   "payment.breaker.consecutive_failures",
 		"PAYMENT_BREAKER_OPEN_TIMEOUT_SECONDS":   "payment.breaker.open_timeout_seconds",
 		"PAYMENT_BREAKER_HALF_OPEN_MAX_REQUESTS": "payment.breaker.half_open_max_requests",
+		"PAYMENT_RECONCILE_ENABLED":              "payment.reconcile.enabled",
+		"PAYMENT_RECONCILE_BATCH_SIZE":           "payment.reconcile.batch_size",
+		"PAYMENT_RECONCILE_DELAY_SECONDS":        "payment.reconcile.delay_seconds",
+		"PAYMENT_RECONCILE_RETRY_AFTER_SECONDS":  "payment.reconcile.retry_after_seconds",
+		"PAYMENT_RECONCILE_MAX_ATTEMPTS":         "payment.reconcile.max_attempts",
+		"OUTBOX_PUBLISH_ENABLED":                 "outbox.publish.enabled",
+		"OUTBOX_PUBLISH_BATCH_SIZE":              "outbox.publish.batch_size",
+		"OUTBOX_PUBLISH_RETRY_AFTER_SECONDS":     "outbox.publish.retry_after_seconds",
 	}
 
 	for envName, propertyKey := range envOverrides {
-		value, ok := os.LookupEnv(envName)
+		value, ok := os.LookupEnv(envName) // 即使值是空字串 也會覆蓋，跟 os.Getenv 不同
 		if ok {
 			runtime.Property.Store.Set(propertyKey, value)
 		}
@@ -270,7 +350,7 @@ func buildQueueStore(runtime *infraapp.Runtime) service.QueueStore {
 		redisComponent.LoadFromPrefix("redis")
 		return service.NewRedisQueueStore(redisComponent.Client(), releaseLimit)
 	}
-
+	// redis_queue_store
 	return service.NewMemoryQueueStore(releaseLimit)
 }
 
@@ -328,88 +408,139 @@ func buildMockPaymentProviderRouter(runtime *infraapp.Runtime, breakerConfig ser
 func registerBackgroundJobs(runtime *infraapp.Runtime, bookingService *service.BookingService) {
 	scheduler := infrascheduler.Register(runtime, "")
 	scheduler.SetPanicOnAnyAddError(true)
-
+	orderExpireLimit := orderExpireBatchSize(runtime)
+	paymentReconcileJobEnabled := paymentReconcileEnabled(runtime)
+	paymentReconcileJobDelay := paymentReconcileDelay(runtime)
+	paymentReconcileJobRetryAfter := paymentReconcileRetryAfter(runtime)
+	paymentReconcileJobLimit := paymentReconcileBatchSize(runtime)
+	paymentReconcileJobMaxAttempts := paymentReconcileMaxAttempts(runtime)
+	outboxPublishJobEnabled := outboxPublishEnabled(runtime)
+	outboxPublishJobLimit := outboxPublishBatchSize(runtime)
+	outboxPublishJobRetryAfter := outboxPublishRetryAfter(runtime)
+	// 每秒  把排隊中的使用者從 waiting 推進成 ready，並發給他一個 purchaseToken
 	_, err := scheduler.AddFuncJobWithName("*/1 * * * * *", "queue-promote-ready", func(ctx context.Context) {
 		now := time.Now()
 		if err := bookingService.QueueStore.PromoteReady(ctx, now); err != nil {
-			log.Printf("queue scheduler promote failed: %v", err)
+			observability.Error(ctx, "scheduler job failed", err, "job_name", "queue-promote-ready")
 		}
 	})
 	if err != nil {
-		log.Fatalf("register queue scheduler failed: %v", err)
+		fatalLog("register scheduler job failed", "job_name", "queue-promote-ready", "error", err)
 	}
-
+	// 每 5 秒 找出已超過付款期限、但還是 pending payment 的訂單，將它們過期
 	_, err = scheduler.AddFuncJobWithName("*/5 * * * * *", "order-expire-sweep", func(ctx context.Context) {
 		count, err := bookingService.SweepExpiredOrders(ctx, service.SweepExpiredOrdersInput{
 			Now:   time.Now(),
-			Limit: orderExpireBatchSize(runtime),
+			Limit: orderExpireLimit,
 		})
 		if err != nil {
-			log.Printf("order expire scheduler sweep failed: %v", err)
+			observability.Error(ctx, "scheduler job failed", err, "job_name", "order-expire-sweep")
 			return
 		}
 		if count > 0 {
-			log.Printf("order expire scheduler expired %d orders", count)
+			observability.Info(ctx, "scheduler job completed", "job_name", "order-expire-sweep", "expired_count", count)
 		}
 	})
 	if err != nil {
-		log.Fatalf("register order expire scheduler failed: %v", err)
+		fatalLog("register scheduler job failed", "job_name", "order-expire-sweep", "error", err)
 	}
-
+	// 每 5 秒  活動到了開賣時間、結束時間，就更新 event status
 	_, err = scheduler.AddFuncJobWithName("*/5 * * * * *", "event-status-advance", func(ctx context.Context) {
 		count, err := bookingService.AdvanceEventStatuses(ctx, time.Now())
 		if err != nil {
-			log.Printf("event status scheduler advance failed: %v", err)
+			observability.Error(ctx, "scheduler job failed", err, "job_name", "event-status-advance")
 			return
 		}
 		if count > 0 {
-			log.Printf("event status scheduler advanced %d events", count)
+			observability.Info(ctx, "scheduler job completed", "job_name", "event-status-advance", "advanced_count", count)
 		}
 	})
 	if err != nil {
-		log.Fatalf("register event status scheduler failed: %v", err)
+		fatalLog("register scheduler job failed", "job_name", "event-status-advance", "error", err)
 	}
-
+	// 每 1 秒  清掉已經過期的 purchaseToken
 	_, err = scheduler.AddFuncJobWithName("*/1 * * * * *", "purchase-token-cleanup", func(ctx context.Context) {
 		count, err := bookingService.CleanupExpiredPurchaseTokens(ctx, time.Now())
 		if err != nil {
-			log.Printf("purchase token cleanup failed: %v", err)
+			observability.Error(ctx, "scheduler job failed", err, "job_name", "purchase-token-cleanup")
 			return
 		}
 		if count > 0 {
-			log.Printf("purchase token cleanup expired %d tokens", count)
+			observability.Info(ctx, "scheduler job completed", "job_name", "purchase-token-cleanup", "expired_count", count)
 		}
 	})
 	if err != nil {
-		log.Fatalf("register purchase token cleanup failed: %v", err)
+		fatalLog("register scheduler job failed", "job_name", "purchase-token-cleanup", "error", err)
 	}
-
+	// 每 10 秒  清掉整個 queue token 已過期的排隊紀錄
 	_, err = scheduler.AddFuncJobWithName("*/10 * * * * *", "queue-timeout-cleanup", func(ctx context.Context) {
 		count, err := bookingService.CleanupExpiredQueues(ctx, time.Now())
 		if err != nil {
-			log.Printf("queue timeout cleanup failed: %v", err)
+			observability.Error(ctx, "scheduler job failed", err, "job_name", "queue-timeout-cleanup")
 			return
 		}
 		if count > 0 {
-			log.Printf("queue timeout cleanup expired %d queues", count)
+			observability.Info(ctx, "scheduler job completed", "job_name", "queue-timeout-cleanup", "expired_count", count)
 		}
 	})
 	if err != nil {
-		log.Fatalf("register queue timeout cleanup failed: %v", err)
+		fatalLog("register scheduler job failed", "job_name", "queue-timeout-cleanup", "error", err)
 	}
-
+	// 每分鐘第 0 秒跑一次  校正 Redis stock 和資料庫 section inventory 的差異。
 	_, err = scheduler.AddFuncJobWithName("0 * * * * *", "stock-reconcile", func(ctx context.Context) {
 		result, err := bookingService.ReconcileStock(ctx)
 		if err != nil {
-			log.Printf("stock reconcile failed: %v", err)
+			observability.Error(ctx, "scheduler job failed", err, "job_name", "stock-reconcile")
 			return
 		}
 		if result.Fixed > 0 {
-			log.Printf("stock reconcile fixed %d/%d sections", result.Fixed, result.Checked)
+			observability.Info(ctx, "scheduler job completed", "job_name", "stock-reconcile", "fixed_count", result.Fixed, "checked_count", result.Checked)
 		}
 	})
 	if err != nil {
-		log.Fatalf("register stock reconcile failed: %v", err)
+		fatalLog("register scheduler job failed", "job_name", "stock-reconcile", "error", err)
+	}
+
+	if paymentReconcileJobEnabled {
+		_, err = scheduler.AddFuncJobWithName("*/30 * * * * *", "payment-attempt-reconcile", func(ctx context.Context) {
+			count, err := bookingService.ReconcilePaymentAttempts(ctx, service.ReconcilePaymentAttemptsInput{
+				Now:         time.Now(),
+				Delay:       paymentReconcileJobDelay,
+				RetryAfter:  paymentReconcileJobRetryAfter,
+				Limit:       paymentReconcileJobLimit,
+				MaxAttempts: paymentReconcileJobMaxAttempts,
+			})
+			if err != nil {
+				observability.Error(ctx, "scheduler job failed", err, "job_name", "payment-attempt-reconcile")
+				return
+			}
+			if count > 0 {
+				observability.Info(ctx, "scheduler job completed", "job_name", "payment-attempt-reconcile", "completed_count", count)
+			}
+		})
+		if err != nil {
+			fatalLog("register scheduler job failed", "job_name", "payment-attempt-reconcile", "error", err)
+		}
+	}
+
+	if outboxPublishJobEnabled {
+		_, err = scheduler.AddFuncJobWithName("*/10 * * * * *", "outbox-publish", func(ctx context.Context) {
+			count, err := bookingService.PublishOutboxEvents(ctx, service.PublishOutboxEventsInput{
+				Now:        time.Now(),
+				Limit:      outboxPublishJobLimit,
+				RetryAfter: outboxPublishJobRetryAfter,
+			})
+			if err != nil {
+				observability.Error(ctx, "scheduler job failed", err, "job_name", "outbox-publish")
+				return
+			}
+			if count > 0 {
+				observability.Info(ctx, "scheduler job completed", "job_name", "outbox-publish", "published_count", count)
+			}
+		})
+		if err != nil {
+			fatalLog("register scheduler job failed", "job_name", "outbox-publish", "error", err)
+		}
 	}
 }
 
@@ -425,6 +556,100 @@ func queueReleaseLimit(runtime *infraapp.Runtime) int {
 	}
 
 	return limit
+}
+
+func pprofEnabled(runtime *infraapp.Runtime) bool {
+	return boolProperty(runtime, "pprof.enabled", false)
+}
+
+func paymentReconcileEnabled(runtime *infraapp.Runtime) bool {
+	value := runtime.Property.Property("payment.reconcile.enabled")
+	if value == "" {
+		return true
+	}
+	enabled, err := strconv.ParseBool(value)
+	return err == nil && enabled
+}
+
+func paymentReconcileBatchSize(runtime *infraapp.Runtime) int {
+	value := runtime.Property.Property("payment.reconcile.batch_size")
+	if value == "" {
+		return 100
+	}
+	limit, err := strconv.Atoi(value)
+	if err != nil || limit <= 0 {
+		return 100
+	}
+	return limit
+}
+
+func paymentReconcileDelay(runtime *infraapp.Runtime) time.Duration {
+	value := runtime.Property.Property("payment.reconcile.delay_seconds")
+	if value == "" {
+		return 2 * time.Minute
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return 2 * time.Minute
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func paymentReconcileRetryAfter(runtime *infraapp.Runtime) time.Duration {
+	value := runtime.Property.Property("payment.reconcile.retry_after_seconds")
+	if value == "" {
+		return 30 * time.Second
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return 30 * time.Second
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func paymentReconcileMaxAttempts(runtime *infraapp.Runtime) int {
+	value := runtime.Property.Property("payment.reconcile.max_attempts")
+	if value == "" {
+		return 5
+	}
+	limit, err := strconv.Atoi(value)
+	if err != nil || limit <= 0 {
+		return 5
+	}
+	return limit
+}
+
+func outboxPublishEnabled(runtime *infraapp.Runtime) bool {
+	value := runtime.Property.Property("outbox.publish.enabled")
+	if value == "" {
+		return true
+	}
+	enabled, err := strconv.ParseBool(value)
+	return err == nil && enabled
+}
+
+func outboxPublishBatchSize(runtime *infraapp.Runtime) int {
+	value := runtime.Property.Property("outbox.publish.batch_size")
+	if value == "" {
+		return 100
+	}
+	limit, err := strconv.Atoi(value)
+	if err != nil || limit <= 0 {
+		return 100
+	}
+	return limit
+}
+
+func outboxPublishRetryAfter(runtime *infraapp.Runtime) time.Duration {
+	value := runtime.Property.Property("outbox.publish.retry_after_seconds")
+	if value == "" {
+		return 30 * time.Second
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return 30 * time.Second
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func queueJoinMaxInFlight(runtime *infraapp.Runtime) int {
@@ -562,54 +787,38 @@ func secondsProperty(runtime *infraapp.Runtime, key string, fallbackSeconds int)
 	return time.Duration(seconds) * time.Second
 }
 
-func buildRepositories(runtime *infraapp.Runtime) (
-	repository.UserRepository,
-	repository.AdminUserRepository,
-	repository.OrganizerRepository,
-	repository.AdminAuditLogRepository,
-	repository.EventRepository,
-	repository.AdminEventRepository,
-	repository.SectionRepository,
-	repository.ReservationRepository,
-	repository.OrderRepository,
-	repository.AdminOrderRepository,
-	repository.PaymentRepository,
-	*pgxpool.Pool,
-) {
-	if runtime.Property.RequiredProperty("app.store") == "postgres" {
-		pg := infrapostgres.Register(runtime, "main")
-		pg.LoadFromPrefix("postgres")
-		pool := pg.Pool()
-		queries := db.New(pool)
-		eventRepo := repository.NewPostgresEventRepository(queries)
-		orderRepo := repository.NewPostgresOrderRepository(queries)
-		return repository.NewPostgresUserRepository(queries),
-			repository.NewPostgresAdminUserRepository(queries),
-			repository.NewPostgresOrganizerRepository(queries),
-			repository.NewPostgresAdminAuditLogRepository(queries),
-			eventRepo,
-			eventRepo,
-			repository.NewPostgresSectionRepository(queries),
-			repository.NewPostgresReservationRepository(queries),
-			orderRepo,
-			orderRepo,
-			repository.NewPostgresPaymentRepository(queries),
-			pool
+func buildRepositories(runtime *infraapp.Runtime) *appRepositories {
+	pg := infrapostgres.Register(runtime, "main") // 註冊一個 PostgreSQL component，名字叫 "main"
+	pg.LoadFromPrefix("postgres")                 // 從 property 裡讀 postgres.* 這組設定
+	pool := pg.Pool()
+	queries := db.New(pool)
+	userRepo := repository.NewPostgresUserRepository(queries)
+	adminUserRepo := repository.NewPostgresAdminUserRepository(queries)
+	organizerRepo := repository.NewPostgresOrganizerRepository(queries)
+	adminAuditLogRepo := repository.NewPostgresAdminAuditLogRepository(queries)
+	eventRepo := repository.NewPostgresEventRepository(queries)
+	sectionRepo := repository.NewPostgresSectionRepository(queries)
+	reservationRepo := repository.NewPostgresReservationRepository(queries)
+	orderRepo := repository.NewPostgresOrderRepository(queries)
+	paymentRepo := repository.NewPostgresPaymentRepository(queries)
+	paymentAttemptRepo := repository.NewPostgresPaymentAttemptRepository(queries)
+	outboxRepo := repository.NewPostgresOutboxEventRepository(queries)
+	idempotencyRepo := repository.NewPostgresIdempotencyRepository(queries)
+	return &appRepositories{
+		user:           userRepo,
+		adminUser:      adminUserRepo,
+		organizer:      organizerRepo,
+		adminAuditLog:  adminAuditLogRepo,
+		event:          eventRepo,
+		adminEvent:     eventRepo,
+		section:        sectionRepo,
+		reservation:    reservationRepo,
+		order:          orderRepo,
+		adminOrder:     orderRepo,
+		payment:        paymentRepo,
+		paymentAttempt: paymentAttemptRepo,
+		outbox:         outboxRepo,
+		idempotency:    idempotencyRepo,
+		dbPool:         pool,
 	}
-
-	users, adminUsers, organizers, events, sections := repository.SeedSampleData()
-	eventRepo := repository.NewMemoryEventRepository(events)
-	orderRepo := repository.NewMemoryOrderRepository()
-	return repository.NewMemoryUserRepository(users),
-		repository.NewMemoryAdminUserRepository(adminUsers),
-		repository.NewMemoryOrganizerRepository(organizers),
-		repository.NewMemoryAdminAuditLogRepository(),
-		eventRepo,
-		eventRepo,
-		repository.NewMemorySectionRepository(sections),
-		repository.NewMemoryReservationRepository(),
-		orderRepo,
-		orderRepo,
-		repository.NewMemoryPaymentRepository(),
-		nil
 }

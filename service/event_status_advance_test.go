@@ -41,7 +41,9 @@ func TestBookingServiceAdvanceEventStatuses(t *testing.T) {
 			SaleEndAt:   now.Add(-time.Minute),
 		},
 	})
-	svc := NewBookingService(eventRepo, nil, nil, nil, nil)
+	svc := newTestBookingService(testBookingDeps{
+		EventRepo: eventRepo,
+	})
 
 	count, err := svc.AdvanceEventStatuses(context.Background(), now)
 	if err != nil {

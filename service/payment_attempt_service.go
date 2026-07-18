@@ -10,8 +10,8 @@ import (
 	"buy-ticket/repository"
 )
 
-var ErrPaymentAttemptRepositoryNotConfigured = errors.New("payment attempt repository is not configured")
 var ErrPaymentAttemptIdempotencyConflict = errors.New("payment attempt idempotency key reused with different request")
+var ErrPaymentAttemptRepositoryNotConfigured = errors.New("payment attempt repository is not configured")
 var ErrMockPaymentClientNotConfigured = errors.New("mock payment client is not configured")
 
 type CreatePaymentAttemptInput struct {
@@ -24,10 +24,6 @@ type CreatePaymentAttemptInput struct {
 }
 
 func (s *BookingService) CreatePaymentAttempt(ctx context.Context, input CreatePaymentAttemptInput) (*domain.PaymentAttempt, error) {
-	if s.PaymentAttemptRepo == nil {
-		return nil, ErrPaymentAttemptRepositoryNotConfigured
-	}
-
 	provider := normalizePaymentAttemptProvider(input.Provider)
 	if input.IdempotencyKey != "" {
 		existingAttempt, err := s.PaymentAttemptRepo.FindByIdempotencyKey(ctx, input.IdempotencyKey)
@@ -72,11 +68,8 @@ func (s *BookingService) CreatePaymentAttempt(ctx context.Context, input CreateP
 	return attempt, nil
 }
 
+// 開始一次支付流程
 func (s *BookingService) StartMockPaymentAttempt(ctx context.Context, input CreatePaymentAttemptInput) (*domain.PaymentAttempt, error) {
-	if s.PaymentAttemptRepo == nil {
-		return nil, ErrPaymentAttemptRepositoryNotConfigured
-	}
-
 	provider := normalizePaymentAttemptProvider(input.Provider)
 	if input.IdempotencyKey != "" {
 		existingAttempt, err := s.PaymentAttemptRepo.FindByIdempotencyKey(ctx, input.IdempotencyKey)
@@ -151,9 +144,6 @@ func (s *BookingService) StartMockPaymentAttempt(ctx context.Context, input Crea
 }
 
 func (s *BookingService) GetPaymentAttemptByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (*domain.PaymentAttempt, error) {
-	if s.PaymentAttemptRepo == nil {
-		return nil, ErrPaymentAttemptRepositoryNotConfigured
-	}
 	return s.PaymentAttemptRepo.FindByMerchantTradeNo(ctx, merchantTradeNo)
 }
 

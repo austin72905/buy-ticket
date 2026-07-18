@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"buy-ticket/db/sqlc"
+	db "buy-ticket/db/sqlc"
 	"buy-ticket/domain"
 	"buy-ticket/repository"
 
@@ -14,22 +14,23 @@ import (
 )
 
 var (
-	ErrEventNotOnSale          = errors.New("event is not on sale")
-	ErrSectionNotReservable    = errors.New("section cannot reserve requested quantity")
-	ErrReservationNotActive    = errors.New("reservation is not active")
-	ErrActiveReservationExists = errors.New("active reservation already exists")
-	ErrReservationAlreadyUsed  = errors.New("reservation already confirmed or closed")
-	ErrReservationCannotClose  = errors.New("reservation cannot be expired or cancelled")
-	ErrOrderCannotBePaid       = errors.New("order cannot be paid")
-	ErrOrderCannotExpire       = errors.New("order cannot be expired")
-	ErrPaymentAmountMismatch   = errors.New("payment amount mismatch")
-	ErrQueueTokenNotFound      = errors.New("queue token not found")
-	ErrUserAlreadyJoinedQueue  = errors.New("user already joined queue")
-	ErrPurchaseTokenRequired   = errors.New("purchase token is required")
-	ErrPurchaseTokenNotFound   = errors.New("purchase token not found")
-	ErrPurchaseTokenExpired    = errors.New("purchase token expired")
-	ErrPurchaseTokenUsed       = errors.New("purchase token already used")
-	ErrPurchaseTokenMismatch   = errors.New("purchase token does not match user or event")
+	ErrEventNotOnSale                = errors.New("event is not on sale")
+	ErrSectionNotReservable          = errors.New("section cannot reserve requested quantity")
+	ErrReservationNotActive          = errors.New("reservation is not active")
+	ErrActiveReservationExists       = errors.New("active reservation already exists")
+	ErrReservationAlreadyUsed        = errors.New("reservation already confirmed or closed")
+	ErrReservationCannotClose        = errors.New("reservation cannot be expired or cancelled")
+	ErrOrderCannotBePaid             = errors.New("order cannot be paid")
+	ErrOrderCannotExpire             = errors.New("order cannot be expired")
+	ErrPaymentAmountMismatch         = errors.New("payment amount mismatch")
+	ErrQueueTokenNotFound            = errors.New("queue token not found")
+	ErrUserAlreadyJoinedQueue        = errors.New("user already joined queue")
+	ErrPurchaseTokenRequired         = errors.New("purchase token is required")
+	ErrPurchaseTokenNotFound         = errors.New("purchase token not found")
+	ErrPurchaseTokenExpired          = errors.New("purchase token expired")
+	ErrPurchaseTokenUsed             = errors.New("purchase token already used")
+	ErrPurchaseTokenMismatch         = errors.New("purchase token does not match user or event")
+	ErrOutboxRepositoryNotConfigured = errors.New("outbox repository is not configured")
 )
 
 type BookingService struct {
@@ -41,6 +42,7 @@ type BookingService struct {
 	OrderRepo              repository.OrderRepository
 	PaymentRepo            repository.PaymentRepository
 	PaymentAttemptRepo     repository.PaymentAttemptRepository
+	OutboxRepo             repository.OutboxEventRepository
 	IdempotencyRepo        repository.IdempotencyRepository
 	MockPaymentClient      MockPaymentClient
 	MockPaymentRouter      *MockPaymentProviderRouter
@@ -151,14 +153,44 @@ func NewBookingService(
 	reservationRepo repository.ReservationRepository,
 	orderRepo repository.OrderRepository,
 	paymentRepo repository.PaymentRepository,
+	paymentAttemptRepo repository.PaymentAttemptRepository,
+	outboxRepo repository.OutboxEventRepository,
+	idempotencyRepo repository.IdempotencyRepository,
 ) *BookingService {
+	if eventRepo == nil {
+		panic("event repository is required")
+	}
+	if sectionRepo == nil {
+		panic("section repository is required")
+	}
+	if reservationRepo == nil {
+		panic("reservation repository is required")
+	}
+	if orderRepo == nil {
+		panic("order repository is required")
+	}
+	if paymentRepo == nil {
+		panic("payment repository is required")
+	}
+	if paymentAttemptRepo == nil {
+		panic("payment attempt repository is required")
+	}
+	if outboxRepo == nil {
+		panic("outbox repository is required")
+	}
+	if idempotencyRepo == nil {
+		panic("idempotency repository is required")
+	}
+
 	bookingService := &BookingService{
 		EventRepo:          eventRepo,
 		SectionRepo:        sectionRepo,
 		ReservationRepo:    reservationRepo,
 		OrderRepo:          orderRepo,
 		PaymentRepo:        paymentRepo,
-		PaymentAttemptRepo: repository.NewMemoryPaymentAttemptRepository(nil),
+		PaymentAttemptRepo: paymentAttemptRepo,
+		OutboxRepo:         outboxRepo,
+		IdempotencyRepo:    idempotencyRepo,
 		QueueStore:         NewMemoryQueueStore(1),
 		OrderPaymentTTL:    10 * time.Minute,
 	}
@@ -209,6 +241,7 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 		}
 
 		reservedSection = section
+		// 先扣 Redis stock，避免高併發超賣
 		if s.StockStore != nil {
 			if err := s.StockStore.Reserve(ctx, *section, input.Quantity); err != nil {
 				if errors.Is(err, ErrInsufficientStock) {
@@ -218,7 +251,7 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 			}
 			stockReserved = true
 		}
-
+		// 扣 DB 裡 section 的庫存
 		section, err = repos.section.ReserveInventory(ctx, input.EventID, input.SectionID, input.Quantity, now)
 		if err != nil {
 			if stockReserved {
@@ -244,13 +277,18 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
-
+		// 建立 reservation
 		return repos.reservation.Save(ctx, reservation)
 	})
+
 	if err != nil {
+		// 交易失敗，回補db 庫存
+		// s.DB == nil  代表目前不是 DB transaction 模式
 		if sectionInventoryReserved && s.DB == nil {
 			_, _ = s.SectionRepo.ReleaseInventory(ctx, input.EventID, input.SectionID, input.Quantity, now)
 		}
+
+		// 回補redis 庫存
 		if stockReserved && reservedSection != nil {
 			_ = s.StockStore.Release(ctx, *reservedSection, input.Quantity)
 		}
@@ -312,10 +350,15 @@ func (s *BookingService) orderPaymentTTL() time.Duration {
 	return s.OrderPaymentTTL
 }
 
+// 把一筆待付款訂單標記為已付款 (最後更新的那個動作)
 func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*domain.Payment, error) {
 	var payment *domain.Payment
 
 	err := s.withTx(ctx, func(repos bookingRepos) error {
+		if repos.outbox == nil {
+			return ErrOutboxRepositoryNotConfigured
+		}
+
 		order, err := repos.order.FindByID(ctx, input.OrderID)
 		if err != nil {
 			return err
@@ -391,7 +434,15 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 			return err
 		}
 
-		return repos.payment.Save(ctx, payment)
+		if err := repos.payment.Save(ctx, payment); err != nil {
+			return err
+		}
+
+		event, err := newPaymentSucceededOutboxEvent(order, reservation, payment, paidAt)
+		if err != nil {
+			return err
+		}
+		return repos.outbox.Create(ctx, event)
 	})
 	if err != nil {
 		return nil, err
@@ -724,6 +775,7 @@ type bookingRepos struct {
 	order          repository.OrderRepository
 	payment        repository.PaymentRepository
 	paymentAttempt repository.PaymentAttemptRepository
+	outbox         repository.OutboxEventRepository
 }
 
 func (s *BookingService) withTx(ctx context.Context, fn func(repos bookingRepos) error) error {
@@ -735,6 +787,7 @@ func (s *BookingService) withTx(ctx context.Context, fn func(repos bookingRepos)
 			order:          s.OrderRepo,
 			payment:        s.PaymentRepo,
 			paymentAttempt: s.PaymentAttemptRepo,
+			outbox:         s.OutboxRepo,
 		})
 	}
 
@@ -752,6 +805,7 @@ func (s *BookingService) withTx(ctx context.Context, fn func(repos bookingRepos)
 		order:          repository.NewPostgresOrderRepository(queries),
 		payment:        repository.NewPostgresPaymentRepository(queries),
 		paymentAttempt: repository.NewPostgresPaymentAttemptRepository(queries),
+		outbox:         repository.NewPostgresOutboxEventRepository(queries),
 	}
 
 	if err := fn(repos); err != nil {

@@ -54,7 +54,7 @@ ingress:
 app:
   env: dev
   serverAddr: ":8080"
-  store: postgres
+  pprofEnabled: false
 
 queue:
   store: redis
@@ -85,9 +85,9 @@ redis:
 
 payment:
   mock:
-    merchantID: TEST_MERCHANT
-    hashKey: TEST_SECRET
-    hashIV: TEST_HASH_IV
+    merchantID: "3002607"
+    hashKey: pwFHCqoQZGmho4w6
+    hashIV: EkRm7iFT261dpevs
     baseURL: "http://host.k3d.internal:8081"
     backupBaseURL: ""
     callbackURL: "http://buy-ticket.local/payments/provider/ecpay/callback"
@@ -97,6 +97,18 @@ payment:
     consecutiveFailures: 5
     openTimeoutSeconds: 30
     halfOpenMaxRequests: 1
+  reconcile:
+    enabled: true
+    batchSize: 100
+    delaySeconds: 120
+    retryAfterSeconds: 30
+    maxAttempts: 5
+
+outbox:
+  publish:
+    enabled: true
+    batchSize: 100
+    retryAfterSeconds: 30
 
 podAnnotations: {}
 podLabels: {}

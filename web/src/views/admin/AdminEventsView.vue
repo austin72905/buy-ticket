@@ -123,7 +123,10 @@ async function submitEvent() {
     }
 
     if (editingEvent.value) {
-      await backoffice.editEvent(editingEvent.value.id, payload)
+      await backoffice.editEvent(editingEvent.value.id, {
+        ...payload,
+        expected_version: editingEvent.value.version,
+      })
     } else {
       await backoffice.saveEvent(payload)
     }

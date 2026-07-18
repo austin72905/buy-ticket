@@ -23,6 +23,7 @@ type Event struct {
 	Venue       string
 	Status      EventStatus
 	Sections    []Section
+	Version     int64
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

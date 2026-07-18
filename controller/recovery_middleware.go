@@ -2,20 +2,23 @@ package controller
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 	"runtime/debug"
+
+	"buy-ticket/observability"
 
 	"github.com/gin-gonic/gin"
 )
 
+// global panic handler
 func RecoveryMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				slog.ErrorContext(
+				observability.Error(
 					ctx.Request.Context(),
 					"http request panic recovered",
+					nil,
 					"method", ctx.Request.Method,
 					"path", ctx.Request.URL.Path,
 					"panic", recovered,

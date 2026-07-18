@@ -93,8 +93,6 @@ func errorCodeForError(fallbackStatus int, err error) string {
 		return "PAYMENT_PROVIDER_CIRCUIT_OPEN"
 	case errors.Is(err, service.ErrPaymentProviderNotConfigured), errors.Is(err, service.ErrMockPaymentClientNotConfigured):
 		return "PAYMENT_PROVIDER_NOT_CONFIGURED"
-	case errors.Is(err, service.ErrPaymentAttemptRepositoryNotConfigured):
-		return "PAYMENT_ATTEMPT_REPOSITORY_NOT_CONFIGURED"
 	case errors.Is(err, service.ErrInvalidPaymentCallback):
 		return "INVALID_PAYMENT_CALLBACK"
 	case errors.Is(err, service.ErrInvalidPaymentSignature):
@@ -123,6 +121,8 @@ func errorCodeForError(fallbackStatus int, err error) string {
 		return "ADMIN_USER_NOT_FOUND"
 	case errors.Is(err, repository.ErrOrganizerNotFound):
 		return "ORGANIZER_NOT_FOUND"
+	case errors.Is(err, repository.ErrResourceVersionConflict):
+		return "RESOURCE_VERSION_CONFLICT"
 	default:
 		return errorCodeForStatus(fallbackStatus)
 	}

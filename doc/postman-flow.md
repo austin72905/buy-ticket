@@ -11,18 +11,7 @@ make migrate-up
 
 ### 1.2 Start API
 
-Memory mode:
-
-```bash
-make run-local
-```
-
-PostgreSQL mode:
-
-1. Edit `config/local/app.properties`.
-2. Set `app.store=postgres`.
-3. Configure `postgres.dsn`.
-4. Restart the API.
+`local` uses PostgreSQL by default. Configure `postgres.dsn` in `config/local/app.properties` if your local database differs from the default.
 
 ```bash
 make run-local

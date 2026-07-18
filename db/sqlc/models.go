@@ -30,6 +30,7 @@ type AdminUser struct {
 	Status       int16              `json:"status"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	Version      int64              `json:"version"`
 }
 
 type Event struct {
@@ -44,6 +45,7 @@ type Event struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	OrganizerID int64              `json:"organizer_id"`
+	Version     int64              `json:"version"`
 }
 
 type EventSection struct {
@@ -59,6 +61,7 @@ type EventSection struct {
 	Status           int16              `json:"status"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Version          int64              `json:"version"`
 }
 
 type IdempotencyKey struct {
@@ -103,6 +106,24 @@ type Organizer struct {
 	Status    int16              `json:"status"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	Version   int64              `json:"version"`
+}
+
+type OutboxEvent struct {
+	ID            int64              `json:"id"`
+	EventID       string             `json:"event_id"`
+	EventType     string             `json:"event_type"`
+	AggregateType string             `json:"aggregate_type"`
+	AggregateID   int64              `json:"aggregate_id"`
+	Payload       []byte             `json:"payload"`
+	Status        int16              `json:"status"`
+	Attempts      int32              `json:"attempts"`
+	MaxAttempts   int32              `json:"max_attempts"`
+	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+	LastError     pgtype.Text        `json:"last_error"`
+	PublishedAt   pgtype.Timestamptz `json:"published_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Payment struct {
@@ -125,25 +146,28 @@ type Payment struct {
 }
 
 type PaymentAttempt struct {
-	ID              int64              `json:"id"`
-	OrderID         int64              `json:"order_id"`
-	PaymentID       pgtype.Int8        `json:"payment_id"`
-	IdempotencyKey  pgtype.Text        `json:"idempotency_key"`
-	Provider        string             `json:"provider"`
-	MerchantTradeNo string             `json:"merchant_trade_no"`
-	ProviderTradeNo pgtype.Text        `json:"provider_trade_no"`
-	Method          string             `json:"method"`
-	Amount          int64              `json:"amount"`
-	Status          int16              `json:"status"`
-	RequestPayload  []byte             `json:"request_payload"`
-	ResponsePayload []byte             `json:"response_payload"`
-	CallbackPayload []byte             `json:"callback_payload"`
-	FailureReason   pgtype.Text        `json:"failure_reason"`
-	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
-	SucceededAt     pgtype.Timestamptz `json:"succeeded_at"`
-	FailedAt        pgtype.Timestamptz `json:"failed_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ID                 int64              `json:"id"`
+	OrderID            int64              `json:"order_id"`
+	PaymentID          pgtype.Int8        `json:"payment_id"`
+	IdempotencyKey     pgtype.Text        `json:"idempotency_key"`
+	Provider           string             `json:"provider"`
+	MerchantTradeNo    string             `json:"merchant_trade_no"`
+	ProviderTradeNo    pgtype.Text        `json:"provider_trade_no"`
+	Method             string             `json:"method"`
+	Amount             int64              `json:"amount"`
+	Status             int16              `json:"status"`
+	RequestPayload     []byte             `json:"request_payload"`
+	ResponsePayload    []byte             `json:"response_payload"`
+	CallbackPayload    []byte             `json:"callback_payload"`
+	FailureReason      pgtype.Text        `json:"failure_reason"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	SucceededAt        pgtype.Timestamptz `json:"succeeded_at"`
+	FailedAt           pgtype.Timestamptz `json:"failed_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ReconcileAttempts  int32              `json:"reconcile_attempts"`
+	NextReconcileAt    pgtype.Timestamptz `json:"next_reconcile_at"`
+	LastReconcileError pgtype.Text        `json:"last_reconcile_error"`
 }
 
 type Reservation struct {

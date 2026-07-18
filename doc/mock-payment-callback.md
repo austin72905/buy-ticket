@@ -30,9 +30,9 @@ make run-dev
 `config/dev/app.properties` 需要有：
 
 ```properties
-payment.mock.merchant_id=TEST_MERCHANT
-payment.mock.hash_key=TEST_SECRET
-payment.mock.hash_iv=TEST_HASH_IV
+payment.mock.merchant_id=3002607
+payment.mock.hash_key=pwFHCqoQZGmho4w6
+payment.mock.hash_iv=EkRm7iFT261dpevs
 payment.mock.base_url=http://localhost:8081
 payment.mock.backup_base_url=
 payment.mock.callback_url=http://localhost:8080/payments/provider/ecpay/callback
@@ -117,9 +117,9 @@ curl http://localhost:8081/health
 `ec-payment-service` 的 merchant / hash 設定需要與 `buy-ticket` 一致：
 
 ```text
-MerchantID = TEST_MERCHANT
-HashKey    = TEST_SECRET
-HashIV     = TEST_HASH_IV
+MerchantID = 3002607
+HashKey    = pwFHCqoQZGmho4w6
+HashIV     = EkRm7iFT261dpevs
 ```
 
 ---

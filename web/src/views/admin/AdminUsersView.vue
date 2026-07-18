@@ -93,6 +93,7 @@ async function submitUser() {
     if (editingUser.value) {
       await backoffice.editAdminUser(editingUser.value.id, {
         ...payload,
+        expected_version: editingUser.value.version,
         password: form.value.password.trim() ? form.value.password : undefined,
       })
     } else {
