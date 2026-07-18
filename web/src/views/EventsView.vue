@@ -46,6 +46,23 @@ function shortTitle(event: EventResponse) {
   return event.name.length > 34 ? `${event.name.slice(0, 34)}...` : event.name
 }
 
+function eventStatusLabel(status: string | number) {
+  const normalized = normalizeEventStatus(status)
+  if (normalized === EventStatus.Draft) return 'Draft'
+  if (normalized === EventStatus.Published) return 'Published'
+  if (normalized === EventStatus.OnSale) return 'On sale'
+  if (normalized === EventStatus.Ended) return 'Ended'
+  return normalized
+}
+
+function eventStatusSeverity(status: string | number) {
+  const normalized = normalizeEventStatus(status)
+  if (normalized === EventStatus.OnSale) return 'danger'
+  if (normalized === EventStatus.Published) return 'success'
+  if (normalized === EventStatus.Ended) return 'secondary'
+  return 'info'
+}
+
 async function reload() {
   try {
     await flow.loadEvents()
@@ -134,10 +151,7 @@ onMounted(reload)
           <span>{{ event.venue }}</span>
         </div>
         <h2>{{ shortTitle(event) }}</h2>
-        <Tag
-          :value="normalizeEventStatus(event.status) === EventStatus.OnSale ? 'On sale' : 'Preparing'"
-          severity="danger"
-        />
+        <Tag :value="eventStatusLabel(event.status)" :severity="eventStatusSeverity(event.status)" />
       </RouterLink>
     </section>
 
