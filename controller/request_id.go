@@ -11,6 +11,11 @@ import (
 
 const headerRequestID = observability.HeaderRequestID
 
+const (
+	contextErrorCodeKey    = "error_code"
+	contextErrorMessageKey = "error_message"
+)
+
 func RequestIDMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		requestIDValue := strings.TrimSpace(ctx.GetHeader(headerRequestID))
@@ -43,6 +48,12 @@ func RequestLoggingMiddleware() gin.HandlerFunc {
 		if len(ctx.Errors) > 0 {
 			attrs = append(attrs, "gin_errors", ctx.Errors.String())
 		}
+		if errorCode := stringContextValue(ctx, contextErrorCodeKey); errorCode != "" {
+			attrs = append(attrs, "error_code", errorCode)
+		}
+		if errorMessage := stringContextValue(ctx, contextErrorMessageKey); errorMessage != "" {
+			attrs = append(attrs, "error_message", errorMessage)
+		}
 
 		if statusCode >= 500 {
 			observability.Error(ctx.Request.Context(), "http request completed", nil, attrs...)
@@ -54,6 +65,18 @@ func RequestLoggingMiddleware() gin.HandlerFunc {
 		}
 		observability.Info(ctx.Request.Context(), "http request completed", attrs...)
 	}
+}
+
+func stringContextValue(ctx *gin.Context, key string) string {
+	value, ok := ctx.Get(key)
+	if !ok {
+		return ""
+	}
+	text, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(text)
 }
 
 func requestID(ctx *gin.Context) string {

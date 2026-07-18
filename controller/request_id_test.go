@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -77,5 +79,40 @@ func TestRequestIDMiddlewareGeneratesRequestID(t *testing.T) {
 
 	if got := resp.Header().Get(headerRequestID); got == "" {
 		t.Fatal("expected generated response request id header")
+	}
+}
+
+func TestRequestLoggingMiddlewareIncludesWriteErrorFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var buffer bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buffer, nil)))
+	defer slog.SetDefault(previousLogger)
+
+	router := gin.New()
+	router.Use(RequestIDMiddleware())
+	router.Use(RequestLoggingMiddleware())
+	router.GET("/error", func(ctx *gin.Context) {
+		writeError(ctx, http.StatusBadRequest, errors.New("bad input"))
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/error", nil)
+	req.Header.Set(headerRequestID, "req-log-error-001")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	var logRecord map[string]any
+	if err := json.Unmarshal(buffer.Bytes(), &logRecord); err != nil {
+		t.Fatalf("unmarshal log record failed: %v; log=%q", err, buffer.String())
+	}
+	if got := logRecord["request_id"]; got != "req-log-error-001" {
+		t.Fatalf("expected request_id req-log-error-001, got %v", got)
+	}
+	if got := logRecord["error_code"]; got != "BAD_REQUEST" {
+		t.Fatalf("expected error_code BAD_REQUEST, got %v", got)
+	}
+	if got := logRecord["error_message"]; got != "bad input" {
+		t.Fatalf("expected error_message bad input, got %v", got)
 	}
 }
