@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"buy-ticket/observability"
+
 	"github.com/sony/gobreaker/v2"
 )
 
@@ -115,6 +117,7 @@ func (c *HTTPMockPaymentClient) Process(ctx context.Context, input MockPaymentPr
 		return nil, err
 	}
 	request.Header.Set("Content-Type", "application/json")
+	setRequestIDHeader(ctx, request)
 
 	response, err := c.HTTPClient.Do(request)
 	if err != nil {
@@ -152,6 +155,7 @@ func (c *HTTPMockPaymentClient) Query(ctx context.Context, input MockPaymentQuer
 	if err != nil {
 		return nil, nil, err
 	}
+	setRequestIDHeader(ctx, request)
 
 	response, err := c.HTTPClient.Do(request)
 	if err != nil {
@@ -176,6 +180,12 @@ func (c *HTTPMockPaymentClient) Query(ctx context.Context, input MockPaymentQuer
 		return nil, responseBody.Bytes(), err
 	}
 	return result, responseBody.Bytes(), nil
+}
+
+func setRequestIDHeader(ctx context.Context, request *http.Request) {
+	if requestID := observability.RequestIDFromContext(ctx); requestID != "" {
+		request.Header.Set(observability.HeaderRequestID, requestID)
+	}
 }
 
 type PaymentCircuitBreakerConfig struct {

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"buy-ticket/observability"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -32,5 +34,48 @@ func TestWriteErrorIncludesRequestID(t *testing.T) {
 	}
 	if body.RequestID != "req-write-error-001" {
 		t.Fatalf("expected request id req-write-error-001, got %q", body.RequestID)
+	}
+}
+
+func TestRequestIDMiddlewareUsesIncomingRequestID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	router.Use(RequestIDMiddleware())
+	router.GET("/request-id", func(ctx *gin.Context) {
+		if got := observability.RequestIDFromContext(ctx.Request.Context()); got != "req-incoming-001" {
+			t.Fatalf("expected request id in context, got %q", got)
+		}
+		ctx.Status(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/request-id", nil)
+	req.Header.Set(headerRequestID, "req-incoming-001")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if got := resp.Header().Get(headerRequestID); got != "req-incoming-001" {
+		t.Fatalf("expected response request id header, got %q", got)
+	}
+}
+
+func TestRequestIDMiddlewareGeneratesRequestID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	router.Use(RequestIDMiddleware())
+	router.GET("/request-id", func(ctx *gin.Context) {
+		if got := observability.RequestIDFromContext(ctx.Request.Context()); got == "" {
+			t.Fatal("expected generated request id in context")
+		}
+		ctx.Status(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/request-id", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if got := resp.Header().Get(headerRequestID); got == "" {
+		t.Fatal("expected generated response request id header")
 	}
 }

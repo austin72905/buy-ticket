@@ -14,6 +14,7 @@ func TestRecoveryMiddlewareReturnsErrorResponse(t *testing.T) {
 
 	router := gin.New()
 	router.Use(RecoveryMiddleware())
+	router.Use(RequestIDMiddleware())
 	router.GET("/panic", func(ctx *gin.Context) {
 		panic("boom")
 	})
