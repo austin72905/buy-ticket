@@ -54,6 +54,7 @@ ingress:
 app:
   env: dev
   serverAddr: ":8080"
+  pprofEnabled: false
 
 queue:
   store: redis

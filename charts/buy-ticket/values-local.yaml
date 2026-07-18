@@ -16,6 +16,9 @@ service:
   type: NodePort
   port: 8080
 
+app:
+  pprofEnabled: true
+
 ingress:
   enabled: false
 

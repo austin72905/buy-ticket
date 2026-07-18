@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"log/slog"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"strconv"
@@ -233,6 +234,10 @@ func registerHTTPServer(
 	router.GET("/healthz", func(ctx *gin.Context) {
 		ctx.JSON(200, gin.H{"status": "ok"})
 	})
+	if pprofEnabled(runtime) {
+		registerPprofRoutes(router)
+		slog.Info("pprof routes enabled")
+	}
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	authController.RegisterRoutes(router)
 	adminAuthController.RegisterRoutes(router)
@@ -242,6 +247,18 @@ func registerHTTPServer(
 	addr := runtime.Property.RequiredProperty("server.addr")
 	runtime.Web.Listen(addr)
 	slog.Info("server configured", "addr", addr)
+}
+
+func registerPprofRoutes(router gin.IRouter) {
+	router.GET("/debug/pprof/", gin.WrapF(pprof.Index))
+	router.GET("/debug/pprof/cmdline", gin.WrapF(pprof.Cmdline))
+	router.GET("/debug/pprof/profile", gin.WrapF(pprof.Profile))
+	router.GET("/debug/pprof/symbol", gin.WrapF(pprof.Symbol))
+	router.POST("/debug/pprof/symbol", gin.WrapF(pprof.Symbol))
+	router.GET("/debug/pprof/trace", gin.WrapF(pprof.Trace))
+	router.GET("/debug/pprof/:profile", func(ctx *gin.Context) {
+		pprof.Handler(ctx.Param("profile")).ServeHTTP(ctx.Writer, ctx.Request)
+	})
 }
 
 func buildBookingService(runtime *infraapp.Runtime, repos *appRepositories) *service.BookingService {
@@ -281,6 +298,7 @@ func buildBookingService(runtime *infraapp.Runtime, repos *appRepositories) *ser
 func applyEnvOverrides(runtime *infraapp.Runtime) {
 	envOverrides := map[string]string{
 		"SERVER_ADDR":                            "server.addr",
+		"PPROF_ENABLED":                          "pprof.enabled",
 		"QUEUE_STORE":                            "queue.store",
 		"QUEUE_RELEASE_LIMIT":                    "queue.release.limit",
 		"QUEUE_JOIN_MAX_IN_FLIGHT":               "queue.join.max_in_flight",
@@ -538,6 +556,10 @@ func queueReleaseLimit(runtime *infraapp.Runtime) int {
 	}
 
 	return limit
+}
+
+func pprofEnabled(runtime *infraapp.Runtime) bool {
+	return boolProperty(runtime, "pprof.enabled", false)
 }
 
 func paymentReconcileEnabled(runtime *infraapp.Runtime) bool {
