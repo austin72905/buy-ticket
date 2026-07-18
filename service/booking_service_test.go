@@ -17,6 +17,7 @@ type testBookingDeps struct {
 	OrderRepo          repository.OrderRepository
 	PaymentRepo        repository.PaymentRepository
 	PaymentAttemptRepo repository.PaymentAttemptRepository
+	OutboxRepo         repository.OutboxEventRepository
 	IdempotencyRepo    repository.IdempotencyRepository
 }
 
@@ -56,6 +57,9 @@ func newTestBookingService(deps testBookingDeps) *BookingService {
 	if deps.PaymentAttemptRepo == nil {
 		deps.PaymentAttemptRepo = &fakePaymentAttemptRepository{}
 	}
+	if deps.OutboxRepo == nil {
+		deps.OutboxRepo = repository.NewMemoryOutboxEventRepository()
+	}
 	if deps.IdempotencyRepo == nil {
 		deps.IdempotencyRepo = newFakeIdempotencyRepository()
 	}
@@ -67,6 +71,7 @@ func newTestBookingService(deps testBookingDeps) *BookingService {
 		deps.OrderRepo,
 		deps.PaymentRepo,
 		deps.PaymentAttemptRepo,
+		deps.OutboxRepo,
 		deps.IdempotencyRepo,
 	)
 }
@@ -558,32 +563,26 @@ func TestBookingServicePayOrder(t *testing.T) {
 				Status:           domain.SectionStatusActive,
 			},
 		}
-		svc := newTestBookingService(testBookingDeps{
-			EventRepo:       &fakeEventRepository{},
-			SectionRepo:     sectionRepo,
-			ReservationRepo: reservationRepo,
-			OrderRepo:       orderRepo,
-			PaymentRepo:     &fakePaymentRepository{},
-		})
-		svc.OutboxRepo = nil
+		defer func() {
+			recovered := recover()
+			if recovered == nil {
+				t.Fatal("預期建立 service 時因 outbox repository 缺失而 panic")
+			}
+			if recovered != "outbox repository is required" {
+				t.Fatalf("預期 panic 訊息為 outbox repository is required，實際為 %v", recovered)
+			}
+		}()
 
-		_, err := svc.PayOrder(context.Background(), PayOrderInput{
-			OrderID:   20,
-			PaymentNo: "PAY-001",
-			Method:    "credit_card",
-			Amount:    3600,
-			PaidAt:    now,
-		})
-
-		if !errors.Is(err, ErrOutboxRepositoryNotConfigured) {
-			t.Fatalf("預期錯誤為 ErrOutboxRepositoryNotConfigured，實際為 %v", err)
-		}
-		if orderRepo.orders[20].Status != domain.OrderStatusPendingPayment {
-			t.Fatalf("預期 order 狀態不變，實際為 %v", orderRepo.orders[20].Status)
-		}
-		if reservationRepo.reservations[10].Status != domain.ReservationStatusHolding {
-			t.Fatalf("預期 reservation 狀態不變，實際為 %v", reservationRepo.reservations[10].Status)
-		}
+		_ = NewBookingService(
+			&fakeEventRepository{},
+			sectionRepo,
+			reservationRepo,
+			orderRepo,
+			&fakePaymentRepository{},
+			&fakePaymentAttemptRepository{},
+			nil,
+			newFakeIdempotencyRepository(),
+		)
 	})
 
 	t.Run("付款金額不一致時應回傳錯誤", func(t *testing.T) {

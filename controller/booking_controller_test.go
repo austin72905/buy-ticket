@@ -25,6 +25,7 @@ type testBookingControllerDeps struct {
 	OrderRepo          repository.OrderRepository
 	PaymentRepo        repository.PaymentRepository
 	PaymentAttemptRepo repository.PaymentAttemptRepository
+	OutboxRepo         repository.OutboxEventRepository
 	IdempotencyRepo    repository.IdempotencyRepository
 }
 
@@ -47,6 +48,9 @@ func newTestBookingServiceForController(deps testBookingControllerDeps) *service
 	if deps.PaymentAttemptRepo == nil {
 		deps.PaymentAttemptRepo = &fakePaymentAttemptRepositoryForController{}
 	}
+	if deps.OutboxRepo == nil {
+		deps.OutboxRepo = repository.NewMemoryOutboxEventRepository()
+	}
 	if deps.IdempotencyRepo == nil {
 		deps.IdempotencyRepo = &fakeIdempotencyRepositoryForController{
 			records: map[string]*domain.IdempotencyKey{},
@@ -60,6 +64,7 @@ func newTestBookingServiceForController(deps testBookingControllerDeps) *service
 		deps.OrderRepo,
 		deps.PaymentRepo,
 		deps.PaymentAttemptRepo,
+		deps.OutboxRepo,
 		deps.IdempotencyRepo,
 	)
 }

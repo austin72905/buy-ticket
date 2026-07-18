@@ -154,6 +154,7 @@ func NewBookingService(
 	orderRepo repository.OrderRepository,
 	paymentRepo repository.PaymentRepository,
 	paymentAttemptRepo repository.PaymentAttemptRepository,
+	outboxRepo repository.OutboxEventRepository,
 	idempotencyRepo repository.IdempotencyRepository,
 ) *BookingService {
 	if eventRepo == nil {
@@ -174,6 +175,9 @@ func NewBookingService(
 	if paymentAttemptRepo == nil {
 		panic("payment attempt repository is required")
 	}
+	if outboxRepo == nil {
+		panic("outbox repository is required")
+	}
 	if idempotencyRepo == nil {
 		panic("idempotency repository is required")
 	}
@@ -185,7 +189,7 @@ func NewBookingService(
 		OrderRepo:          orderRepo,
 		PaymentRepo:        paymentRepo,
 		PaymentAttemptRepo: paymentAttemptRepo,
-		OutboxRepo:         repository.NewMemoryOutboxEventRepository(),
+		OutboxRepo:         outboxRepo,
 		IdempotencyRepo:    idempotencyRepo,
 		QueueStore:         NewMemoryQueueStore(1),
 		OrderPaymentTTL:    10 * time.Minute,

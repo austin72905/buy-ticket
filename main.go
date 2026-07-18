@@ -239,9 +239,9 @@ func buildBookingService(runtime *infraapp.Runtime, repos *appRepositories) *ser
 		repos.order,
 		repos.payment,
 		repos.paymentAttempt,
+		repos.outbox,
 		repos.idempotency,
 	)
-	bookingService.OutboxRepo = repos.outbox
 	bookingService.DB = repos.dbPool
 	bookingService.OrderPaymentTTL = orderPaymentTTL(runtime)
 	bookingService.MockPaymentCallbackURL = runtime.Property.Property("payment.mock.callback_url")
