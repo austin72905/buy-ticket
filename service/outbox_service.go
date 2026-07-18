@@ -91,6 +91,13 @@ func (s *BookingService) PublishOutboxEvents(ctx context.Context, input PublishO
 	}
 
 	published := 0
+	/*
+		避免這種寫法，會拿到錯誤位置
+		for _, event := range events {
+		    repo.UpdatePublishState(&event)
+		}
+
+	*/
 	for index := range events {
 		event := events[index]
 		if err := publishOutboxEvent(ctx, event); err != nil {
@@ -112,6 +119,7 @@ func (s *BookingService) PublishOutboxEvents(ctx context.Context, input PublishO
 	return published, nil
 }
 
+// 之後可以改成真的用email 通知
 func publishOutboxEvent(ctx context.Context, event domain.OutboxEvent) error {
 	_ = ctx
 	switch event.EventType {
