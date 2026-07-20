@@ -2027,6 +2027,14 @@ func (f *fakeOrderRepository) ListByUserID(ctx context.Context, userID int64) ([
 	return orders, nil
 }
 
+func (f *fakeOrderRepository) CreateFromReservation(ctx context.Context, order *domain.Order, reservation *domain.Reservation) error {
+	if order.ReservationID != reservation.ID {
+		return repository.ErrOrderReservationMismatch
+	}
+
+	return f.Save(ctx, order)
+}
+
 func (f *fakeOrderRepository) Save(ctx context.Context, order *domain.Order) error {
 	if f.orders == nil {
 		f.orders = map[int64]*domain.Order{}

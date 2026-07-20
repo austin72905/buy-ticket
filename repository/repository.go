@@ -13,6 +13,7 @@ var ErrPaymentAttemptNotFound = errors.New("payment attempt not found")
 var ErrAdminUserNotFound = errors.New("admin user not found")
 var ErrOrganizerNotFound = errors.New("organizer not found")
 var ErrResourceVersionConflict = errors.New("resource has been modified, please reload")
+var ErrOrderReservationMismatch = errors.New("order reservation mismatch")
 var ErrPaymentOrderMismatch = errors.New("payment order mismatch")
 
 type AdminUserRepository interface {
@@ -85,6 +86,7 @@ type OrderRepository interface {
 	FindByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error)
 	ListExpiredPending(ctx context.Context, now time.Time, limit int) ([]domain.Order, error)
 	ListByUserID(ctx context.Context, userID int64) ([]domain.Order, error)
+	CreateFromReservation(ctx context.Context, order *domain.Order, reservation *domain.Reservation) error
 	Save(ctx context.Context, order *domain.Order) error
 }
 

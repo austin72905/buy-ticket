@@ -654,31 +654,7 @@ func (r *PostgresOrderRepository) Save(ctx context.Context, order *domain.Order)
 			return err
 		}
 
-		record, err := r.queries.CreateOrder(ctx, db.CreateOrderParams{
-			OrderNo:       order.OrderNo,
-			ReservationID: order.ReservationID,
-			ReservationNo: reservation.ReservationNo,
-			EventID:       order.EventID,
-			EventName:     reservation.EventName,
-			SectionID:     order.SectionID,
-			SectionName:   reservation.SectionName,
-			UserID:        order.UserID,
-			UserName:      reservation.UserName,
-			Quantity:      int32(order.Quantity),
-			UnitPrice:     order.UnitPrice,
-			TotalAmount:   order.TotalAmount,
-			Status:        int16(order.Status),
-			ExpiresAt:     toPgTimestamp(order.ExpiresAt),
-			PaidAt:        nullablePgTimestamp(orderPaidAt(order)),
-			CreatedAt:     toPgTimestamp(order.CreatedAt),
-			UpdatedAt:     toPgTimestamp(order.UpdatedAt),
-		})
-		if err != nil {
-			return err
-		}
-
-		*order = *toDomainOrder(record)
-		return nil
+		return r.CreateFromReservation(ctx, order, toDomainReservation(reservation))
 	}
 
 	return r.queries.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
@@ -687,6 +663,38 @@ func (r *PostgresOrderRepository) Save(ctx context.Context, order *domain.Order)
 		PaidAt:    nullablePgTimestamp(orderPaidAt(order)),
 		UpdatedAt: toPgTimestamp(order.UpdatedAt),
 	})
+}
+
+func (r *PostgresOrderRepository) CreateFromReservation(ctx context.Context, order *domain.Order, reservation *domain.Reservation) error {
+	if order.ReservationID != reservation.ID {
+		return ErrOrderReservationMismatch
+	}
+
+	record, err := r.queries.CreateOrder(ctx, db.CreateOrderParams{
+		OrderNo:       order.OrderNo,
+		ReservationID: order.ReservationID,
+		ReservationNo: reservation.ReservationNo,
+		EventID:       order.EventID,
+		EventName:     reservation.EventName,
+		SectionID:     order.SectionID,
+		SectionName:   reservation.SectionName,
+		UserID:        order.UserID,
+		UserName:      reservation.UserName,
+		Quantity:      int32(order.Quantity),
+		UnitPrice:     order.UnitPrice,
+		TotalAmount:   order.TotalAmount,
+		Status:        int16(order.Status),
+		ExpiresAt:     toPgTimestamp(order.ExpiresAt),
+		PaidAt:        nullablePgTimestamp(orderPaidAt(order)),
+		CreatedAt:     toPgTimestamp(order.CreatedAt),
+		UpdatedAt:     toPgTimestamp(order.UpdatedAt),
+	})
+	if err != nil {
+		return err
+	}
+
+	*order = *toDomainOrder(record)
+	return nil
 }
 
 func (r *PostgresPaymentRepository) Save(ctx context.Context, payment *domain.Payment) error {
@@ -1657,17 +1665,21 @@ func toDomainSectionFromConfirmSectionSale(record db.ConfirmSectionSaleRow) *dom
 
 func toDomainReservation(record db.Reservation) *domain.Reservation {
 	return &domain.Reservation{
-		ID:          record.ID,
-		EventID:     record.EventID,
-		SectionID:   record.SectionID,
-		UserID:      record.UserID,
-		Quantity:    int(record.Quantity),
-		UnitPrice:   record.UnitPrice,
-		TotalAmount: record.TotalAmount,
-		Status:      domain.ReservationStatus(record.Status),
-		ExpiresAt:   record.ExpiresAt.Time,
-		CreatedAt:   record.CreatedAt.Time,
-		UpdatedAt:   record.UpdatedAt.Time,
+		ID:            record.ID,
+		ReservationNo: record.ReservationNo,
+		EventID:       record.EventID,
+		EventName:     record.EventName,
+		SectionID:     record.SectionID,
+		SectionName:   record.SectionName,
+		UserID:        record.UserID,
+		UserName:      record.UserName,
+		Quantity:      int(record.Quantity),
+		UnitPrice:     record.UnitPrice,
+		TotalAmount:   record.TotalAmount,
+		Status:        domain.ReservationStatus(record.Status),
+		ExpiresAt:     record.ExpiresAt.Time,
+		CreatedAt:     record.CreatedAt.Time,
+		UpdatedAt:     record.UpdatedAt.Time,
 	}
 }
 

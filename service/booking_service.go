@@ -334,7 +334,7 @@ func (s *BookingService) CreateOrder(ctx context.Context, input CreateOrderInput
 		UpdatedAt:     now,
 	}
 
-	if err := s.OrderRepo.Save(ctx, order); err != nil {
+	if err := s.OrderRepo.CreateFromReservation(ctx, order, reservation); err != nil {
 		_ = s.QueueStore.RestorePurchaseToken(ctx, *queueSnapshot)
 		return nil, err
 	}

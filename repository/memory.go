@@ -961,6 +961,14 @@ func (r *MemoryOrderRepository) ListExpiredPending(ctx context.Context, now time
 	return orders, nil
 }
 
+func (r *MemoryOrderRepository) CreateFromReservation(ctx context.Context, order *domain.Order, reservation *domain.Reservation) error {
+	if order.ReservationID != reservation.ID {
+		return ErrOrderReservationMismatch
+	}
+
+	return r.Save(ctx, order)
+}
+
 func (r *MemoryOrderRepository) Save(ctx context.Context, order *domain.Order) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

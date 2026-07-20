@@ -490,6 +490,14 @@ func (f *fakeOrderRepositoryForController) ListByUserID(ctx context.Context, use
 	return []domain.Order{}, nil
 }
 
+func (f *fakeOrderRepositoryForController) CreateFromReservation(ctx context.Context, order *domain.Order, reservation *domain.Reservation) error {
+	if order.ReservationID != reservation.ID {
+		return repository.ErrOrderReservationMismatch
+	}
+
+	return f.Save(ctx, order)
+}
+
 func (f *fakeOrderRepositoryForController) Save(ctx context.Context, order *domain.Order) error {
 	f.orders[order.ID] = order
 	return nil
