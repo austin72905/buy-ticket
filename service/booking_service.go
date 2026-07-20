@@ -355,96 +355,110 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 	var payment *domain.Payment
 
 	err := s.withTx(ctx, func(repos bookingRepos) error {
-		if repos.outbox == nil {
-			return ErrOutboxRepositoryNotConfigured
-		}
-
-		order, err := repos.order.FindByID(ctx, input.OrderID)
+		createdPayment, err := s.payOrderWithRepos(ctx, repos, input)
 		if err != nil {
 			return err
 		}
 
-		paidAt := input.PaidAt
-		if paidAt.IsZero() {
-			paidAt = time.Now()
-		}
-
-		paymentNo := input.PaymentNo
-		if paymentNo == "" {
-			paymentNo = generatePaymentNo(paidAt)
-		}
-
-		amount := input.Amount
-		if amount == 0 {
-			amount = order.TotalAmount
-		}
-
-		if !order.CanPay(paidAt) {
-			return ErrOrderCannotBePaid
-		}
-
-		if amount != order.TotalAmount {
-			return ErrPaymentAmountMismatch
-		}
-
-		reservation, err := repos.reservation.FindByID(ctx, order.ReservationID)
-		if err != nil {
-			return err
-		}
-
-		if !reservation.Confirm(paidAt) {
-			return ErrReservationAlreadyUsed
-		}
-
-		section, err := repos.section.FindByEventAndID(ctx, reservation.EventID, reservation.SectionID)
-		if err != nil {
-			return err
-		}
-
-		if !order.MarkPaid(paidAt) {
-			return ErrOrderCannotBePaid
-		}
-
-		payment = &domain.Payment{
-			OrderID:   order.ID,
-			PaymentNo: paymentNo,
-			Method:    input.Method,
-			Amount:    amount,
-			Status:    domain.PaymentStatusPending,
-			CreatedAt: paidAt,
-			UpdatedAt: paidAt,
-		}
-
-		if !payment.MarkPaid(paidAt) {
-			return ErrOrderCannotBePaid
-		}
-
-		if _, err := repos.section.ConfirmSale(ctx, section.EventID, section.ID, reservation.Quantity, paidAt); err != nil {
-			if errors.Is(err, repository.ErrSectionNotFound) {
-				return ErrSectionNotReservable
-			}
-			return err
-		}
-
-		if err := repos.reservation.Save(ctx, reservation); err != nil {
-			return err
-		}
-
-		if err := repos.order.Save(ctx, order); err != nil {
-			return err
-		}
-
-		if err := repos.payment.CreateFromOrder(ctx, payment, order); err != nil {
-			return err
-		}
-
-		event, err := newPaymentSucceededOutboxEvent(order, reservation, payment, paidAt)
-		if err != nil {
-			return err
-		}
-		return repos.outbox.Create(ctx, event)
+		payment = createdPayment
+		return nil
 	})
 	if err != nil {
+		return nil, err
+	}
+
+	return payment, nil
+}
+
+func (s *BookingService) payOrderWithRepos(ctx context.Context, repos bookingRepos, input PayOrderInput) (*domain.Payment, error) {
+	if repos.outbox == nil {
+		return nil, ErrOutboxRepositoryNotConfigured
+	}
+
+	order, err := repos.order.FindByID(ctx, input.OrderID)
+	if err != nil {
+		return nil, err
+	}
+
+	paidAt := input.PaidAt
+	if paidAt.IsZero() {
+		paidAt = time.Now()
+	}
+
+	paymentNo := input.PaymentNo
+	if paymentNo == "" {
+		paymentNo = generatePaymentNo(paidAt)
+	}
+
+	amount := input.Amount
+	if amount == 0 {
+		amount = order.TotalAmount
+	}
+
+	if !order.CanPay(paidAt) {
+		return nil, ErrOrderCannotBePaid
+	}
+
+	if amount != order.TotalAmount {
+		return nil, ErrPaymentAmountMismatch
+	}
+
+	reservation, err := repos.reservation.FindByID(ctx, order.ReservationID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !reservation.Confirm(paidAt) {
+		return nil, ErrReservationAlreadyUsed
+	}
+
+	section, err := repos.section.FindByEventAndID(ctx, reservation.EventID, reservation.SectionID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !order.MarkPaid(paidAt) {
+		return nil, ErrOrderCannotBePaid
+	}
+
+	payment := &domain.Payment{
+		OrderID:   order.ID,
+		PaymentNo: paymentNo,
+		Method:    input.Method,
+		Amount:    amount,
+		Status:    domain.PaymentStatusPending,
+		CreatedAt: paidAt,
+		UpdatedAt: paidAt,
+	}
+
+	if !payment.MarkPaid(paidAt) {
+		return nil, ErrOrderCannotBePaid
+	}
+
+	if _, err := repos.section.ConfirmSale(ctx, section.EventID, section.ID, reservation.Quantity, paidAt); err != nil {
+		if errors.Is(err, repository.ErrSectionNotFound) {
+			return nil, ErrSectionNotReservable
+		}
+		return nil, err
+	}
+
+	if err := repos.reservation.Save(ctx, reservation); err != nil {
+		return nil, err
+	}
+
+	if err := repos.order.Save(ctx, order); err != nil {
+		return nil, err
+	}
+
+	if err := repos.payment.CreateFromOrder(ctx, payment, order); err != nil {
+		return nil, err
+	}
+
+	event, err := newPaymentSucceededOutboxEvent(order, reservation, payment, paidAt)
+	if err != nil {
+		return nil, err
+	}
+	if err := repos.outbox.Create(ctx, event); err != nil {
 		return nil, err
 	}
 

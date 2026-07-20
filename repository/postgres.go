@@ -757,6 +757,9 @@ func (r *PostgresPaymentRepository) CreateFromOrder(ctx context.Context, payment
 func (r *PostgresPaymentRepository) FindByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error) {
 	record, err := r.queries.GetPaymentByPaymentNo(ctx, paymentNo)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrPaymentNotFound
+		}
 		return nil, err
 	}
 

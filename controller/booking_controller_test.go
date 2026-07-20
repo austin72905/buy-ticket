@@ -522,7 +522,7 @@ func (f *fakePaymentRepositoryForController) FindByPaymentNo(ctx context.Context
 			return payment, nil
 		}
 	}
-	return nil, errors.New("payment not found")
+	return nil, repository.ErrPaymentNotFound
 }
 
 func (f *fakePaymentRepositoryForController) ListByUserID(ctx context.Context, userID int64) ([]domain.Payment, error) {

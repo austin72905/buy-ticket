@@ -737,6 +737,122 @@ func TestBookingServiceHandleECPayCallback(t *testing.T) {
 		}
 	})
 
+	t.Run("重複 callback 不會重複建立 payment", func(t *testing.T) {
+		now := time.Now()
+		orderRepo := &fakeOrderRepository{
+			orders: map[int64]*domain.Order{
+				22: {
+					ID:            22,
+					OrderNo:       "ORD-CB-003",
+					ReservationID: 12,
+					UserID:        3,
+					EventID:       1,
+					SectionID:     2,
+					Quantity:      1,
+					UnitPrice:     1800,
+					TotalAmount:   1800,
+					Status:        domain.OrderStatusPendingPayment,
+					ExpiresAt:     now.Add(10 * time.Minute),
+				},
+			},
+		}
+		reservationRepo := &fakeReservationRepository{
+			reservations: map[int64]*domain.Reservation{
+				12: {
+					ID:          12,
+					EventID:     1,
+					SectionID:   2,
+					UserID:      3,
+					Quantity:    1,
+					UnitPrice:   1800,
+					TotalAmount: 1800,
+					Status:      domain.ReservationStatusHolding,
+					ExpiresAt:   now.Add(5 * time.Minute),
+				},
+			},
+		}
+		sectionRepo := &fakeSectionRepository{
+			section: &domain.Section{
+				ID:               2,
+				EventID:          1,
+				ReservedQuantity: 1,
+				TotalQuantity:    10,
+				Status:           domain.SectionStatusActive,
+			},
+		}
+		paymentRepo := &fakePaymentRepository{}
+		attemptRepo := repository.NewMemoryPaymentAttemptRepository([]*domain.PaymentAttempt{
+			{
+				ID:              31,
+				OrderID:         22,
+				Provider:        "mock_ecpay",
+				MerchantTradeNo: "MT-CB-003",
+				Method:          "credit_card",
+				Amount:          1800,
+				Status:          domain.PaymentAttemptStatusProcessing,
+				CreatedAt:       now,
+				UpdatedAt:       now,
+			},
+		})
+		svc := newTestBookingService(testBookingDeps{
+			EventRepo:          &fakeEventRepository{},
+			SectionRepo:        sectionRepo,
+			ReservationRepo:    reservationRepo,
+			OrderRepo:          orderRepo,
+			PaymentRepo:        paymentRepo,
+			PaymentAttemptRepo: attemptRepo,
+		})
+		callback := VerifyMockPaymentCallbackInput{
+			MerchantID:      "TEST_MERCHANT",
+			MerchantTradeNo: "MT-CB-003",
+			RtnCode:         "1",
+			RtnMsg:          "成功",
+			TradeNo:         "TRADE-003",
+			TradeAmt:        "1800",
+			PaymentDate:     "2026/06/11 18:30:00",
+			PaymentType:     "Credit",
+			TradeDate:       "2026/06/11 18:29:59",
+			SimulatePaid:    "1",
+			ReturnStatus:    "1",
+		}
+		svc.MockPaymentSignature = MockPaymentSignatureConfig{
+			MerchantID: "TEST_MERCHANT",
+			HashKey:    "TEST_SECRET",
+			HashIV:     "TEST_HASH_IV",
+		}
+		callback.CheckMacValue = buildMockPaymentCheckMacValue(callback, svc.MockPaymentSignature)
+		input := HandleECPayCallbackInput{
+			MerchantID:      callback.MerchantID,
+			MerchantTradeNo: callback.MerchantTradeNo,
+			RtnCode:         callback.RtnCode,
+			RtnMsg:          callback.RtnMsg,
+			TradeNo:         callback.TradeNo,
+			TradeAmt:        callback.TradeAmt,
+			PaymentDate:     callback.PaymentDate,
+			PaymentType:     callback.PaymentType,
+			TradeDate:       callback.TradeDate,
+			SimulatePaid:    callback.SimulatePaid,
+			CheckMacValue:   callback.CheckMacValue,
+			ReturnStatus:    callback.ReturnStatus,
+		}
+
+		if err := svc.HandleECPayCallback(context.Background(), input); err != nil {
+			t.Fatalf("第一次 callback 不應失敗：%v", err)
+		}
+		if err := svc.HandleECPayCallback(context.Background(), input); err != nil {
+			t.Fatalf("重複 callback 不應失敗：%v", err)
+		}
+		if len(paymentRepo.payments) != 1 {
+			t.Fatalf("重複 callback 不應重複建立 payment，實際為 %d", len(paymentRepo.payments))
+		}
+		attempt, err := attemptRepo.FindByMerchantTradeNo(context.Background(), "MT-CB-003")
+		if err != nil {
+			t.Fatalf("預期找到 payment attempt，實際錯誤：%v", err)
+		}
+		if attempt.Status != domain.PaymentAttemptStatusSucceeded {
+			t.Fatalf("預期 attempt status succeeded，實際為 %v", attempt.Status)
+		}
+	})
 	t.Run("失敗回呼不會建立付款", func(t *testing.T) {
 		orderRepo := &fakeOrderRepository{
 			orders: map[int64]*domain.Order{
@@ -2069,7 +2185,7 @@ func (f *fakePaymentRepository) FindByPaymentNo(ctx context.Context, paymentNo s
 		}
 	}
 
-	return nil, errors.New("payment not found")
+	return nil, repository.ErrPaymentNotFound
 }
 
 func (f *fakePaymentRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Payment, error) {
