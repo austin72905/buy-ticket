@@ -1844,6 +1844,17 @@ func (f *fakeSectionRepository) FindByEventAndID(ctx context.Context, eventID, s
 	return f.section, nil
 }
 
+func (f *fakeSectionRepository) ListAll(ctx context.Context) ([]domain.Section, error) {
+	if len(f.sections) > 0 {
+		return append([]domain.Section(nil), f.sections...), nil
+	}
+	if f.section == nil {
+		return nil, errors.New("section not found")
+	}
+
+	return []domain.Section{*f.section}, nil
+}
+
 func (f *fakeSectionRepository) ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error) {
 	if len(f.sections) > 0 {
 		sections := make([]domain.Section, 0)

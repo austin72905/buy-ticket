@@ -322,6 +322,75 @@ func (q *Queries) ListAdminEventSections(ctx context.Context, arg ListAdminEvent
 	return items, nil
 }
 
+const listAllSections = `-- name: ListAllSections :many
+SELECT
+    id,
+    event_id,
+    event_name,
+    section_name,
+    price,
+    total_quantity,
+    reserved_quantity,
+    sold_quantity,
+    purchase_limit,
+    status,
+    version,
+    created_at,
+    updated_at
+FROM event_sections
+ORDER BY event_id, id
+`
+
+type ListAllSectionsRow struct {
+	ID               int64              `json:"id"`
+	EventID          int64              `json:"event_id"`
+	EventName        string             `json:"event_name"`
+	SectionName      string             `json:"section_name"`
+	Price            int64              `json:"price"`
+	TotalQuantity    int32              `json:"total_quantity"`
+	ReservedQuantity int32              `json:"reserved_quantity"`
+	SoldQuantity     int32              `json:"sold_quantity"`
+	PurchaseLimit    int32              `json:"purchase_limit"`
+	Status           int16              `json:"status"`
+	Version          int64              `json:"version"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListAllSections(ctx context.Context) ([]ListAllSectionsRow, error) {
+	rows, err := q.db.Query(ctx, listAllSections)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllSectionsRow{}
+	for rows.Next() {
+		var i ListAllSectionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventID,
+			&i.EventName,
+			&i.SectionName,
+			&i.Price,
+			&i.TotalQuantity,
+			&i.ReservedQuantity,
+			&i.SoldQuantity,
+			&i.PurchaseLimit,
+			&i.Status,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSectionsByEventID = `-- name: ListSectionsByEventID :many
 SELECT
     id,

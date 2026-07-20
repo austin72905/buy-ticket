@@ -49,6 +49,7 @@ type Querier interface {
 	ListAdminEvents(ctx context.Context, organizerID int64) ([]ListAdminEventsRow, error)
 	ListAdminOrders(ctx context.Context, arg ListAdminOrdersParams) ([]ListAdminOrdersRow, error)
 	ListAdminUsers(ctx context.Context) ([]ListAdminUsersRow, error)
+	ListAllSections(ctx context.Context) ([]ListAllSectionsRow, error)
 	ListEvents(ctx context.Context) ([]ListEventsRow, error)
 	ListExpiredHoldingReservations(ctx context.Context, arg ListExpiredHoldingReservationsParams) ([]Reservation, error)
 	ListExpiredPendingOrders(ctx context.Context, arg ListExpiredPendingOrdersParams) ([]Order, error)

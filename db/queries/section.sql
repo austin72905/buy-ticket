@@ -37,6 +37,24 @@ FROM event_sections
 WHERE event_id = $1
 ORDER BY id;
 
+-- name: ListAllSections :many
+SELECT
+    id,
+    event_id,
+    event_name,
+    section_name,
+    price,
+    total_quantity,
+    reserved_quantity,
+    sold_quantity,
+    purchase_limit,
+    status,
+    version,
+    created_at,
+    updated_at
+FROM event_sections
+ORDER BY event_id, id;
+
 -- name: ListAdminEventSections :many
 SELECT
     s.id,

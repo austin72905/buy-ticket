@@ -351,6 +351,20 @@ func (r *PostgresSectionRepository) FindByEventAndID(ctx context.Context, eventI
 	return toDomainSectionFromGetSectionByEventAndID(record), nil
 }
 
+func (r *PostgresSectionRepository) ListAll(ctx context.Context) ([]domain.Section, error) {
+	records, err := r.queries.ListAllSections(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	sections := make([]domain.Section, 0, len(records))
+	for _, record := range records {
+		sections = append(sections, *toDomainSectionFromListAllSections(record))
+	}
+
+	return sections, nil
+}
+
 func (r *PostgresSectionRepository) ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error) {
 	records, err := r.queries.ListSectionsByEventID(ctx, eventID)
 	if err != nil {
@@ -1598,6 +1612,10 @@ func toDomainSection(record db.EventSection) *domain.Section {
 }
 
 func toDomainSectionFromGetSectionByEventAndID(record db.GetSectionByEventAndIDRow) *domain.Section {
+	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
+}
+
+func toDomainSectionFromListAllSections(record db.ListAllSectionsRow) *domain.Section {
 	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
 }
 

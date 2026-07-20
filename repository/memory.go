@@ -623,6 +623,19 @@ func (r *MemorySectionRepository) FindByEventAndID(ctx context.Context, eventID,
 	return &cloned, nil
 }
 
+func (r *MemorySectionRepository) ListAll(ctx context.Context) ([]domain.Section, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	sections := make([]domain.Section, 0, len(r.sections))
+	for _, section := range r.sections {
+		cloned := *section
+		sections = append(sections, cloned)
+	}
+
+	return sections, nil
+}
+
 func (r *MemorySectionRepository) ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

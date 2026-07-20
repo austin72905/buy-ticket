@@ -384,6 +384,13 @@ func (f *fakeSectionRepositoryForController) FindByEventAndID(ctx context.Contex
 	return f.section, nil
 }
 
+func (f *fakeSectionRepositoryForController) ListAll(ctx context.Context) ([]domain.Section, error) {
+	if f.section == nil {
+		return []domain.Section{}, nil
+	}
+	return []domain.Section{*f.section}, nil
+}
+
 func (f *fakeSectionRepositoryForController) ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error) {
 	return []domain.Section{}, nil
 }

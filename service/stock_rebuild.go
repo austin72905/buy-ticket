@@ -36,19 +36,5 @@ func (s *BookingService) ReconcileStock(ctx context.Context) (StockReconcileResu
 
 // 把所有 event 底下的 section 撈出來
 func (s *BookingService) listAllSections(ctx context.Context) ([]domain.Section, error) {
-	events, err := s.EventRepo.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	sections := make([]domain.Section, 0)
-	for _, event := range events {
-		eventSections, listErr := s.SectionRepo.ListByEventID(ctx, event.ID)
-		if listErr != nil {
-			return nil, listErr
-		}
-		sections = append(sections, eventSections...)
-	}
-
-	return sections, nil
+	return s.SectionRepo.ListAll(ctx)
 }
