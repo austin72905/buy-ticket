@@ -278,7 +278,7 @@ func (s *BookingService) ReserveTicket(ctx context.Context, input ReserveTicketI
 			UpdatedAt:   now,
 		}
 		// 建立 reservation
-		return repos.reservation.Save(ctx, reservation)
+		return repos.reservation.CreateFromEventSection(ctx, reservation, event, section)
 	})
 
 	if err != nil {

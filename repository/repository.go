@@ -13,6 +13,7 @@ var ErrPaymentAttemptNotFound = errors.New("payment attempt not found")
 var ErrAdminUserNotFound = errors.New("admin user not found")
 var ErrOrganizerNotFound = errors.New("organizer not found")
 var ErrResourceVersionConflict = errors.New("resource has been modified, please reload")
+var ErrReservationSnapshotMismatch = errors.New("reservation snapshot mismatch")
 var ErrOrderReservationMismatch = errors.New("order reservation mismatch")
 var ErrPaymentOrderMismatch = errors.New("payment order mismatch")
 
@@ -78,6 +79,7 @@ type ReservationRepository interface {
 	FindByID(ctx context.Context, reservationID int64) (*domain.Reservation, error)
 	FindActiveByUserAndEvent(ctx context.Context, userID, eventID int64, now time.Time) (*domain.Reservation, error)
 	ListByUserID(ctx context.Context, userID int64) ([]domain.Reservation, error)
+	CreateFromEventSection(ctx context.Context, reservation *domain.Reservation, event *domain.Event, section *domain.Section) error
 	Save(ctx context.Context, reservation *domain.Reservation) error
 }
 

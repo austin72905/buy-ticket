@@ -776,6 +776,14 @@ func (r *MemoryReservationRepository) FindActiveByUserAndEvent(ctx context.Conte
 	return nil, ErrReservationNotFound
 }
 
+func (r *MemoryReservationRepository) CreateFromEventSection(ctx context.Context, reservation *domain.Reservation, event *domain.Event, section *domain.Section) error {
+	if reservation.EventID != event.ID || reservation.EventID != section.EventID || reservation.SectionID != section.ID {
+		return ErrReservationSnapshotMismatch
+	}
+
+	return r.Save(ctx, reservation)
+}
+
 func (r *MemoryReservationRepository) Save(ctx context.Context, reservation *domain.Reservation) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -519,28 +519,7 @@ func (r *PostgresReservationRepository) Save(ctx context.Context, reservation *d
 			return err
 		}
 
-		record, err := r.queries.CreateReservation(ctx, db.CreateReservationParams{
-			ReservationNo: buildReservationNo(reservation.UserID),
-			EventID:       reservation.EventID,
-			EventName:     event.Name,
-			SectionID:     reservation.SectionID,
-			SectionName:   section.SectionName,
-			UserID:        reservation.UserID,
-			UserName:      "",
-			Quantity:      int32(reservation.Quantity),
-			UnitPrice:     reservation.UnitPrice,
-			TotalAmount:   reservation.TotalAmount,
-			Status:        int16(reservation.Status),
-			ExpiresAt:     toPgTimestamp(reservation.ExpiresAt),
-			CreatedAt:     toPgTimestamp(reservation.CreatedAt),
-			UpdatedAt:     toPgTimestamp(reservation.UpdatedAt),
-		})
-		if err != nil {
-			return err
-		}
-
-		*reservation = *toDomainReservation(record)
-		return nil
+		return r.CreateFromEventSection(ctx, reservation, toDomainEventFromGetEventByID(event), toDomainSectionFromGetSectionByEventAndID(section))
 	}
 
 	return r.queries.UpdateReservationStatus(ctx, db.UpdateReservationStatusParams{
@@ -548,6 +527,35 @@ func (r *PostgresReservationRepository) Save(ctx context.Context, reservation *d
 		Status:    int16(reservation.Status),
 		UpdatedAt: toPgTimestamp(reservation.UpdatedAt),
 	})
+}
+
+func (r *PostgresReservationRepository) CreateFromEventSection(ctx context.Context, reservation *domain.Reservation, event *domain.Event, section *domain.Section) error {
+	if reservation.EventID != event.ID || reservation.EventID != section.EventID || reservation.SectionID != section.ID {
+		return ErrReservationSnapshotMismatch
+	}
+
+	record, err := r.queries.CreateReservation(ctx, db.CreateReservationParams{
+		ReservationNo: buildReservationNo(reservation.UserID),
+		EventID:       reservation.EventID,
+		EventName:     event.Name,
+		SectionID:     reservation.SectionID,
+		SectionName:   section.Name,
+		UserID:        reservation.UserID,
+		UserName:      "",
+		Quantity:      int32(reservation.Quantity),
+		UnitPrice:     reservation.UnitPrice,
+		TotalAmount:   reservation.TotalAmount,
+		Status:        int16(reservation.Status),
+		ExpiresAt:     toPgTimestamp(reservation.ExpiresAt),
+		CreatedAt:     toPgTimestamp(reservation.CreatedAt),
+		UpdatedAt:     toPgTimestamp(reservation.UpdatedAt),
+	})
+	if err != nil {
+		return err
+	}
+
+	*reservation = *toDomainReservation(record)
+	return nil
 }
 
 func (r *PostgresOrderRepository) FindByID(ctx context.Context, orderID int64) (*domain.Order, error) {

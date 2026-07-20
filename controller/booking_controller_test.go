@@ -456,6 +456,14 @@ func (f *fakeReservationRepositoryForController) FindActiveByUserAndEvent(ctx co
 	return nil, repository.ErrReservationNotFound
 }
 
+func (f *fakeReservationRepositoryForController) CreateFromEventSection(ctx context.Context, reservation *domain.Reservation, event *domain.Event, section *domain.Section) error {
+	if reservation.EventID != event.ID || reservation.EventID != section.EventID || reservation.SectionID != section.ID {
+		return repository.ErrReservationSnapshotMismatch
+	}
+
+	return f.Save(ctx, reservation)
+}
+
 func (f *fakeReservationRepositoryForController) Save(ctx context.Context, reservation *domain.Reservation) error {
 	f.reservations[reservation.ID] = reservation
 	return nil
