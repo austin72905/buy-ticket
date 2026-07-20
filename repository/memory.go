@@ -1009,6 +1009,14 @@ func (r *MemoryPaymentRepository) ListByUserID(ctx context.Context, userID int64
 	return []domain.Payment{}, nil
 }
 
+func (r *MemoryPaymentRepository) CreateFromOrder(ctx context.Context, payment *domain.Payment, order *domain.Order) error {
+	if payment.OrderID != order.ID {
+		return ErrPaymentOrderMismatch
+	}
+
+	return r.Save(ctx, payment)
+}
+
 func (r *MemoryPaymentRepository) Save(ctx context.Context, payment *domain.Payment) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -434,7 +434,7 @@ func (s *BookingService) PayOrder(ctx context.Context, input PayOrderInput) (*do
 			return err
 		}
 
-		if err := repos.payment.Save(ctx, payment); err != nil {
+		if err := repos.payment.CreateFromOrder(ctx, payment, order); err != nil {
 			return err
 		}
 

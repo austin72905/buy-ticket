@@ -13,6 +13,7 @@ var ErrPaymentAttemptNotFound = errors.New("payment attempt not found")
 var ErrAdminUserNotFound = errors.New("admin user not found")
 var ErrOrganizerNotFound = errors.New("organizer not found")
 var ErrResourceVersionConflict = errors.New("resource has been modified, please reload")
+var ErrPaymentOrderMismatch = errors.New("payment order mismatch")
 
 type AdminUserRepository interface {
 	FindByID(ctx context.Context, adminUserID int64) (*domain.AdminUser, error)
@@ -90,6 +91,7 @@ type OrderRepository interface {
 type PaymentRepository interface {
 	FindByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error)
 	ListByUserID(ctx context.Context, userID int64) ([]domain.Payment, error)
+	CreateFromOrder(ctx context.Context, payment *domain.Payment, order *domain.Order) error
 	Save(ctx context.Context, payment *domain.Payment) error
 }
 

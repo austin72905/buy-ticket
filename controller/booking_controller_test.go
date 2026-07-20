@@ -513,6 +513,14 @@ func (f *fakePaymentRepositoryForController) ListByUserID(ctx context.Context, u
 	return []domain.Payment{}, nil
 }
 
+func (f *fakePaymentRepositoryForController) CreateFromOrder(ctx context.Context, payment *domain.Payment, order *domain.Order) error {
+	if payment.OrderID != order.ID {
+		return repository.ErrPaymentOrderMismatch
+	}
+
+	return f.Save(ctx, payment)
+}
+
 func (f *fakePaymentRepositoryForController) Save(ctx context.Context, payment *domain.Payment) error {
 	if f.payments == nil {
 		f.payments = map[int64]*domain.Payment{}

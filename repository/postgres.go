@@ -696,29 +696,7 @@ func (r *PostgresPaymentRepository) Save(ctx context.Context, payment *domain.Pa
 			return err
 		}
 
-		record, err := r.queries.CreatePayment(ctx, db.CreatePaymentParams{
-			PaymentNo:     payment.PaymentNo,
-			OrderID:       payment.OrderID,
-			OrderNo:       order.OrderNo,
-			ReservationID: order.ReservationID,
-			EventID:       order.EventID,
-			EventName:     order.EventName,
-			UserID:        order.UserID,
-			UserName:      order.UserName,
-			Method:        payment.Method,
-			Amount:        payment.Amount,
-			Status:        int16(payment.Status),
-			PaidAt:        nullablePgTimestamp(payment.PaidAt),
-			FailedAt:      nullablePgTimestamp(payment.FailedAt),
-			CreatedAt:     toPgTimestamp(payment.CreatedAt),
-			UpdatedAt:     toPgTimestamp(payment.UpdatedAt),
-		})
-		if err != nil {
-			return err
-		}
-
-		*payment = *toDomainPayment(record)
-		return nil
+		return r.CreateFromOrder(ctx, payment, toDomainOrder(order))
 	}
 
 	return r.queries.UpdatePaymentStatus(ctx, db.UpdatePaymentStatusParams{
@@ -728,6 +706,36 @@ func (r *PostgresPaymentRepository) Save(ctx context.Context, payment *domain.Pa
 		FailedAt:  nullablePgTimestamp(payment.FailedAt),
 		UpdatedAt: toPgTimestamp(payment.UpdatedAt),
 	})
+}
+
+func (r *PostgresPaymentRepository) CreateFromOrder(ctx context.Context, payment *domain.Payment, order *domain.Order) error {
+	if payment.OrderID != order.ID {
+		return ErrPaymentOrderMismatch
+	}
+
+	record, err := r.queries.CreatePayment(ctx, db.CreatePaymentParams{
+		PaymentNo:     payment.PaymentNo,
+		OrderID:       payment.OrderID,
+		OrderNo:       order.OrderNo,
+		ReservationID: order.ReservationID,
+		EventID:       order.EventID,
+		EventName:     order.EventName,
+		UserID:        order.UserID,
+		UserName:      order.UserName,
+		Method:        payment.Method,
+		Amount:        payment.Amount,
+		Status:        int16(payment.Status),
+		PaidAt:        nullablePgTimestamp(payment.PaidAt),
+		FailedAt:      nullablePgTimestamp(payment.FailedAt),
+		CreatedAt:     toPgTimestamp(payment.CreatedAt),
+		UpdatedAt:     toPgTimestamp(payment.UpdatedAt),
+	})
+	if err != nil {
+		return err
+	}
+
+	*payment = *toDomainPayment(record)
+	return nil
 }
 
 func (r *PostgresPaymentRepository) FindByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error) {
@@ -1667,9 +1675,13 @@ func toDomainOrder(record db.Order) *domain.Order {
 	return &domain.Order{
 		ID:            record.ID,
 		OrderNo:       record.OrderNo,
+		ReservationNo: record.ReservationNo,
 		UserID:        record.UserID,
+		UserName:      record.UserName,
 		EventID:       record.EventID,
+		EventName:     record.EventName,
 		SectionID:     record.SectionID,
+		SectionName:   record.SectionName,
 		ReservationID: record.ReservationID,
 		Quantity:      int(record.Quantity),
 		UnitPrice:     record.UnitPrice,
