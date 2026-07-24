@@ -272,7 +272,7 @@ function createOrder(reservationId, purchaseToken, buyerKey, cookieHeader) {
 }
 
 function classifyError(res) {
-  const message = String(safeJsonField(res, 'error') || '');
+  const message = String(safeJsonField(res, 'message') || safeJsonField(res, 'error') || '');
 
   if (message.includes('active reservation already exists')) {
     activeReservationErrors.add(1);
