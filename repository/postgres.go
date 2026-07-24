@@ -351,6 +351,20 @@ func (r *PostgresSectionRepository) FindByEventAndID(ctx context.Context, eventI
 	return toDomainSectionFromGetSectionByEventAndID(record), nil
 }
 
+func (r *PostgresSectionRepository) ListAll(ctx context.Context) ([]domain.Section, error) {
+	records, err := r.queries.ListAllSections(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	sections := make([]domain.Section, 0, len(records))
+	for _, record := range records {
+		sections = append(sections, *toDomainSectionFromListAllSections(record))
+	}
+
+	return sections, nil
+}
+
 func (r *PostgresSectionRepository) ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error) {
 	records, err := r.queries.ListSectionsByEventID(ctx, eventID)
 	if err != nil {
@@ -505,28 +519,7 @@ func (r *PostgresReservationRepository) Save(ctx context.Context, reservation *d
 			return err
 		}
 
-		record, err := r.queries.CreateReservation(ctx, db.CreateReservationParams{
-			ReservationNo: buildReservationNo(reservation.UserID),
-			EventID:       reservation.EventID,
-			EventName:     event.Name,
-			SectionID:     reservation.SectionID,
-			SectionName:   section.SectionName,
-			UserID:        reservation.UserID,
-			UserName:      "",
-			Quantity:      int32(reservation.Quantity),
-			UnitPrice:     reservation.UnitPrice,
-			TotalAmount:   reservation.TotalAmount,
-			Status:        int16(reservation.Status),
-			ExpiresAt:     toPgTimestamp(reservation.ExpiresAt),
-			CreatedAt:     toPgTimestamp(reservation.CreatedAt),
-			UpdatedAt:     toPgTimestamp(reservation.UpdatedAt),
-		})
-		if err != nil {
-			return err
-		}
-
-		*reservation = *toDomainReservation(record)
-		return nil
+		return r.CreateFromEventSection(ctx, reservation, toDomainEventFromGetEventByID(event), toDomainSectionFromGetSectionByEventAndID(section))
 	}
 
 	return r.queries.UpdateReservationStatus(ctx, db.UpdateReservationStatusParams{
@@ -534,6 +527,35 @@ func (r *PostgresReservationRepository) Save(ctx context.Context, reservation *d
 		Status:    int16(reservation.Status),
 		UpdatedAt: toPgTimestamp(reservation.UpdatedAt),
 	})
+}
+
+func (r *PostgresReservationRepository) CreateFromEventSection(ctx context.Context, reservation *domain.Reservation, event *domain.Event, section *domain.Section) error {
+	if reservation.EventID != event.ID || reservation.EventID != section.EventID || reservation.SectionID != section.ID {
+		return ErrReservationSnapshotMismatch
+	}
+
+	record, err := r.queries.CreateReservation(ctx, db.CreateReservationParams{
+		ReservationNo: buildReservationNo(reservation.UserID),
+		EventID:       reservation.EventID,
+		EventName:     event.Name,
+		SectionID:     reservation.SectionID,
+		SectionName:   section.Name,
+		UserID:        reservation.UserID,
+		UserName:      "",
+		Quantity:      int32(reservation.Quantity),
+		UnitPrice:     reservation.UnitPrice,
+		TotalAmount:   reservation.TotalAmount,
+		Status:        int16(reservation.Status),
+		ExpiresAt:     toPgTimestamp(reservation.ExpiresAt),
+		CreatedAt:     toPgTimestamp(reservation.CreatedAt),
+		UpdatedAt:     toPgTimestamp(reservation.UpdatedAt),
+	})
+	if err != nil {
+		return err
+	}
+
+	*reservation = *toDomainReservation(record)
+	return nil
 }
 
 func (r *PostgresOrderRepository) FindByID(ctx context.Context, orderID int64) (*domain.Order, error) {
@@ -640,31 +662,7 @@ func (r *PostgresOrderRepository) Save(ctx context.Context, order *domain.Order)
 			return err
 		}
 
-		record, err := r.queries.CreateOrder(ctx, db.CreateOrderParams{
-			OrderNo:       order.OrderNo,
-			ReservationID: order.ReservationID,
-			ReservationNo: reservation.ReservationNo,
-			EventID:       order.EventID,
-			EventName:     reservation.EventName,
-			SectionID:     order.SectionID,
-			SectionName:   reservation.SectionName,
-			UserID:        order.UserID,
-			UserName:      reservation.UserName,
-			Quantity:      int32(order.Quantity),
-			UnitPrice:     order.UnitPrice,
-			TotalAmount:   order.TotalAmount,
-			Status:        int16(order.Status),
-			ExpiresAt:     toPgTimestamp(order.ExpiresAt),
-			PaidAt:        nullablePgTimestamp(orderPaidAt(order)),
-			CreatedAt:     toPgTimestamp(order.CreatedAt),
-			UpdatedAt:     toPgTimestamp(order.UpdatedAt),
-		})
-		if err != nil {
-			return err
-		}
-
-		*order = *toDomainOrder(record)
-		return nil
+		return r.CreateFromReservation(ctx, order, toDomainReservation(reservation))
 	}
 
 	return r.queries.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
@@ -675,6 +673,38 @@ func (r *PostgresOrderRepository) Save(ctx context.Context, order *domain.Order)
 	})
 }
 
+func (r *PostgresOrderRepository) CreateFromReservation(ctx context.Context, order *domain.Order, reservation *domain.Reservation) error {
+	if order.ReservationID != reservation.ID {
+		return ErrOrderReservationMismatch
+	}
+
+	record, err := r.queries.CreateOrder(ctx, db.CreateOrderParams{
+		OrderNo:       order.OrderNo,
+		ReservationID: order.ReservationID,
+		ReservationNo: reservation.ReservationNo,
+		EventID:       order.EventID,
+		EventName:     reservation.EventName,
+		SectionID:     order.SectionID,
+		SectionName:   reservation.SectionName,
+		UserID:        order.UserID,
+		UserName:      reservation.UserName,
+		Quantity:      int32(order.Quantity),
+		UnitPrice:     order.UnitPrice,
+		TotalAmount:   order.TotalAmount,
+		Status:        int16(order.Status),
+		ExpiresAt:     toPgTimestamp(order.ExpiresAt),
+		PaidAt:        nullablePgTimestamp(orderPaidAt(order)),
+		CreatedAt:     toPgTimestamp(order.CreatedAt),
+		UpdatedAt:     toPgTimestamp(order.UpdatedAt),
+	})
+	if err != nil {
+		return err
+	}
+
+	*order = *toDomainOrder(record)
+	return nil
+}
+
 func (r *PostgresPaymentRepository) Save(ctx context.Context, payment *domain.Payment) error {
 	if payment.ID == 0 {
 		order, err := r.queries.GetOrderByID(ctx, payment.OrderID)
@@ -682,29 +712,7 @@ func (r *PostgresPaymentRepository) Save(ctx context.Context, payment *domain.Pa
 			return err
 		}
 
-		record, err := r.queries.CreatePayment(ctx, db.CreatePaymentParams{
-			PaymentNo:     payment.PaymentNo,
-			OrderID:       payment.OrderID,
-			OrderNo:       order.OrderNo,
-			ReservationID: order.ReservationID,
-			EventID:       order.EventID,
-			EventName:     order.EventName,
-			UserID:        order.UserID,
-			UserName:      order.UserName,
-			Method:        payment.Method,
-			Amount:        payment.Amount,
-			Status:        int16(payment.Status),
-			PaidAt:        nullablePgTimestamp(payment.PaidAt),
-			FailedAt:      nullablePgTimestamp(payment.FailedAt),
-			CreatedAt:     toPgTimestamp(payment.CreatedAt),
-			UpdatedAt:     toPgTimestamp(payment.UpdatedAt),
-		})
-		if err != nil {
-			return err
-		}
-
-		*payment = *toDomainPayment(record)
-		return nil
+		return r.CreateFromOrder(ctx, payment, toDomainOrder(order))
 	}
 
 	return r.queries.UpdatePaymentStatus(ctx, db.UpdatePaymentStatusParams{
@@ -716,9 +724,42 @@ func (r *PostgresPaymentRepository) Save(ctx context.Context, payment *domain.Pa
 	})
 }
 
+func (r *PostgresPaymentRepository) CreateFromOrder(ctx context.Context, payment *domain.Payment, order *domain.Order) error {
+	if payment.OrderID != order.ID {
+		return ErrPaymentOrderMismatch
+	}
+
+	record, err := r.queries.CreatePayment(ctx, db.CreatePaymentParams{
+		PaymentNo:     payment.PaymentNo,
+		OrderID:       payment.OrderID,
+		OrderNo:       order.OrderNo,
+		ReservationID: order.ReservationID,
+		EventID:       order.EventID,
+		EventName:     order.EventName,
+		UserID:        order.UserID,
+		UserName:      order.UserName,
+		Method:        payment.Method,
+		Amount:        payment.Amount,
+		Status:        int16(payment.Status),
+		PaidAt:        nullablePgTimestamp(payment.PaidAt),
+		FailedAt:      nullablePgTimestamp(payment.FailedAt),
+		CreatedAt:     toPgTimestamp(payment.CreatedAt),
+		UpdatedAt:     toPgTimestamp(payment.UpdatedAt),
+	})
+	if err != nil {
+		return err
+	}
+
+	*payment = *toDomainPayment(record)
+	return nil
+}
+
 func (r *PostgresPaymentRepository) FindByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error) {
 	record, err := r.queries.GetPaymentByPaymentNo(ctx, paymentNo)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrPaymentNotFound
+		}
 		return nil, err
 	}
 
@@ -1132,23 +1173,6 @@ func (r *PostgresIdempotencyRepository) Complete(ctx context.Context, key, endpo
 	})
 }
 
-func toDomainEvent(record db.Event) *domain.Event {
-	return &domain.Event{
-		ID:          record.ID,
-		OrganizerID: record.OrganizerID,
-		Name:        record.Name,
-		StartAt:     record.StartAt.Time,
-		EndAt:       record.EndAt.Time,
-		SaleStartAt: record.SaleStartAt.Time,
-		SaleEndAt:   record.SaleEndAt.Time,
-		Venue:       record.Venue,
-		Status:      domain.EventStatus(record.Status),
-		Version:     record.Version,
-		CreatedAt:   record.CreatedAt.Time,
-		UpdatedAt:   record.UpdatedAt.Time,
-	}
-}
-
 func toDomainEventFromGetEventByID(record db.GetEventByIDRow) *domain.Event {
 	return &domain.Event{
 		ID:          record.ID,
@@ -1238,17 +1262,6 @@ func toDomainEventFromCreateEvent(record db.CreateEventRow) *domain.Event {
 	}
 }
 
-func toDomainOrganizer(record db.Organizer) *domain.Organizer {
-	return &domain.Organizer{
-		ID:        record.ID,
-		Name:      record.Name,
-		Status:    domain.OrganizerStatus(record.Status),
-		Version:   record.Version,
-		CreatedAt: record.CreatedAt.Time,
-		UpdatedAt: record.UpdatedAt.Time,
-	}
-}
-
 func toDomainOrganizerFromGetOrganizerByID(record db.GetOrganizerByIDRow) *domain.Organizer {
 	return &domain.Organizer{
 		ID:        record.ID,
@@ -1306,25 +1319,6 @@ func toDomainOrganizerSummary(id int64, name pgtype.Text, status pgtype.Int2) *d
 		organizer.Status = domain.OrganizerStatus(status.Int16)
 	}
 	return organizer
-}
-
-func toDomainAdminUser(record db.AdminUser) *domain.AdminUser {
-	adminUser := &domain.AdminUser{
-		ID:           record.ID,
-		Name:         record.Name,
-		Email:        record.Email,
-		PasswordHash: record.PasswordHash,
-		Role:         domain.AdminRole(record.Role),
-		Status:       domain.AdminUserStatus(record.Status),
-		Version:      record.Version,
-		CreatedAt:    record.CreatedAt.Time,
-		UpdatedAt:    record.UpdatedAt.Time,
-	}
-	if record.OrganizerID.Valid {
-		organizerID := record.OrganizerID.Int64
-		adminUser.OrganizerID = &organizerID
-	}
-	return adminUser
 }
 
 func toDomainAdminUserFromGetAdminUserByID(record db.GetAdminUserByIDRow) *domain.AdminUser {
@@ -1502,17 +1496,6 @@ func stringFromSQLValue(value interface{}) (string, bool) {
 	}
 }
 
-func toDomainUser(record db.User) *domain.User {
-	return &domain.User{
-		ID:           record.ID,
-		Name:         record.Name,
-		Email:        record.Email,
-		PasswordHash: record.PasswordHash,
-		CreatedAt:    record.CreatedAt.Time,
-		UpdatedAt:    record.UpdatedAt.Time,
-	}
-}
-
 func toDomainUserFromGetUserByID(record db.GetUserByIDRow) *domain.User {
 	return &domain.User{
 		ID:           record.ID,
@@ -1593,11 +1576,11 @@ func newDomainSection(
 	}
 }
 
-func toDomainSection(record db.EventSection) *domain.Section {
+func toDomainSectionFromGetSectionByEventAndID(record db.GetSectionByEventAndIDRow) *domain.Section {
 	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
 }
 
-func toDomainSectionFromGetSectionByEventAndID(record db.GetSectionByEventAndIDRow) *domain.Section {
+func toDomainSectionFromListAllSections(record db.ListAllSectionsRow) *domain.Section {
 	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
 }
 
@@ -1631,17 +1614,21 @@ func toDomainSectionFromConfirmSectionSale(record db.ConfirmSectionSaleRow) *dom
 
 func toDomainReservation(record db.Reservation) *domain.Reservation {
 	return &domain.Reservation{
-		ID:          record.ID,
-		EventID:     record.EventID,
-		SectionID:   record.SectionID,
-		UserID:      record.UserID,
-		Quantity:    int(record.Quantity),
-		UnitPrice:   record.UnitPrice,
-		TotalAmount: record.TotalAmount,
-		Status:      domain.ReservationStatus(record.Status),
-		ExpiresAt:   record.ExpiresAt.Time,
-		CreatedAt:   record.CreatedAt.Time,
-		UpdatedAt:   record.UpdatedAt.Time,
+		ID:            record.ID,
+		ReservationNo: record.ReservationNo,
+		EventID:       record.EventID,
+		EventName:     record.EventName,
+		SectionID:     record.SectionID,
+		SectionName:   record.SectionName,
+		UserID:        record.UserID,
+		UserName:      record.UserName,
+		Quantity:      int(record.Quantity),
+		UnitPrice:     record.UnitPrice,
+		TotalAmount:   record.TotalAmount,
+		Status:        domain.ReservationStatus(record.Status),
+		ExpiresAt:     record.ExpiresAt.Time,
+		CreatedAt:     record.CreatedAt.Time,
+		UpdatedAt:     record.UpdatedAt.Time,
 	}
 }
 
@@ -1649,9 +1636,13 @@ func toDomainOrder(record db.Order) *domain.Order {
 	return &domain.Order{
 		ID:            record.ID,
 		OrderNo:       record.OrderNo,
+		ReservationNo: record.ReservationNo,
 		UserID:        record.UserID,
+		UserName:      record.UserName,
 		EventID:       record.EventID,
+		EventName:     record.EventName,
 		SectionID:     record.SectionID,
+		SectionName:   record.SectionName,
 		ReservationID: record.ReservationID,
 		Quantity:      int(record.Quantity),
 		UnitPrice:     record.UnitPrice,
@@ -1824,10 +1815,6 @@ func newDomainPaymentAttempt(
 	}
 
 	return attempt
-}
-
-func toDomainPaymentAttempt(record db.PaymentAttempt) *domain.PaymentAttempt {
-	return newDomainPaymentAttempt(record.ID, record.OrderID, record.PaymentID, record.IdempotencyKey, record.Provider, record.MerchantTradeNo, record.ProviderTradeNo, record.Method, record.Amount, record.Status, record.RequestPayload, record.ResponsePayload, record.CallbackPayload, record.FailureReason, record.ExpiresAt, record.SucceededAt, record.FailedAt, record.ReconcileAttempts, record.NextReconcileAt, record.LastReconcileError, record.CreatedAt, record.UpdatedAt)
 }
 
 func toDomainPaymentAttemptFromCreatePaymentAttempt(record db.CreatePaymentAttemptRow) *domain.PaymentAttempt {

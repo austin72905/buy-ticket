@@ -623,6 +623,19 @@ func (r *MemorySectionRepository) FindByEventAndID(ctx context.Context, eventID,
 	return &cloned, nil
 }
 
+func (r *MemorySectionRepository) ListAll(ctx context.Context) ([]domain.Section, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	sections := make([]domain.Section, 0, len(r.sections))
+	for _, section := range r.sections {
+		cloned := *section
+		sections = append(sections, cloned)
+	}
+
+	return sections, nil
+}
+
 func (r *MemorySectionRepository) ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -761,6 +774,14 @@ func (r *MemoryReservationRepository) FindActiveByUserAndEvent(ctx context.Conte
 	}
 
 	return nil, ErrReservationNotFound
+}
+
+func (r *MemoryReservationRepository) CreateFromEventSection(ctx context.Context, reservation *domain.Reservation, event *domain.Event, section *domain.Section) error {
+	if reservation.EventID != event.ID || reservation.EventID != section.EventID || reservation.SectionID != section.ID {
+		return ErrReservationSnapshotMismatch
+	}
+
+	return r.Save(ctx, reservation)
 }
 
 func (r *MemoryReservationRepository) Save(ctx context.Context, reservation *domain.Reservation) error {
@@ -948,6 +969,14 @@ func (r *MemoryOrderRepository) ListExpiredPending(ctx context.Context, now time
 	return orders, nil
 }
 
+func (r *MemoryOrderRepository) CreateFromReservation(ctx context.Context, order *domain.Order, reservation *domain.Reservation) error {
+	if order.ReservationID != reservation.ID {
+		return ErrOrderReservationMismatch
+	}
+
+	return r.Save(ctx, order)
+}
+
 func (r *MemoryOrderRepository) Save(ctx context.Context, order *domain.Order) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -994,6 +1023,14 @@ func (r *MemoryPaymentRepository) FindByPaymentNo(ctx context.Context, paymentNo
 
 func (r *MemoryPaymentRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Payment, error) {
 	return []domain.Payment{}, nil
+}
+
+func (r *MemoryPaymentRepository) CreateFromOrder(ctx context.Context, payment *domain.Payment, order *domain.Order) error {
+	if payment.OrderID != order.ID {
+		return ErrPaymentOrderMismatch
+	}
+
+	return r.Save(ctx, payment)
 }
 
 func (r *MemoryPaymentRepository) Save(ctx context.Context, payment *domain.Payment) error {

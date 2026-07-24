@@ -384,6 +384,13 @@ func (f *fakeSectionRepositoryForController) FindByEventAndID(ctx context.Contex
 	return f.section, nil
 }
 
+func (f *fakeSectionRepositoryForController) ListAll(ctx context.Context) ([]domain.Section, error) {
+	if f.section == nil {
+		return []domain.Section{}, nil
+	}
+	return []domain.Section{*f.section}, nil
+}
+
 func (f *fakeSectionRepositoryForController) ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error) {
 	return []domain.Section{}, nil
 }
@@ -449,6 +456,14 @@ func (f *fakeReservationRepositoryForController) FindActiveByUserAndEvent(ctx co
 	return nil, repository.ErrReservationNotFound
 }
 
+func (f *fakeReservationRepositoryForController) CreateFromEventSection(ctx context.Context, reservation *domain.Reservation, event *domain.Event, section *domain.Section) error {
+	if reservation.EventID != event.ID || reservation.EventID != section.EventID || reservation.SectionID != section.ID {
+		return repository.ErrReservationSnapshotMismatch
+	}
+
+	return f.Save(ctx, reservation)
+}
+
 func (f *fakeReservationRepositoryForController) Save(ctx context.Context, reservation *domain.Reservation) error {
 	f.reservations[reservation.ID] = reservation
 	return nil
@@ -483,6 +498,14 @@ func (f *fakeOrderRepositoryForController) ListByUserID(ctx context.Context, use
 	return []domain.Order{}, nil
 }
 
+func (f *fakeOrderRepositoryForController) CreateFromReservation(ctx context.Context, order *domain.Order, reservation *domain.Reservation) error {
+	if order.ReservationID != reservation.ID {
+		return repository.ErrOrderReservationMismatch
+	}
+
+	return f.Save(ctx, order)
+}
+
 func (f *fakeOrderRepositoryForController) Save(ctx context.Context, order *domain.Order) error {
 	f.orders[order.ID] = order
 	return nil
@@ -499,11 +522,19 @@ func (f *fakePaymentRepositoryForController) FindByPaymentNo(ctx context.Context
 			return payment, nil
 		}
 	}
-	return nil, errors.New("payment not found")
+	return nil, repository.ErrPaymentNotFound
 }
 
 func (f *fakePaymentRepositoryForController) ListByUserID(ctx context.Context, userID int64) ([]domain.Payment, error) {
 	return []domain.Payment{}, nil
+}
+
+func (f *fakePaymentRepositoryForController) CreateFromOrder(ctx context.Context, payment *domain.Payment, order *domain.Order) error {
+	if payment.OrderID != order.ID {
+		return repository.ErrPaymentOrderMismatch
+	}
+
+	return f.Save(ctx, payment)
 }
 
 func (f *fakePaymentRepositoryForController) Save(ctx context.Context, payment *domain.Payment) error {

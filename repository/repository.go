@@ -13,6 +13,9 @@ var ErrPaymentAttemptNotFound = errors.New("payment attempt not found")
 var ErrAdminUserNotFound = errors.New("admin user not found")
 var ErrOrganizerNotFound = errors.New("organizer not found")
 var ErrResourceVersionConflict = errors.New("resource has been modified, please reload")
+var ErrReservationSnapshotMismatch = errors.New("reservation snapshot mismatch")
+var ErrOrderReservationMismatch = errors.New("order reservation mismatch")
+var ErrPaymentOrderMismatch = errors.New("payment order mismatch")
 
 type AdminUserRepository interface {
 	FindByID(ctx context.Context, adminUserID int64) (*domain.AdminUser, error)
@@ -64,6 +67,7 @@ type UserRepository interface {
 
 type SectionRepository interface {
 	FindByEventAndID(ctx context.Context, eventID, sectionID int64) (*domain.Section, error)
+	ListAll(ctx context.Context) ([]domain.Section, error)
 	ListByEventID(ctx context.Context, eventID int64) ([]domain.Section, error)
 	ReserveInventory(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error)
 	ReleaseInventory(ctx context.Context, eventID, sectionID int64, quantity int, now time.Time) (*domain.Section, error)
@@ -75,6 +79,7 @@ type ReservationRepository interface {
 	FindByID(ctx context.Context, reservationID int64) (*domain.Reservation, error)
 	FindActiveByUserAndEvent(ctx context.Context, userID, eventID int64, now time.Time) (*domain.Reservation, error)
 	ListByUserID(ctx context.Context, userID int64) ([]domain.Reservation, error)
+	CreateFromEventSection(ctx context.Context, reservation *domain.Reservation, event *domain.Event, section *domain.Section) error
 	Save(ctx context.Context, reservation *domain.Reservation) error
 }
 
@@ -83,12 +88,14 @@ type OrderRepository interface {
 	FindByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error)
 	ListExpiredPending(ctx context.Context, now time.Time, limit int) ([]domain.Order, error)
 	ListByUserID(ctx context.Context, userID int64) ([]domain.Order, error)
+	CreateFromReservation(ctx context.Context, order *domain.Order, reservation *domain.Reservation) error
 	Save(ctx context.Context, order *domain.Order) error
 }
 
 type PaymentRepository interface {
 	FindByPaymentNo(ctx context.Context, paymentNo string) (*domain.Payment, error)
 	ListByUserID(ctx context.Context, userID int64) ([]domain.Payment, error)
+	CreateFromOrder(ctx context.Context, payment *domain.Payment, order *domain.Order) error
 	Save(ctx context.Context, payment *domain.Payment) error
 }
 

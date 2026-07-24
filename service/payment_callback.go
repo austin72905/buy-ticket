@@ -39,25 +39,7 @@ func (s *BookingService) HandleECPayCallback(ctx context.Context, input HandleEC
 		return ErrInvalidPaymentCallback
 	}
 
-	if err := s.VerifyMockPaymentCallback(VerifyMockPaymentCallbackInput{
-		MerchantID:           input.MerchantID,
-		MerchantTradeNo:      input.MerchantTradeNo,
-		RtnCode:              input.RtnCode,
-		RtnMsg:               input.RtnMsg,
-		TradeNo:              input.TradeNo,
-		TradeAmt:             input.TradeAmt,
-		PaymentDate:          input.PaymentDate,
-		PaymentType:          input.PaymentType,
-		PaymentTypeChargeFee: input.PaymentTypeChargeFee,
-		TradeDate:            input.TradeDate,
-		SimulatePaid:         input.SimulatePaid,
-		CustomField1:         input.CustomField1,
-		CustomField2:         input.CustomField2,
-		CustomField3:         input.CustomField3,
-		CustomField4:         input.CustomField4,
-		CheckMacValue:        input.CheckMacValue,
-		ReturnStatus:         input.ReturnStatus,
-	}); err != nil {
+	if err := s.VerifyMockPaymentCallback(VerifyMockPaymentCallbackInput(input)); err != nil {
 		return err
 	}
 
@@ -108,38 +90,34 @@ func (s *BookingService) completeSuccessfulPaymentAttempt(ctx context.Context, a
 		method = "ecpay"
 	}
 
-	if existingPayment, err := s.PaymentRepo.FindByPaymentNo(ctx, providerTradeNo); err == nil && existingPayment != nil {
-		if attempt.Status != domain.PaymentAttemptStatusSucceeded {
-			if attempt.MarkSucceeded(existingPayment.ID, providerTradeNo, payload, paidAt) {
-				return s.PaymentAttemptRepo.Save(ctx, attempt)
+	return s.withTx(ctx, func(repos bookingRepos) error {
+		if existingPayment, err := repos.payment.FindByPaymentNo(ctx, providerTradeNo); err == nil && existingPayment != nil {
+			if attempt.Status != domain.PaymentAttemptStatusSucceeded {
+				if attempt.MarkSucceeded(existingPayment.ID, providerTradeNo, payload, paidAt) {
+					return repos.paymentAttempt.Save(ctx, attempt)
+				}
 			}
+			return nil
+		} else if err != nil && !errors.Is(err, repository.ErrPaymentNotFound) {
+			return err
+		}
+
+		payment, err := s.payOrderWithRepos(ctx, repos, PayOrderInput{
+			OrderID:   attempt.OrderID,
+			PaymentNo: providerTradeNo,
+			Method:    method,
+			Amount:    amount,
+			PaidAt:    paidAt,
+		})
+		if err != nil {
+			return err
+		}
+
+		if attempt.MarkSucceeded(payment.ID, providerTradeNo, payload, paidAt) {
+			return repos.paymentAttempt.Save(ctx, attempt)
 		}
 		return nil
-	}
-
-	order, err := s.OrderRepo.FindByID(ctx, attempt.OrderID)
-	if err != nil {
-		return err
-	}
-	if order.Status == domain.OrderStatusPaid {
-		return nil
-	}
-
-	payment, err := s.PayOrder(ctx, PayOrderInput{
-		OrderID:   order.ID,
-		PaymentNo: providerTradeNo,
-		Method:    method,
-		Amount:    amount,
-		PaidAt:    paidAt,
 	})
-	if err != nil {
-		return err
-	}
-
-	if attempt.MarkSucceeded(payment.ID, providerTradeNo, payload, paidAt) {
-		return s.PaymentAttemptRepo.Save(ctx, attempt)
-	}
-	return nil
 }
 
 func (s *BookingService) findPaymentAttemptForCallback(ctx context.Context, merchantTradeNo string) (*domain.PaymentAttempt, error) {

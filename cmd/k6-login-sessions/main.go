@@ -120,7 +120,9 @@ func checkHealth(client *http.Client, baseURL string) error {
 	if err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("health check failed with status %d", response.StatusCode)
@@ -193,7 +195,9 @@ func loginUser(client *http.Client, baseURL, email, password string) (string, er
 	if err != nil {
 		return "", fmt.Errorf("login %s failed: %w", email, err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 
 	if response.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(response.Body)

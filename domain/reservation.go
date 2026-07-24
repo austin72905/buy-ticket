@@ -12,17 +12,21 @@ const (
 )
 
 type Reservation struct {
-	ID          int64
-	EventID     int64
-	SectionID   int64
-	UserID      int64
-	Quantity    int
-	UnitPrice   int64
-	TotalAmount int64
-	Status      ReservationStatus
-	ExpiresAt   time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID            int64
+	ReservationNo string
+	EventID       int64
+	EventName     string
+	SectionID     int64
+	SectionName   string
+	UserID        int64
+	UserName      string
+	Quantity      int
+	UnitPrice     int64
+	TotalAmount   int64
+	Status        ReservationStatus
+	ExpiresAt     time.Time
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 func (r Reservation) IsExpired(now time.Time) bool {

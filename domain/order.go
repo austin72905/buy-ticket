@@ -14,9 +14,13 @@ const (
 type Order struct {
 	ID            int64
 	OrderNo       string
+	ReservationNo string
 	UserID        int64
+	UserName      string
 	EventID       int64
+	EventName     string
 	SectionID     int64
+	SectionName   string
 	ReservationID int64
 	Quantity      int
 	UnitPrice     int64
