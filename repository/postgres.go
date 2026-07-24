@@ -1173,23 +1173,6 @@ func (r *PostgresIdempotencyRepository) Complete(ctx context.Context, key, endpo
 	})
 }
 
-func toDomainEvent(record db.Event) *domain.Event {
-	return &domain.Event{
-		ID:          record.ID,
-		OrganizerID: record.OrganizerID,
-		Name:        record.Name,
-		StartAt:     record.StartAt.Time,
-		EndAt:       record.EndAt.Time,
-		SaleStartAt: record.SaleStartAt.Time,
-		SaleEndAt:   record.SaleEndAt.Time,
-		Venue:       record.Venue,
-		Status:      domain.EventStatus(record.Status),
-		Version:     record.Version,
-		CreatedAt:   record.CreatedAt.Time,
-		UpdatedAt:   record.UpdatedAt.Time,
-	}
-}
-
 func toDomainEventFromGetEventByID(record db.GetEventByIDRow) *domain.Event {
 	return &domain.Event{
 		ID:          record.ID,
@@ -1279,17 +1262,6 @@ func toDomainEventFromCreateEvent(record db.CreateEventRow) *domain.Event {
 	}
 }
 
-func toDomainOrganizer(record db.Organizer) *domain.Organizer {
-	return &domain.Organizer{
-		ID:        record.ID,
-		Name:      record.Name,
-		Status:    domain.OrganizerStatus(record.Status),
-		Version:   record.Version,
-		CreatedAt: record.CreatedAt.Time,
-		UpdatedAt: record.UpdatedAt.Time,
-	}
-}
-
 func toDomainOrganizerFromGetOrganizerByID(record db.GetOrganizerByIDRow) *domain.Organizer {
 	return &domain.Organizer{
 		ID:        record.ID,
@@ -1347,25 +1319,6 @@ func toDomainOrganizerSummary(id int64, name pgtype.Text, status pgtype.Int2) *d
 		organizer.Status = domain.OrganizerStatus(status.Int16)
 	}
 	return organizer
-}
-
-func toDomainAdminUser(record db.AdminUser) *domain.AdminUser {
-	adminUser := &domain.AdminUser{
-		ID:           record.ID,
-		Name:         record.Name,
-		Email:        record.Email,
-		PasswordHash: record.PasswordHash,
-		Role:         domain.AdminRole(record.Role),
-		Status:       domain.AdminUserStatus(record.Status),
-		Version:      record.Version,
-		CreatedAt:    record.CreatedAt.Time,
-		UpdatedAt:    record.UpdatedAt.Time,
-	}
-	if record.OrganizerID.Valid {
-		organizerID := record.OrganizerID.Int64
-		adminUser.OrganizerID = &organizerID
-	}
-	return adminUser
 }
 
 func toDomainAdminUserFromGetAdminUserByID(record db.GetAdminUserByIDRow) *domain.AdminUser {
@@ -1543,17 +1496,6 @@ func stringFromSQLValue(value interface{}) (string, bool) {
 	}
 }
 
-func toDomainUser(record db.User) *domain.User {
-	return &domain.User{
-		ID:           record.ID,
-		Name:         record.Name,
-		Email:        record.Email,
-		PasswordHash: record.PasswordHash,
-		CreatedAt:    record.CreatedAt.Time,
-		UpdatedAt:    record.UpdatedAt.Time,
-	}
-}
-
 func toDomainUserFromGetUserByID(record db.GetUserByIDRow) *domain.User {
 	return &domain.User{
 		ID:           record.ID,
@@ -1632,10 +1574,6 @@ func newDomainSection(
 		CreatedAt:        createdAt.Time,
 		UpdatedAt:        updatedAt.Time,
 	}
-}
-
-func toDomainSection(record db.EventSection) *domain.Section {
-	return newDomainSection(record.ID, record.EventID, record.SectionName, record.Price, record.TotalQuantity, record.ReservedQuantity, record.SoldQuantity, record.PurchaseLimit, record.Status, record.Version, record.CreatedAt, record.UpdatedAt)
 }
 
 func toDomainSectionFromGetSectionByEventAndID(record db.GetSectionByEventAndIDRow) *domain.Section {
@@ -1877,10 +1815,6 @@ func newDomainPaymentAttempt(
 	}
 
 	return attempt
-}
-
-func toDomainPaymentAttempt(record db.PaymentAttempt) *domain.PaymentAttempt {
-	return newDomainPaymentAttempt(record.ID, record.OrderID, record.PaymentID, record.IdempotencyKey, record.Provider, record.MerchantTradeNo, record.ProviderTradeNo, record.Method, record.Amount, record.Status, record.RequestPayload, record.ResponsePayload, record.CallbackPayload, record.FailureReason, record.ExpiresAt, record.SucceededAt, record.FailedAt, record.ReconcileAttempts, record.NextReconcileAt, record.LastReconcileError, record.CreatedAt, record.UpdatedAt)
 }
 
 func toDomainPaymentAttemptFromCreatePaymentAttempt(record db.CreatePaymentAttemptRow) *domain.PaymentAttempt {

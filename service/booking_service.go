@@ -809,7 +809,9 @@ func (s *BookingService) withTx(ctx context.Context, fn func(repos bookingRepos)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
 
 	queries := db.New(tx)
 	repos := bookingRepos{

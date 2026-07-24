@@ -39,25 +39,7 @@ func (s *BookingService) HandleECPayCallback(ctx context.Context, input HandleEC
 		return ErrInvalidPaymentCallback
 	}
 
-	if err := s.VerifyMockPaymentCallback(VerifyMockPaymentCallbackInput{
-		MerchantID:           input.MerchantID,
-		MerchantTradeNo:      input.MerchantTradeNo,
-		RtnCode:              input.RtnCode,
-		RtnMsg:               input.RtnMsg,
-		TradeNo:              input.TradeNo,
-		TradeAmt:             input.TradeAmt,
-		PaymentDate:          input.PaymentDate,
-		PaymentType:          input.PaymentType,
-		PaymentTypeChargeFee: input.PaymentTypeChargeFee,
-		TradeDate:            input.TradeDate,
-		SimulatePaid:         input.SimulatePaid,
-		CustomField1:         input.CustomField1,
-		CustomField2:         input.CustomField2,
-		CustomField3:         input.CustomField3,
-		CustomField4:         input.CustomField4,
-		CheckMacValue:        input.CheckMacValue,
-		ReturnStatus:         input.ReturnStatus,
-	}); err != nil {
+	if err := s.VerifyMockPaymentCallback(VerifyMockPaymentCallbackInput(input)); err != nil {
 		return err
 	}
 
