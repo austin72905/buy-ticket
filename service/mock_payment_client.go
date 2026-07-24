@@ -163,7 +163,9 @@ func (c *HTTPMockPaymentClient) Query(ctx context.Context, input MockPaymentQuer
 	if err != nil {
 		return nil, nil, err
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 
 	responseBody := bytes.Buffer{}
 	if _, err := responseBody.ReadFrom(response.Body); err != nil {
