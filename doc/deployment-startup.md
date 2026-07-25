@@ -73,6 +73,40 @@ cd D:\SourceCode\Go\buy-ticket
 docker build -t buy-ticket:local .
 ```
 
+### Migration image
+
+Release tags also build a dedicated migration image:
+
+```text
+ghcr.io/austin72905/buy-ticket-migrate:<tag>
+```
+
+The image contains:
+
+```text
+/usr/local/bin/migrate
+/app/migrations
+```
+
+Local build:
+
+```powershell
+docker build -f Dockerfile.migrate -t buy-ticket-migrate:local .
+```
+
+The Helm chart can run migrations as a pre-install/pre-upgrade Job when enabled:
+
+```bash
+helm upgrade --install buy-ticket ./charts/buy-ticket \
+  -n buy-ticket \
+  --create-namespace \
+  --set migration.enabled=true \
+  --set migration.image.repository=ghcr.io/austin72905/buy-ticket-migrate \
+  --set migration.image.tag=v0.1.0
+```
+
+Keep `migration.enabled=false` for deploys that should not run database migrations.
+
 ## 4. 單機 k3s 部署
 
 ### 前提

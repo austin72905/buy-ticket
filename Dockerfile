@@ -17,7 +17,6 @@ FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
 COPY --from=builder /out/buy-ticket /app/buy-ticket
-COPY --from=builder /src/migrations /app/migrations
 
 ENV APP_ENV=dev
 EXPOSE 8080

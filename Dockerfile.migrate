@@ -1,0 +1,12 @@
+# syntax=docker/dockerfile:1.7
+#
+# Build from this repository:
+#   docker build -f Dockerfile.migrate -t buy-ticket-migrate:local .
+
+FROM migrate/migrate:v4.18.3
+
+WORKDIR /app
+COPY migrations /app/migrations
+
+ENTRYPOINT ["migrate", "-path", "/app/migrations"]
+CMD ["-help"]
