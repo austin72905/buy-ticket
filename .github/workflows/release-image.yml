@@ -12,6 +12,7 @@ permissions:
 env:
   BACKEND_IMAGE_NAME: ghcr.io/${{ github.repository }}
   WEB_IMAGE_NAME: ghcr.io/${{ github.repository }}-web
+  MIGRATION_IMAGE_NAME: ghcr.io/${{ github.repository }}-migrate
 
 jobs:
   test:
@@ -68,3 +69,11 @@ jobs:
           build-args: |
             VITE_API_BASE_URL=/api
             VITE_API_TIMEOUT_MS=10000
+
+      - name: Build and push migration image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.migrate
+          push: true
+          tags: ${{ env.MIGRATION_IMAGE_NAME }}:${{ github.ref_name }}

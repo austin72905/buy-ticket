@@ -12,6 +12,12 @@ web:
     tag: local
     pullPolicy: IfNotPresent
 
+migration:
+  image:
+    repository: buy-ticket-migrate
+    tag: local
+    pullPolicy: IfNotPresent
+
 service:
   type: NodePort
   port: 8080

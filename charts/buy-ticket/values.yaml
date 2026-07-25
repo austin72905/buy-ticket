@@ -25,6 +25,17 @@ web:
       initialDelaySeconds: 10
       periodSeconds: 20
 
+migration:
+  enabled: false
+  image:
+    repository: buy-ticket-migrate
+    tag: local
+    pullPolicy: IfNotPresent
+  command: up
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 300
+  resources: {}
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
