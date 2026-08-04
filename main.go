@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"net/http/pprof"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"buy-ticket/controller"
@@ -44,20 +42,6 @@ func configureLogging() {
 func fatalLog(message string, attrs ...any) {
 	slog.Error(message, attrs...)
 	os.Exit(1)
-}
-
-func (app *BuyTicketApp) Start() {
-	ctx := context.Background()
-	if err := app.Runtime.Probe.Check(ctx); err != nil {
-		panic(err)
-	}
-	app.Runtime.Lifecycle.Startup.RunAll(ctx)
-	app.Runtime.Lifecycle.Started = true
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(stop)
-	<-stop
-	app.Runtime.Lifecycle.Shutdown.RunAll(ctx)
 }
 
 type BuyTicketApp struct {

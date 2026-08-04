@@ -266,14 +266,14 @@ This keeps the current demo flow working while adding the provider payment found
 
 Provider router behavior:
 
-- `mock_ecpay_primary` uses `payment.mock.base_url`.
-- `mock_ecpay_backup` uses `payment.mock.backup_base_url`.
+- `mock_ecpay_primary` uses `PAYMENT_MOCK_BASE_URL`.
+- `mock_ecpay_backup` uses `PAYMENT_MOCK_BACKUP_BASE_URL`.
 - If primary circuit breaker is open, only a new `payment_attempt` may use backup.
 - Existing timeout attempts are kept as historical records and are not automatically resent.
 
 Circuit breaker defaults:
 
-- `payment.breaker.enabled=true`
-- `payment.breaker.consecutive_failures=5`
-- `payment.breaker.open_timeout_seconds=30`
-- `payment.breaker.half_open_max_requests=1`
+- `PAYMENT_BREAKER_ENABLED=true`
+- `PAYMENT_BREAKER_CONSECUTIVE_FAILURES=5`
+- `PAYMENT_BREAKER_OPEN_TIMEOUT_SECONDS=30`
+- `PAYMENT_BREAKER_HALF_OPEN_MAX_REQUESTS=1`

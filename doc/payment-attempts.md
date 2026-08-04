@@ -88,10 +88,10 @@ POST /payments/start
 Mock pay service 預設設定：
 
 ```properties
-payment.mock.base_url=http://localhost:8081
-payment.mock.backup_base_url=
-payment.mock.callback_url=http://localhost:8080/payments/provider/ecpay/callback
-payment.mock.timeout_seconds=3
+PAYMENT_MOCK_BASE_URL=http://localhost:8081
+PAYMENT_MOCK_BACKUP_BASE_URL=
+PAYMENT_MOCK_CALLBACK_URL=http://localhost:8080/payments/provider/ecpay/callback
+PAYMENT_MOCK_TIMEOUT_SECONDS=3
 ```
 
 如果 mock pay service 沒有啟動，`POST /payments/start` 仍會建立 `payment_attempt`，但 attempt 會被標記為 `timeout`。
@@ -142,19 +142,19 @@ Status：
 目前 provider-style 付款流程已加入 provider router：
 
 ```text
-mock_ecpay_primary -> payment.mock.base_url
-mock_ecpay_backup  -> payment.mock.backup_base_url
+mock_ecpay_primary -> PAYMENT_MOCK_BASE_URL
+mock_ecpay_backup  -> PAYMENT_MOCK_BACKUP_BASE_URL
 ```
 
-`payment.mock.backup_base_url` 預設為空，代表只使用 primary provider。設定 backup 後，新的 `payment_attempt` 可以在 primary breaker open 時改走 backup。
+`PAYMENT_MOCK_BACKUP_BASE_URL` 預設為空，代表只使用 primary provider。設定 backup 後，新的 `payment_attempt` 可以在 primary breaker open 時改走 backup。
 
 Circuit breaker 預設：
 
 ```properties
-payment.breaker.enabled=true
-payment.breaker.consecutive_failures=5
-payment.breaker.open_timeout_seconds=30
-payment.breaker.half_open_max_requests=1
+PAYMENT_BREAKER_ENABLED=true
+PAYMENT_BREAKER_CONSECUTIVE_FAILURES=5
+PAYMENT_BREAKER_OPEN_TIMEOUT_SECONDS=30
+PAYMENT_BREAKER_HALF_OPEN_MAX_REQUESTS=1
 ```
 
 行為規則：

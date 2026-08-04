@@ -27,20 +27,20 @@ frontend
 make run-dev
 ```
 
-`config/dev/app.properties` 需要有：
+`.env` 或環境變數需要有：
 
 ```properties
-payment.mock.merchant_id=3002607
-payment.mock.hash_key=pwFHCqoQZGmho4w6
-payment.mock.hash_iv=EkRm7iFT261dpevs
-payment.mock.base_url=http://localhost:8081
-payment.mock.backup_base_url=
-payment.mock.callback_url=http://localhost:8080/payments/provider/ecpay/callback
-payment.mock.timeout_seconds=3
-payment.breaker.enabled=true
-payment.breaker.consecutive_failures=5
-payment.breaker.open_timeout_seconds=30
-payment.breaker.half_open_max_requests=1
+PAYMENT_MOCK_MERCHANT_ID=3002607
+PAYMENT_MOCK_HASH_KEY=pwFHCqoQZGmho4w6
+PAYMENT_MOCK_HASH_IV=EkRm7iFT261dpevs
+PAYMENT_MOCK_BASE_URL=http://localhost:8081
+PAYMENT_MOCK_BACKUP_BASE_URL=
+PAYMENT_MOCK_CALLBACK_URL=http://localhost:8080/payments/provider/ecpay/callback
+PAYMENT_MOCK_TIMEOUT_SECONDS=3
+PAYMENT_BREAKER_ENABLED=true
+PAYMENT_BREAKER_CONSECUTIVE_FAILURES=5
+PAYMENT_BREAKER_OPEN_TIMEOUT_SECONDS=30
+PAYMENT_BREAKER_HALF_OPEN_MAX_REQUESTS=1
 ```
 
 ### Payment provider router 與 circuit breaker
@@ -48,14 +48,14 @@ payment.breaker.half_open_max_requests=1
 目前 `POST /payments/start` 會透過 provider router 選擇 mock payment provider：
 
 ```text
-mock_ecpay_primary -> payment.mock.base_url
-mock_ecpay_backup  -> payment.mock.backup_base_url
+mock_ecpay_primary -> PAYMENT_MOCK_BASE_URL
+mock_ecpay_backup  -> PAYMENT_MOCK_BACKUP_BASE_URL
 ```
 
-`payment.mock.backup_base_url` 預設為空，代表只使用 primary provider。若要啟用 backup：
+`PAYMENT_MOCK_BACKUP_BASE_URL` 預設為空，代表只使用 primary provider。若要啟用 backup：
 
 ```properties
-payment.mock.backup_base_url=http://localhost:8082
+PAYMENT_MOCK_BACKUP_BASE_URL=http://localhost:8082
 ```
 
 或用環境變數：
@@ -223,7 +223,7 @@ Request payload：
 - `recordNo` = `payment_attempts.merchant_trade_no`
 - `amount` = `orders.total_amount`
 - `payType` = 目前固定送 `ECPAY`
-- `callbackUrl` = `payment.mock.callback_url`
+- `callbackUrl` = `PAYMENT_MOCK_CALLBACK_URL`
 
 重點：`recordNo` 不是 `order_no`。它是這一次付款 attempt 的交易編號。
 
@@ -355,9 +355,9 @@ MerchantTradeNo -> payment_attempts.merchant_trade_no -> payment_attempts.order_
 
 檢查：
 
-- `payment.mock.merchant_id`
-- `payment.mock.hash_key`
-- `payment.mock.hash_iv`
+- `PAYMENT_MOCK_MERCHANT_ID`
+- `PAYMENT_MOCK_HASH_KEY`
+- `PAYMENT_MOCK_HASH_IV`
 - `ec-payment-service` 的 MerchantID / HashKey / HashIV
 
 兩邊必須一致。
@@ -395,7 +395,7 @@ curl http://localhost:8081/health
 以及：
 
 ```properties
-payment.mock.base_url=http://localhost:8081
-payment.mock.backup_base_url=http://localhost:8082
-payment.mock.callback_url=http://localhost:8080/payments/provider/ecpay/callback
+PAYMENT_MOCK_BASE_URL=http://localhost:8081
+PAYMENT_MOCK_BACKUP_BASE_URL=http://localhost:8082
+PAYMENT_MOCK_CALLBACK_URL=http://localhost:8080/payments/provider/ecpay/callback
 ```
