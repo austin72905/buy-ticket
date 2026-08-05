@@ -293,85 +293,98 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, cfg Config, bookingServic
 	outboxPublishJobEnabled := outboxPublishEnabled(cfg)
 	outboxPublishJobLimit := outboxPublishBatchSize(cfg)
 	outboxPublishJobRetryAfter := outboxPublishRetryAfter(cfg)
+	jobGuards := newLocalJobGuards()
 
 	_, err := scheduler.AddFuncJobWithName("*/1 * * * * *", "queue-promote-ready", func(ctx context.Context) {
-		now := time.Now()
-		if err := bookingService.QueueStore.PromoteReady(ctx, now); err != nil {
-			observability.Error(ctx, "scheduler job failed", err, "job_name", "queue-promote-ready")
-		}
+		jobGuards.Run(ctx, "queue-promote-ready", func(ctx context.Context) {
+			now := time.Now()
+			if err := bookingService.QueueStore.PromoteReady(ctx, now); err != nil {
+				observability.Error(ctx, "scheduler job failed", err, "job_name", "queue-promote-ready")
+			}
+		})
 	})
 	if err != nil {
 		fatalLog("register scheduler job failed", "job_name", "queue-promote-ready", "error", err)
 	}
 
 	_, err = scheduler.AddFuncJobWithName("*/5 * * * * *", "order-expire-sweep", func(ctx context.Context) {
-		count, err := bookingService.SweepExpiredOrders(ctx, service.SweepExpiredOrdersInput{
-			Now:   time.Now(),
-			Limit: orderExpireLimit,
+		jobGuards.Run(ctx, "order-expire-sweep", func(ctx context.Context) {
+			count, err := bookingService.SweepExpiredOrders(ctx, service.SweepExpiredOrdersInput{
+				Now:   time.Now(),
+				Limit: orderExpireLimit,
+			})
+			if err != nil {
+				observability.Error(ctx, "scheduler job failed", err, "job_name", "order-expire-sweep")
+				return
+			}
+			if count > 0 {
+				observability.Info(ctx, "scheduler job completed", "job_name", "order-expire-sweep", "expired_count", count)
+			}
 		})
-		if err != nil {
-			observability.Error(ctx, "scheduler job failed", err, "job_name", "order-expire-sweep")
-			return
-		}
-		if count > 0 {
-			observability.Info(ctx, "scheduler job completed", "job_name", "order-expire-sweep", "expired_count", count)
-		}
 	})
 	if err != nil {
 		fatalLog("register scheduler job failed", "job_name", "order-expire-sweep", "error", err)
 	}
 
 	_, err = scheduler.AddFuncJobWithName("*/5 * * * * *", "event-status-advance", func(ctx context.Context) {
-		count, err := bookingService.AdvanceEventStatuses(ctx, time.Now())
-		if err != nil {
-			observability.Error(ctx, "scheduler job failed", err, "job_name", "event-status-advance")
-			return
-		}
-		if count > 0 {
-			observability.Info(ctx, "scheduler job completed", "job_name", "event-status-advance", "advanced_count", count)
-		}
+		jobGuards.Run(ctx, "event-status-advance", func(ctx context.Context) {
+			count, err := bookingService.AdvanceEventStatuses(ctx, time.Now())
+			if err != nil {
+				observability.Error(ctx, "scheduler job failed", err, "job_name", "event-status-advance")
+				return
+			}
+			if count > 0 {
+				observability.Info(ctx, "scheduler job completed", "job_name", "event-status-advance", "advanced_count", count)
+			}
+		})
 	})
 	if err != nil {
 		fatalLog("register scheduler job failed", "job_name", "event-status-advance", "error", err)
 	}
 
 	_, err = scheduler.AddFuncJobWithName("*/1 * * * * *", "purchase-token-cleanup", func(ctx context.Context) {
-		count, err := bookingService.CleanupExpiredPurchaseTokens(ctx, time.Now())
-		if err != nil {
-			observability.Error(ctx, "scheduler job failed", err, "job_name", "purchase-token-cleanup")
-			return
-		}
-		if count > 0 {
-			observability.Info(ctx, "scheduler job completed", "job_name", "purchase-token-cleanup", "expired_count", count)
-		}
+		jobGuards.Run(ctx, "purchase-token-cleanup", func(ctx context.Context) {
+			count, err := bookingService.CleanupExpiredPurchaseTokens(ctx, time.Now())
+			if err != nil {
+				observability.Error(ctx, "scheduler job failed", err, "job_name", "purchase-token-cleanup")
+				return
+			}
+			if count > 0 {
+				observability.Info(ctx, "scheduler job completed", "job_name", "purchase-token-cleanup", "expired_count", count)
+			}
+		})
 	})
 	if err != nil {
 		fatalLog("register scheduler job failed", "job_name", "purchase-token-cleanup", "error", err)
 	}
 
 	_, err = scheduler.AddFuncJobWithName("*/10 * * * * *", "queue-timeout-cleanup", func(ctx context.Context) {
-		count, err := bookingService.CleanupExpiredQueues(ctx, time.Now())
-		if err != nil {
-			observability.Error(ctx, "scheduler job failed", err, "job_name", "queue-timeout-cleanup")
-			return
-		}
-		if count > 0 {
-			observability.Info(ctx, "scheduler job completed", "job_name", "queue-timeout-cleanup", "expired_count", count)
-		}
+		jobGuards.Run(ctx, "queue-timeout-cleanup", func(ctx context.Context) {
+			count, err := bookingService.CleanupExpiredQueues(ctx, time.Now())
+			if err != nil {
+				observability.Error(ctx, "scheduler job failed", err, "job_name", "queue-timeout-cleanup")
+				return
+			}
+			if count > 0 {
+				observability.Info(ctx, "scheduler job completed", "job_name", "queue-timeout-cleanup", "expired_count", count)
+			}
+		})
 	})
 	if err != nil {
 		fatalLog("register scheduler job failed", "job_name", "queue-timeout-cleanup", "error", err)
 	}
 
 	_, err = scheduler.AddFuncJobWithName("0 * * * * *", "stock-reconcile", func(ctx context.Context) {
-		result, err := bookingService.ReconcileStock(ctx)
-		if err != nil {
-			observability.Error(ctx, "scheduler job failed", err, "job_name", "stock-reconcile")
-			return
-		}
-		if result.Fixed > 0 {
-			observability.Info(ctx, "scheduler job completed", "job_name", "stock-reconcile", "fixed_count", result.Fixed, "checked_count", result.Checked)
-		}
+		jobGuards.Run(ctx, "stock-reconcile", func(ctx context.Context) {
+			result, err := bookingService.ReconcileStock(ctx)
+			if err != nil {
+				observability.Error(ctx, "scheduler job failed", err, "job_name", "stock-reconcile")
+				return
+			}
+			if result.Fixed > 0 {
+				observability.Info(ctx, "scheduler job completed", "job_name", "stock-reconcile", "fixed_count", result.Fixed, "checked_count", result.Checked)
+			}
+		})
 	})
 	if err != nil {
 		fatalLog("register scheduler job failed", "job_name", "stock-reconcile", "error", err)
@@ -379,20 +392,22 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, cfg Config, bookingServic
 
 	if paymentReconcileJobEnabled {
 		_, err = scheduler.AddFuncJobWithName("*/30 * * * * *", "payment-attempt-reconcile", func(ctx context.Context) {
-			count, err := bookingService.ReconcilePaymentAttempts(ctx, service.ReconcilePaymentAttemptsInput{
-				Now:         time.Now(),
-				Delay:       paymentReconcileJobDelay,
-				RetryAfter:  paymentReconcileJobRetryAfter,
-				Limit:       paymentReconcileJobLimit,
-				MaxAttempts: paymentReconcileJobMaxAttempts,
+			jobGuards.Run(ctx, "payment-attempt-reconcile", func(ctx context.Context) {
+				count, err := bookingService.ReconcilePaymentAttempts(ctx, service.ReconcilePaymentAttemptsInput{
+					Now:         time.Now(),
+					Delay:       paymentReconcileJobDelay,
+					RetryAfter:  paymentReconcileJobRetryAfter,
+					Limit:       paymentReconcileJobLimit,
+					MaxAttempts: paymentReconcileJobMaxAttempts,
+				})
+				if err != nil {
+					observability.Error(ctx, "scheduler job failed", err, "job_name", "payment-attempt-reconcile")
+					return
+				}
+				if count > 0 {
+					observability.Info(ctx, "scheduler job completed", "job_name", "payment-attempt-reconcile", "completed_count", count)
+				}
 			})
-			if err != nil {
-				observability.Error(ctx, "scheduler job failed", err, "job_name", "payment-attempt-reconcile")
-				return
-			}
-			if count > 0 {
-				observability.Info(ctx, "scheduler job completed", "job_name", "payment-attempt-reconcile", "completed_count", count)
-			}
 		})
 		if err != nil {
 			fatalLog("register scheduler job failed", "job_name", "payment-attempt-reconcile", "error", err)
@@ -401,18 +416,20 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, cfg Config, bookingServic
 
 	if outboxPublishJobEnabled {
 		_, err = scheduler.AddFuncJobWithName("*/10 * * * * *", "outbox-publish", func(ctx context.Context) {
-			count, err := bookingService.PublishOutboxEvents(ctx, service.PublishOutboxEventsInput{
-				Now:        time.Now(),
-				Limit:      outboxPublishJobLimit,
-				RetryAfter: outboxPublishJobRetryAfter,
+			jobGuards.Run(ctx, "outbox-publish", func(ctx context.Context) {
+				count, err := bookingService.PublishOutboxEvents(ctx, service.PublishOutboxEventsInput{
+					Now:        time.Now(),
+					Limit:      outboxPublishJobLimit,
+					RetryAfter: outboxPublishJobRetryAfter,
+				})
+				if err != nil {
+					observability.Error(ctx, "scheduler job failed", err, "job_name", "outbox-publish")
+					return
+				}
+				if count > 0 {
+					observability.Info(ctx, "scheduler job completed", "job_name", "outbox-publish", "published_count", count)
+				}
 			})
-			if err != nil {
-				observability.Error(ctx, "scheduler job failed", err, "job_name", "outbox-publish")
-				return
-			}
-			if count > 0 {
-				observability.Info(ctx, "scheduler job completed", "job_name", "outbox-publish", "published_count", count)
-			}
 		})
 		if err != nil {
 			fatalLog("register scheduler job failed", "job_name", "outbox-publish", "error", err)

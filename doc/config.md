@@ -49,6 +49,13 @@ Kubernetes 建議同一個 image 部署兩個 Deployment：
 - API Deployment：`APP_ROLE=api`
 - Scheduler Deployment：`APP_ROLE=scheduler`
 
+Scheduler job 目前有本地 no-overlap guard：
+
+- 同一個 scheduler Pod 內，同一個 job 如果上一輪還沒跑完，下一輪會直接跳過。
+- 這可以避免每秒或短週期 job 在單一 process 內重入。
+- 這不是 Redis distributed lock；如果 scheduler replicas 大於 1，不同 Pod 之間仍可能同時執行同一個 job。
+- 目前 Kubernetes 建議維持 `scheduler.replicaCount=1`。若未來要 scheduler HA，再補 Redis lock 或 leader election。
+
 ## 主要環境變數
 
 | 變數 | 說明 |
