@@ -27,7 +27,6 @@ type AppConfig struct {
 }
 
 type QueueConfig struct {
-	Store                 string
 	ReleaseLimit          int
 	JoinMaxInFlight       int
 	JoinRetryAfterSeconds int
@@ -100,16 +99,16 @@ type OutboxPublishConfig struct {
 func loadConfig() Config {
 	sourceLoaded := loadDotEnvIfLocal()
 	appEnv := envString("APP_ENV", "local")
-	queueStoreDefault := "memory"
 	orderPaymentTTLDefault := 10
 	redisAddrDefault := ""
 	paymentMockMerchantIDDefault := ""
 	paymentMockHashKeyDefault := ""
 	paymentMockHashIVDefault := ""
-	if appEnv == "dev" {
-		queueStoreDefault = "redis"
-		orderPaymentTTLDefault = 3
+	if appEnv == "local" || appEnv == "dev" {
 		redisAddrDefault = "localhost:6379"
+	}
+	if appEnv == "dev" {
+		orderPaymentTTLDefault = 3
 		paymentMockMerchantIDDefault = "3002607"
 		paymentMockHashKeyDefault = "pwFHCqoQZGmho4w6"
 		paymentMockHashIVDefault = "EkRm7iFT261dpevs"
@@ -122,7 +121,6 @@ func loadConfig() Config {
 			PprofEnabled: envBool("PPROF_ENABLED", false),
 		},
 		Queue: QueueConfig{
-			Store:                 envString("QUEUE_STORE", queueStoreDefault),
 			ReleaseLimit:          envInt("QUEUE_RELEASE_LIMIT", 50),
 			JoinMaxInFlight:       envInt("QUEUE_JOIN_MAX_IN_FLIGHT", 500),
 			JoinRetryAfterSeconds: envInt("QUEUE_JOIN_RETRY_AFTER_SECONDS", 1),
@@ -236,13 +234,8 @@ func validateConfig(cfg Config) {
 	if cfg.Postgres.DSN == "" {
 		fatalLog("POSTGRES_DSN is required")
 	}
-	switch cfg.Queue.Store {
-	case "memory", "redis":
-	default:
-		fatalLog("unsupported QUEUE_STORE", "value", cfg.Queue.Store)
-	}
-	if cfg.Queue.Store == "redis" && cfg.Redis.Addr == "" {
-		fatalLog("REDIS_ADDR is required when QUEUE_STORE=redis")
+	if cfg.Redis.Addr == "" {
+		fatalLog("REDIS_ADDR is required")
 	}
 }
 
@@ -352,8 +345,7 @@ func configSummary(cfg Config) []any {
 	return []any{
 		"env", cfg.App.Env,
 		"source", cfg.ConfigSourceLoaded,
-		"queue_store", cfg.Queue.Store,
 		"server_addr", cfg.App.ServerAddr,
-		"redis_configured", cfg.Redis.Addr != "",
+		"redis_addr", cfg.Redis.Addr,
 	}
 }

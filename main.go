@@ -216,28 +216,16 @@ func buildBookingService(runtime *infraapp.Runtime, cfg Config, repos *appReposi
 
 func buildQueueStore(runtime *infraapp.Runtime, cfg Config) service.QueueStore {
 	releaseLimit := queueReleaseLimit(cfg)
-	if cfg.Queue.Store == "redis" {
-		redisComponent := buildRedisComponent(runtime, "queue", cfg)
-		return service.NewRedisQueueStore(redisComponent.Client(), releaseLimit)
-	}
-
-	return service.NewMemoryQueueStore(releaseLimit)
+	redisComponent := buildRedisComponent(runtime, "queue", cfg)
+	return service.NewRedisQueueStore(redisComponent.Client(), releaseLimit)
 }
 
 func buildStockStore(runtime *infraapp.Runtime, cfg Config) service.StockStore {
-	if cfg.Redis.Addr == "" {
-		return nil
-	}
-
 	redisComponent := buildRedisComponent(runtime, "stock", cfg)
 	return service.NewRedisStockStore(redisComponent.Client())
 }
 
 func buildSessionStore(runtime *infraapp.Runtime, cfg Config) service.SessionStore {
-	if cfg.Redis.Addr == "" {
-		return service.NewMemorySessionStore()
-	}
-
 	redisComponent := buildRedisComponent(runtime, "session", cfg)
 	return service.NewRedisSessionStore(redisComponent.Client())
 }

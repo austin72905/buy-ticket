@@ -68,7 +68,6 @@ app:
   pprofEnabled: false
 
 queue:
-  store: redis
   releaseLimit: 100
   join:
     maxInFlight: 500

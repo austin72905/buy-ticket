@@ -29,10 +29,11 @@ make run-dev
 
 `make run-dev` 會設定 `APP_ENV=dev`，現在 `dev` 也會讀取 `.env`。如果沒有 `.env`，程式會使用 dev 預設值：
 
-- `QUEUE_STORE=redis`
 - `REDIS_ADDR=localhost:6379`
 - `ORDER_PAYMENT_TTL_MINUTES=3`
 - mock payment 簽章設定使用測試值
+
+Queue、stock 與 session 在 local、dev 與 prod runtime 都固定使用 Redis。Local / dev 預設連線 `localhost:6379`；prod 必須透過環境變數提供 `REDIS_ADDR`。Memory store 僅保留給單元測試直接注入。
 
 ## Runtime Role
 
@@ -62,13 +63,12 @@ Scheduler job 目前有本地 no-overlap guard：
 | --- | --- |
 | `SERVER_ADDR` | HTTP listen address，例如 `:8080` |
 | `PPROF_ENABLED` | 是否開啟 `/debug/pprof` |
-| `QUEUE_STORE` | `memory` 或 `redis` |
 | `QUEUE_RELEASE_LIMIT` | 每次 scheduler 放行到 ready 的人數上限 |
 | `QUEUE_JOIN_MAX_IN_FLIGHT` | 單一 API process 內 `/queue/join` 最大同時處理數 |
 | `ORDER_PAYMENT_TTL_MINUTES` | 訂單待付款時間 |
 | `SESSION_TTL_HOURS` | 前台 / 後台 session TTL |
 | `POSTGRES_DSN` | PostgreSQL 連線字串 |
-| `REDIS_ADDR` | Redis address；`QUEUE_STORE=redis` 時必填 |
+| `REDIS_ADDR` | Redis address；prod 必填，local / dev 預設為 `localhost:6379` |
 | `PAYMENT_MOCK_BASE_URL` | mock payment primary provider URL |
 | `PAYMENT_MOCK_BACKUP_BASE_URL` | mock payment backup provider URL |
 | `PAYMENT_MOCK_CALLBACK_URL` | mock payment callback 回打 buy-ticket 的 URL |
@@ -84,7 +84,6 @@ typed config 只驗證必要條件：
 
 - `SERVER_ADDR` 不可空
 - `POSTGRES_DSN` 不可空
-- `QUEUE_STORE` 只能是 `memory` 或 `redis`
-- `QUEUE_STORE=redis` 時，`REDIS_ADDR` 不可空
+- `REDIS_ADDR` 不可空
 
 這樣避免舊版 properties validator 因為不同 `APP_ROLE` 沒用到某些設定而啟動失敗。

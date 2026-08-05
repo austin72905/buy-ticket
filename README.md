@@ -62,7 +62,7 @@ buy-ticket-scheduler  APP_ROLE=scheduler
 
 這樣 API replicas 擴充時，不會同時啟動多份 scheduler。
 
-Redis 是 dev / deployment 的預設 queue、stock 與 session store。程式目前仍保留本機開發與測試用的 memory fallback：`QUEUE_STORE=redis` 時 queue 使用 Redis；設定 `REDIS_ADDR` 時 stock 與 session 使用 Redis。
+Queue、stock 與 session 在 local、dev 與 prod 都固定使用 Redis。Local / dev 的 `REDIS_ADDR` 預設為 `localhost:6379`；prod 必須明確提供 `REDIS_ADDR`，否則應用會在啟動驗證時失敗。Memory store 只保留為單元測試替身，不用於應用 runtime。
 
 ## Core Features
 
