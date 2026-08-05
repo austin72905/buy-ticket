@@ -10,14 +10,21 @@
 Vue Frontend
   -> Go API
       -> PostgreSQL
-      -> Redis Queue / Redis Stock
+      -> Redis Queue / Stock / Session
       -> Mock Payment Service
-  -> Scheduler Role
-      -> queue promotion
-      -> order expiration
-      -> payment reconciliation
-      -> outbox publish
-      -> stock reconciliation
+
+Scheduler Role
+  -> PostgreSQL
+  -> Redis Queue / Stock
+  -> Mock Payment Service
+  -> queue promotion
+  -> order expiration
+  -> event status advance
+  -> purchase-token cleanup
+  -> queue-timeout cleanup
+  -> stock reconciliation
+  -> payment reconciliation (enabled by default)
+  -> outbox publish (enabled by default)
 ```
 
 ### System Diagram
@@ -55,13 +62,15 @@ buy-ticket-scheduler  APP_ROLE=scheduler
 
 這樣 API replicas 擴充時，不會同時啟動多份 scheduler。
 
+Redis 是 dev / deployment 的預設 queue、stock 與 session store。程式目前仍保留本機開發與測試用的 memory fallback：`QUEUE_STORE=redis` 時 queue 使用 Redis；設定 `REDIS_ADDR` 時 stock 與 session 使用 Redis。
+
 ## Core Features
 
 ### Queue
 
 - 使用 Redis queue model：`waiting ZSET` + `ready ZSET`。
 - `/queue/join` 只加入 waiting queue。
-- scheduler 依 `queue.release.limit` 定期放行 ready token。
+- scheduler 依 `QUEUE_RELEASE_LIMIT` 定期放行 ready token。
 - ready 後產生 `purchase_token`，前端才能 reserve ticket。
 - API 有 backpressure，避免瞬間大量 `/queue/join` 打爆服務。
 
@@ -189,10 +198,10 @@ PAYMENT_SUCCEEDED
 目前後台支援：
 
 - Admin login/logout/me。
-- Organizer CRUD。
-- Admin user CRUD。
-- Event CRUD。
-- Section CRUD。
+- Organizer list / create / update。
+- Admin user list / create / update。
+- Event list / get / create / update。
+- Section list / create / update。
 - Orders keyset pagination。
 - Audit logs keyset pagination。
 - Sensitive data masking / reveal audit log。
@@ -206,11 +215,13 @@ PAYMENT_SUCCEEDED
 
 ### Infra
 
-啟動 PostgreSQL / Redis / RabbitMQ 等本機 infra：
+啟動 PostgreSQL / Redis / RabbitMQ 等本機 infrastructure：
 
 ```powershell
 docker compose up -d
 ```
+
+`docker compose up -d` 只會啟動 infrastructure，不會啟動 Go API、scheduler、Vue frontend 或 mock payment service。RabbitMQ 目前尚未接入應用流程；現行 outbox publisher 只寫入 log，RabbitMQ container 是為未來整合預留。
 
 執行 migration：
 
@@ -238,7 +249,7 @@ go run .
 
 ### Mock Payment Service
 
-mock payment service 預設：
+Mock payment service 是外部相依服務，不在這個 repository，也不會由本專案的 `docker compose up -d` 啟動。啟動 Go API 的付款流程前，需先另行啟動一個相容的 mock payment service。後端預設連線位址為：
 
 ```text
 http://localhost:8081
@@ -249,6 +260,8 @@ http://localhost:8081
 ```powershell
 curl http://localhost:8081/health
 ```
+
+Payment reconciliation 與 outbox publish 預設啟用，可分別透過 `PAYMENT_RECONCILE_ENABLED` 與 `OUTBOX_PUBLISH_ENABLED` 關閉。
 
 ## Testing
 
