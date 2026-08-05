@@ -1,172 +1,112 @@
-# 後台管理功能規劃
+# Admin Backoffice
 
-這份文件整理 `buy-ticket` 後台的實作方向。目標不是一次做完整營運後台，而是分階段補上能展示工程能力、又能貼近目前購票系統資料模型的功能。
+這份文件說明 `buy-ticket` 目前已實作的後台功能、權限邊界與資料一致性設計。
 
----
+## 1. 後台範圍
 
-## 1. 目標
+目前後台包含：
 
-後台要解決三件事：
+- 獨立的 admin 登入、登出與 session。
+- Admin user 與 organizer 管理。
+- Event 與 section 查詢、建立和更新。
+- 訂單查詢與敏感資料 reveal。
+- Audit log 查詢。
+- Organizer scope 權限隔離。
+- Keyset pagination。
+- Optimistic locking。
 
-1. 讓管理者可以查看活動、票區、訂單與付款狀態。
-2. 讓大量資料列表使用 keyset pagination，避免 `OFFSET` 深分頁效能退化。
-3. 讓敏感資料預設脫敏，完整資料 reveal 需要權限與 audit log。
+前台 `users` 與後台 `admin_users` 是不同帳號模型，session cookie 也分開管理。
 
-後台第一版不追求完整 CMS，而是補出作品亮點：
+## 2. 角色與資料範圍
 
-- 訂單列表 keyset pagination
-- 票區庫存狀態查詢
-- 後台角色權限
-- 敏感資料脫敏
-- reveal audit log
+目前支援兩種角色：
 
----
+### `SUPER_ADMIN`
 
-## 2. 目前系統可直接利用的資料
+- 可管理所有 admin users 與 organizers。
+- 可查看及管理所有 organizer 的 events 與 sections。
+- 可查看所有訂單與 audit logs。
+- 可使用 reveal API 查看訂單的完整使用者姓名與 email。
 
-目前已存在的核心資料表：
+### `EVENT_ADMIN`
 
-- `users`
-- `events`
-- `event_sections`
-- `reservations`
-- `orders`
-- `payments`
-- `payment_attempts`
-- `idempotency_keys`
+- 必須綁定一個 `organizer_id`。
+- 只能查看與管理自己 organizer 的 events 與 sections。
+- 訂單列表會自動限制在自己 organizer 的活動。
+- 只能查看自己產生的 audit logs。
+- 不能管理 admin users 或 organizers。
+- 不能使用敏感資料 reveal API。
 
-這代表後台第一版可以先從「查詢與管控」開始，不需要先重做主流程。
+Organizer scope 由 service 與 repository 查詢條件強制套用，不依賴前端自行過濾。
 
----
+## 3. Authentication API
 
-## 3. 後台角色
+| Method | Path | 說明 |
+| --- | --- | --- |
+| `POST` | `/admin/auth/login` | Admin 登入並建立 `buy_ticket_admin_session` cookie |
+| `POST` | `/admin/auth/logout` | 清除目前 admin session |
+| `GET` | `/admin/me` | 取得目前登入的 admin user |
 
-建議先做兩種角色：
+除 login 外，所有 `/admin` API 都需要有效的 admin session。Disabled admin user 無法作為有效登入身分使用。
 
-### 3.1 SUPER_ADMIN
+## 4. Admin User 與 Organizer API
 
-- 可以查看所有後台頁面。
-- 預設仍只看到脫敏資料。
-- 可以呼叫 reveal API 查看完整敏感資料。
-- 每次 reveal 都必須填寫原因並寫入 audit log。
+以下 API 只允許 `SUPER_ADMIN` 使用：
 
-### 3.2 EVENT_ADMIN
+| Method | Path | 說明 |
+| --- | --- | --- |
+| `GET` | `/admin/users` | 列出 admin users |
+| `POST` | `/admin/users` | 建立 `SUPER_ADMIN` 或 `EVENT_ADMIN` |
+| `PATCH` | `/admin/users/{adminUserId}` | 更新帳號、角色、狀態、密碼或 organizer |
+| `GET` | `/admin/organizers` | 列出 organizers |
+| `POST` | `/admin/organizers` | 建立 organizer |
+| `PATCH` | `/admin/organizers/{organizerId}` | 更新 organizer 名稱或狀態 |
 
-- 可以查看活動、票區、訂單。
-- 永遠只能看到脫敏資料。
-- 不能 reveal 完整手機、email、姓名或其他敏感資料。
+`EVENT_ADMIN` 必須綁定 organizer；`SUPER_ADMIN` 不綁定 organizer。系統也不允許 admin 將自己的帳號設為 disabled。
 
----
+## 5. Event 與 Section API
 
-## 4. 後台核心頁面
+`SUPER_ADMIN` 可以操作所有資料；`EVENT_ADMIN` 只限自己的 organizer。
 
-### 4.1 活動管理
+| Method | Path | 說明 |
+| --- | --- | --- |
+| `GET` | `/admin/events` | 列出可存取的 events |
+| `POST` | `/admin/events` | 建立 event |
+| `GET` | `/admin/events/{eventId}` | 取得 event |
+| `PATCH` | `/admin/events/{eventId}` | 更新 event |
+| `GET` | `/admin/events/{eventId}/sections` | 列出 event sections |
+| `POST` | `/admin/events/{eventId}/sections` | 建立 section |
+| `PATCH` | `/admin/events/{eventId}/sections/{sectionId}` | 更新 section |
 
-第一版功能：
+Event request 的 `status` 目前使用數字 enum。更新 event 時不能手動指定 `ON_SALE`；開售狀態由 event status scheduler 依 `PUBLISHED` 與售票時間推進。
 
-- 活動列表
-- 活動詳情
-- 活動狀態
-- 開售時間
-- 結束時間
+Section 已支援：
 
-後續功能：
+- 價格。
+- 總庫存、保留庫存、已售庫存與可用庫存。
+- `purchase_limit`。
+- `ACTIVE`、`INACTIVE`、`SOLD_OUT` 狀態。
 
-- 建立活動
-- 編輯活動
-- 上架 / 下架
-- 開售 / 結束
+更新 section 時，`total_quantity` 不得小於目前 `reserved_quantity + sold_quantity`，而 `purchase_limit` 不得超過總庫存。
 
-建議狀態：
+## 6. 訂單列表與敏感資料
 
-- `draft`
-- `published`
-- `selling`
-- `ended`
+### 訂單列表
 
-目前 `events` 已有活動資料，第一階段可以先做查詢與狀態調整。
-
----
-
-### 4.2 票區 / 票種管理
-
-目前系統的 `event_sections` 可以視為票區或票種。
-
-第一版功能：
-
-- 票區列表
-- 票區名稱
-- 價格
-- 總庫存
-- 鎖定中庫存
-- 已售庫存
-- 剩餘庫存
-
-計算方式：
-
-```sql
-available_quantity = total_quantity - reserved_quantity - sold_quantity
+```http
+GET /admin/orders
 ```
 
-後續功能：
+支援 query parameters：
 
-- 修改總庫存
-- 修改價格
-- 設定每人限購
+- `event_id`
+- `user_id`
+- `status`
+- `cursor_created_at`
+- `cursor_id`
+- `limit`
 
-注意：如果要支援「每人限購」，需要新增欄位，例如：
-
-```sql
-ALTER TABLE event_sections
-ADD COLUMN purchase_limit_per_user INTEGER NULL;
-```
-
----
-
-### 4.3 訂單管理
-
-這是第一版最值得先做的後台功能。
-
-列表欄位：
-
-- order id
-- order no
-- user id
-- event id
-- section id
-- quantity
-- total amount
-- status
-- expires at
-- created at
-- updated at
-
-訂單狀態：
-
-- `pending_payment`
-- `paid`
-- `expired`
-- `cancelled`
-
-查詢條件：
-
-- event id
-- user id
-- order status
-- created time range
-
-分頁方式使用 keyset pagination：
-
-```sql
-SELECT *
-FROM orders
-WHERE ($1::timestamptz IS NULL OR created_at < $1)
-   OR (created_at = $1 AND id < $2)
-ORDER BY created_at DESC, id DESC
-LIMIT $3;
-```
-
-API response：
+回應使用 keyset pagination：
 
 ```json
 {
@@ -178,119 +118,20 @@ API response：
 }
 ```
 
----
+排序鍵為 `created_at DESC, id DESC`。預設每頁 20 筆，server 會限制請求大小。一般訂單列表會遮罩：
 
-### 4.4 搶票請求紀錄
+- `user_name`
+- `user_email`
 
-這是第二階段功能，不建議第一版就做。
+### Reveal sensitive data
 
-原因：
-
-- 搶票請求資料量會很大。
-- 如果同步寫 DB，可能拖慢高併發主流程。
-- 比較適合後續用 async log、queue 或批次寫入。
-
-未來可以記錄：
-
-- request id
-- user id
-- event id
-- section id
-- result
-- latency
-- error reason
-- created at
-
-結果類型：
-
-- `success`
-- `sold_out`
-- `duplicate_purchase`
-- `rate_limited`
-- `queue_waiting`
-- `purchase_token_invalid`
-- `reservation_failed`
-
-這張表適合 keyset pagination。
-
----
-
-### 4.5 庫存流水
-
-這是第二階段功能，適合在主流程穩定後補。
-
-用途：
-
-- 追蹤庫存為什麼被扣。
-- 追蹤庫存為什麼被回補。
-- Debug Redis / DB 庫存不一致。
-- 展示補償與 reconciliation 能力。
-
-未來可以新增 `stock_ledger_entries`：
-
-```sql
-CREATE TABLE stock_ledger_entries (
-    id BIGSERIAL PRIMARY KEY,
-    event_id BIGINT NOT NULL,
-    section_id BIGINT NOT NULL,
-    reservation_id BIGINT NULL,
-    order_id BIGINT NULL,
-    action VARCHAR(50) NOT NULL,
-    quantity INTEGER NOT NULL,
-    reason VARCHAR(255) NULL,
-    created_at TIMESTAMPTZ NOT NULL
-);
-```
-
-action 建議：
-
-- `reserve`
-- `release_reservation`
-- `create_order`
-- `payment_confirmed`
-- `order_expired`
-- `stock_reconcile`
-- `compensation_rollback`
-
-這張表適合 keyset pagination。
-
----
-
-## 5. 敏感資料脫敏
-
-後台 API 預設應該回傳脫敏資料。
-
-範例：
-
-```text
-Email: user@example.com -> u***@example.com
-姓名: 王小明 -> 王**
-手機: 0912345678 -> 091****678
-IP: 192.168.10.23 -> 192.168.*.*
-```
-
-目前 `users` 主要有 name / email，所以第一版先做：
-
-- name masking
-- email masking
-- reveal API
-- reveal audit log
-
-不建議在作品中儲存信用卡號。付款卡號應由 payment provider 管理。
-
----
-
-## 6. Reveal Sensitive API
-
-完整敏感資料不應該直接出現在一般列表。
-
-建議 API：
+只有 `SUPER_ADMIN` 可以呼叫：
 
 ```http
 POST /admin/orders/{orderId}/reveal-sensitive
 ```
 
-request：
+Request：
 
 ```json
 {
@@ -298,192 +139,65 @@ request：
 }
 ```
 
-限制：
+`reason` 必填。成功後回傳完整姓名與 email，並寫入 `REVEAL_ORDER_SENSITIVE` audit log，包含 admin user、target order、reason、IP 與 user agent。
 
-- 只有 `SUPER_ADMIN` 可用。
-- `reason` 必填。
-- 成功或失敗都可以寫 audit log。
-
-response：
-
-```json
-{
-  "order_id": 123,
-  "user_id": 10,
-  "user_name": "王小明",
-  "email": "user@example.com"
-}
-```
-
----
+目前沒有 `GET /admin/orders/{orderId}` endpoint；完整敏感資料只能透過 reveal API 取得。
 
 ## 7. Audit Log
 
-建議新增 `admin_audit_logs`：
-
-```sql
-CREATE TABLE admin_audit_logs (
-    id BIGSERIAL PRIMARY KEY,
-    admin_user_id BIGINT NOT NULL,
-    action VARCHAR(100) NOT NULL,
-    target_type VARCHAR(50) NOT NULL,
-    target_id BIGINT NOT NULL,
-    reason TEXT NULL,
-    ip_address VARCHAR(64) NULL,
-    user_agent TEXT NULL,
-    created_at TIMESTAMPTZ NOT NULL
-);
-```
-
-第一版 action：
-
-- `REVEAL_ORDER_SENSITIVE`
-- `UPDATE_EVENT`
-- `UPDATE_EVENT_SECTION`
-
-後台操作紀錄也適合使用 keyset pagination。
-
----
-
-## 8. 後台 API 第一版
-
-建議第一版先做這些：
-
 ```http
-GET  /admin/orders
-GET  /admin/orders/{orderId}
-POST /admin/orders/{orderId}/reveal-sensitive
-
-GET  /admin/events
-GET  /admin/events/{eventId}
-
-GET  /admin/events/{eventId}/sections
-
-GET  /admin/audit-logs
+GET /admin/audit-logs
 ```
 
-如果要先更小，可以只做：
+Audit log 使用和訂單列表相同的 `cursor_created_at + cursor_id` keyset pagination。IP address 在 API response 中會遮罩。
 
-```http
-GET  /admin/orders
-POST /admin/orders/{orderId}/reveal-sensitive
-GET  /admin/audit-logs
-```
+目前會記錄以下操作：
 
----
+| Action | Target |
+| --- | --- |
+| `ADMIN_USER_UPDATE` | `ADMIN_USER` |
+| `ORGANIZER_UPDATE` | `ORGANIZER` |
+| `EVENT_UPDATE` | `EVENT` |
+| `SECTION_UPDATE` | `SECTION` |
+| `REVEAL_ORDER_SENSITIVE` | `ORDER` |
 
-## 9. Keyset Pagination 規格
+`SUPER_ADMIN` 可以查看所有 logs；`EVENT_ADMIN` 目前只能查看自己產生的 logs。
 
-適用列表：
+## 8. Optimistic Locking
 
-- 訂單列表
-- 搶票請求紀錄
-- 庫存流水
-- 後台操作紀錄
+以下資料表具有 `version` 欄位：
 
-排序規則：
+- `admin_users`
+- `organizers`
+- `events`
+- `event_sections`
 
-```sql
-ORDER BY created_at DESC, id DESC
-```
-
-cursor 格式：
+所有 PATCH request 都必須帶 `expected_version`：
 
 ```json
 {
-  "created_at": "2026-06-28T12:00:00Z",
-  "id": 12345
+  "expected_version": 3,
+  "name": "更新後名稱"
 }
 ```
 
-查下一頁：
+更新 SQL 會使用目前 version 作為條件，成功後執行 `version = version + 1`。若資料已被其他 request 更新，API 回傳 `409 Conflict`，前端應重新讀取最新資料後再提交。
 
-```sql
-WHERE created_at < :cursor_created_at
-   OR (created_at = :cursor_created_at AND id < :cursor_id)
-```
+## 9. 狀態表示
 
-優點：
+API response 的 status 使用字串，例如：
 
-- 不會因為頁數越深越慢。
-- 適合 append-only 或接近 append-only 的大表。
-- 適合訂單、log、流水資料。
+- Admin user、organizer：`ACTIVE`、`DISABLED`
+- Event：`DRAFT`、`PUBLISHED`、`ON_SALE`、`ENDED`
+- Section：`ACTIVE`、`INACTIVE`、`SOLD_OUT`
+- Order：`PENDING_PAYMENT`、`PAID`、`EXPIRED`、`CANCELLED`
 
-限制：
+Admin create／update request 的 status 目前仍使用數字 enum；詳細對照請參考 `doc/api-status-values.md`。
 
-- 不適合任意跳頁。
-- 排序欄位需要穩定。
-- 前端要保存 `next_cursor`。
+## 10. 目前限制
 
----
-
-## 10. 建議實作順序
-
-### Phase 1：後台基礎
-
-1. 新增 admin role 模型。
-2. 新增 admin auth middleware。
-3. 新增 `admin_audit_logs` migration。
-4. 新增 masking utility。
-
-### Phase 2：訂單後台
-
-1. 新增 `GET /admin/orders`。
-2. 使用 keyset pagination。
-3. 訂單列表回傳脫敏 user 資料。
-4. 新增 `POST /admin/orders/{orderId}/reveal-sensitive`。
-5. reveal 時寫入 audit log。
-
-### Phase 3：活動與票區後台
-
-1. 新增 `GET /admin/events`。
-2. 新增 `GET /admin/events/{eventId}/sections`。
-3. 顯示總庫存、鎖定中、已售、剩餘。
-4. 後續再補活動與票區修改 API。
-
-### Phase 4：操作紀錄
-
-1. 新增 `GET /admin/audit-logs`。
-2. 使用 keyset pagination。
-3. IP 預設脫敏。
-
-### Phase 5：進階紀錄
-
-1. 新增搶票請求紀錄。
-2. 新增庫存流水。
-3. 將高頻紀錄改成 async 寫入。
-
----
-
-## 11. README 可展示的亮點
-
-後續可以在 README 放：
-
-```text
-Admin Backoffice
-- Order list uses keyset pagination to avoid OFFSET deep pagination degradation.
-- Sensitive user fields are masked by default in admin APIs.
-- SUPER_ADMIN reveal requires a reason and writes audit logs.
-- Event section inventory exposes total, reserved, sold, and available quantities.
-- Stock ledger is planned for inventory reconciliation and compensation tracking.
-```
-
----
-
-## 12. 第一個可執行切片
-
-最小可交付版本：
-
-1. `admin_audit_logs` migration。
-2. `MaskEmail()` / `MaskName()` utility。
-3. `GET /admin/orders?limit=20`。
-4. response 使用 `items + next_cursor`。
-5. `POST /admin/orders/{orderId}/reveal-sensitive`。
-6. reveal 寫入 audit log。
-
-這個切片可以展示：
-
-- 後台不是單純 CRUD。
-- 大表查詢有 pagination 設計。
-- 敏感資料有權限與留痕。
-- 能直接接在目前購票主流程資料上。
+- 尚未提供獨立的單筆訂單詳情 API。
+- Create 操作目前沒有全部寫入 audit log；主要記錄 update 與敏感資料 reveal。
+- Events 與 sections 列表目前不是 keyset pagination。
+- 尚未實作搶票請求紀錄、庫存流水或完整營運報表。
+- 後台目前是 API 能力，若要作為完整營運工具，仍需由 frontend 補齊對應管理介面與操作流程。

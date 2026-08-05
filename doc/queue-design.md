@@ -62,17 +62,7 @@ Response：
 }
 ```
 
-如果活動已經允許立即放行，也可能直接回：
-
-```json
-{
-  "queue_token": "qt_20260612233742.971083100",
-  "status": "READY",
-  "ahead_count": 0,
-  "purchase_token": "pt_20260613012918.860164300",
-  "purchase_token_expires_at": "2026-06-13T01:34:18+08:00"
-}
-```
+目前 `/queue/join` 一律先將使用者加入 waiting queue 並回傳 `WAITING`。只有 scheduler 執行 promote 後，`GET /queue/status/{queueToken}` 才會回傳 `READY` 與 `purchase_token`。
 
 ### GET /queue/status/{queueToken}
 
@@ -107,11 +97,11 @@ READY：
 ```text
 queue:waiting:{eventID}
 queue:ready:{eventID}
-queue:snapshot:{queueToken}
+queue:token:{queueToken}
 queue:purchase:{purchaseToken}
-queue:user:{eventID}:{userID}
+queue:user:event:{eventID}:{userID}
 queue:events:active
-queue:seq:{eventID}
+queue:event:{eventID}:seq
 ```
 
 ### waiting queue
@@ -137,7 +127,7 @@ queue:ready:{eventID}
 ### queue snapshot
 
 ```text
-queue:snapshot:{queueToken}
+queue:token:{queueToken}
 ```
 
 保存 queue token 對應狀態，例如：
@@ -167,6 +157,8 @@ queue:purchase:{purchaseToken}
 
 queue 放行由 scheduler 控制，不由 `GET /queue/status` 即時計算放行。
 
+目前 promote 使用 Redis Lua script，將 ready 容量計算、waiting 移除、snapshot 更新、purchase token 建立及 ready queue 寫入收斂在同一次 script 執行中。
+
 概念流程：
 
 ```text
@@ -183,6 +175,8 @@ for each token:
 ```
 
 這樣可以避免每次使用者 poll queue status 都掃整條 queue。
+
+Lua script 是 Redis 內的原子操作，因此多個 scheduler 同時執行 promote 時，不會讓同一個 waiting token 被重複放行。不過 scheduler 的其他 jobs 並沒有因此取得跨 Pod 的 distributed lock。
 
 目前 scheduler job 有 local no-overlap guard：同一個 Pod 內，如果上一輪 job 還沒跑完，下一輪會 skip。
 
@@ -265,7 +259,6 @@ purchase token 不存在：
 目前設計仍有幾個可補強點：
 
 - scheduler Pod 之間尚未使用 Redis distributed lock，目前建議 `scheduler.replicaCount=1`。
-- promote 流程若要更嚴謹，可以用 Lua script 收斂成單次 Redis 原子操作。
 - queue join backpressure 目前是 process-local，若 API 多 Pod，可再補 Redis token bucket。
 
 這些限制不影響目前單 scheduler Pod 的主流程，但要做 scheduler HA 時需要補上。

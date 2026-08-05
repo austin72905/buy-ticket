@@ -270,16 +270,28 @@ OUTBOX_PUBLISH_RETRY_AFTER_SECONDS=30
 
 ```json
 {
+  "event_id": "evt_0123456789abcdef",
   "event_type": "PAYMENT_SUCCEEDED",
-  "aggregate_type": "ORDER",
+  "aggregate_type": "PAYMENT",
   "aggregate_id": 1,
   "payload": {
-    "order_id": 1,
     "payment_id": 1,
-    "payment_no": "PAY-20260718171128-98e4ee"
+    "payment_no": "PAY-20260718171128-98e4ee",
+    "order_id": 1,
+    "order_no": "ORD-20260718170000-1234",
+    "reservation_id": 1,
+    "user_id": 1,
+    "event_id": 1,
+    "section_id": 1,
+    "quantity": 2,
+    "amount": 2800,
+    "method": "ecpay",
+    "paid_at": "2026-07-18T17:11:28+08:00"
   }
 }
 ```
+
+`aggregate_id` 使用 `payment.ID`，不是 order ID。每個 outbox event 的 `event_id` 具有唯一索引，publisher 失敗時最多重試 5 次並透過 `next_attempt_at` 延後下一次嘗試。
 
 ## 為什麼不是前端直接改 paid
 
@@ -325,6 +337,7 @@ OUTBOX_PUBLISH_RETRY_AFTER_SECONDS=30
 - outbox publisher 目前以 log 模擬，不是真的送 MQ / Email。
 - circuit breaker 狀態是 process-local，多 Pod 不共享。
 - payment reconciliation 依賴 provider query API。
+- outbox publish 與 payment reconciliation 尚未使用 claim／row locking；目前應維持單一 scheduler replica。
 
 後續可補強：
 
@@ -332,3 +345,4 @@ OUTBOX_PUBLISH_RETRY_AFTER_SECONDS=30
 - 補 Email notification service。
 - payment provider 增加正式查詢 API 與簽章驗證。
 - circuit breaker metrics / dashboard。
+- 多 scheduler worker 前，替 outbox publish 與 payment reconciliation 加入 claim／locking，並讓訊息 consumer 依 `event_id` 做冪等處理。

@@ -85,7 +85,7 @@ sequenceDiagram
 
     Client->>API: POST /queue/join
     API->>Queue: Join(...)
-    Queue-->>API: queue_token / waiting or ready
+    Queue-->>API: queue_token / waiting
     API-->>Client: join response
 
     loop polling
@@ -143,13 +143,13 @@ Behavior:
 
 - Runs every 1 second.
 - Calls `QueueStore.PromoteReady(...)`.
-- Uses `queue.release.limit` to control how many users can enter `ready` each run.
+- Uses `QUEUE_RELEASE_LIMIT` to control the maximum number of users held in `ready`.
 
 Configuration:
 
 - Job name: `queue-promote-ready`
 - Cron spec: `*/1 * * * * *`
-- `queue.release.limit`: loaded from properties
+- `QUEUE_RELEASE_LIMIT`: loaded from typed config through environment variables or local `.env`
 
 ---
 
@@ -170,8 +170,8 @@ Configuration:
 
 - Job name: `order-expire-sweep`
 - Cron spec: `*/5 * * * * *`
-- `order.expire.batch.size`: loaded from properties
-- `order.payment.ttl_minutes`: server-side pending payment TTL used when creating orders
+- `ORDER_EXPIRE_BATCH_SIZE`: maximum number of expired orders processed per run
+- `ORDER_PAYMENT_TTL_MINUTES`: server-side pending payment TTL used when creating orders
 
 ---
 
@@ -202,17 +202,38 @@ Configuration:
 
 ---
 
-## 7. Queue Status
+## 7. Background Job Summary
 
-Queue status uses an integer enum:
+All jobs run when `APP_ROLE=all` or `APP_ROLE=scheduler`. Each job has a process-local no-overlap guard, but there is no distributed lock across scheduler Pods.
 
-- `1` = waiting
-- `2` = ready
-- `3` = expired
+| Job | Cron spec | Behavior |
+| --- | --- | --- |
+| `queue-promote-ready` | `*/1 * * * * *` | Promotes waiting queue entries to ready |
+| `order-expire-sweep` | `*/5 * * * * *` | Expires unpaid orders and releases reservations and stock |
+| `event-status-advance` | `*/5 * * * * *` | Advances published events to on-sale or ended |
+| `purchase-token-cleanup` | `*/1 * * * * *` | Removes expired purchase tokens from the ready queue |
+| `queue-timeout-cleanup` | `*/10 * * * * *` | Removes expired waiting and ready queue entries |
+| `stock-reconcile` | `0 * * * * *` | Reconciles Redis stock with PostgreSQL |
+| `payment-attempt-reconcile` | `*/30 * * * * *` | Queries provider state when callbacks are missing; can be disabled |
+| `outbox-publish` | `*/10 * * * * *` | Publishes pending outbox events to the current log-based publisher; can be disabled |
+
+`payment-attempt-reconcile` and `outbox-publish` are enabled by default and can be disabled with `PAYMENT_RECONCILE_ENABLED=false` and `OUTBOX_PUBLISH_ENABLED=false`.
 
 ---
 
-## 8. Key APIs
+## 8. Queue Status
+
+Queue status is returned by the API as a string:
+
+- `WAITING`
+- `READY`
+- `EXPIRED`
+
+The domain and Redis snapshot use an internal numeric enum, but clients should only depend on the API string values.
+
+---
+
+## 9. Key APIs
 
 Public APIs:
 
@@ -243,18 +264,17 @@ Authenticated APIs:
 
 ---
 
-## 9. Remaining Work
+## 10. Remaining Work
 
-- Queue timeout cleanup
-- Purchase token cleanup
-- Stock consistency hardening: see `doc/stock-reconciliation.md`
-- Payment reliability: see `doc/payment-design.md`
 - Payment callback / webhook hardening
+- Distributed scheduler locking or leader election before running multiple scheduler replicas
+- Outbox claim/locking before multiple workers publish concurrently
+- Real RabbitMQ integration and consumer idempotency
 - RabbitMQ delay or DLQ timeout flow
 
 ---
 
-## 10. Payment API Modes
+## 11. Payment API Modes
 
 The project currently keeps two payment entry points:
 

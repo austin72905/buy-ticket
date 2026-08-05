@@ -1,52 +1,54 @@
 # buy-ticket 啟動與部署方式
 
-這份文件給新電腦或其他 AI agent 使用，用來快速理解目前專案如何本機啟動、Docker build，以及用 Helm 部署到單機 k3s。
+這份文件說明本 repository 的本機啟動、image build，以及目前實際使用的 Helm deployment repository。
 
-## 1. 目前架構
+## 1. Runtime 架構
 
-目前是同一個 repo、同一個 binary、同一個 Docker image，透過 `APP_ROLE` 決定啟動內容。
+應用使用同一個 binary 與 Docker image，透過 `APP_ROLE` 決定啟動內容。
 
-| APP_ROLE | 用途 | 行為 |
+| `APP_ROLE` | 用途 | 行為 |
 | --- | --- | --- |
-| `all` 或未設定 | 本機開發預設 | API + scheduler 都啟動 |
+| `all` 或未設定 | 本機開發預設 | API 與 scheduler 都啟動 |
 | `api` | Kubernetes API Deployment | 只啟動 HTTP API |
-| `scheduler` | Kubernetes scheduler Deployment | 只啟動背景任務，不啟動 HTTP |
+| `scheduler` | Kubernetes scheduler Deployment | 只啟動背景任務，不監聽 HTTP port |
 
-Kubernetes 部署時會用同一個 image 啟動兩個 Deployment：
+Kubernetes 通常以同一個 image 啟動兩個 Deployment：
 
 - `buy-ticket-api`：`APP_ROLE=api`，可水平擴充。
-- `buy-ticket-scheduler`：`APP_ROLE=scheduler`，replicas 預設 `1`。
+- `buy-ticket-scheduler`：`APP_ROLE=scheduler`，目前建議維持單一 replica。
 
-## 2. 本機開發啟動
+Scheduler 只有 process-local no-overlap guard，尚未使用 distributed lock 或 leader election；多個 scheduler Pod 仍可能同時執行相同 job。
 
-### 啟動 infra
+## 2. 本機開發
+
+### 啟動 infrastructure
 
 ```powershell
 cd D:\SourceCode\Go\buy-ticket
 make up
 ```
 
-目前 `docker-compose.yml` 會啟動：
+本 repository 的 `docker-compose.yml` 只啟動：
 
 - PostgreSQL：`localhost:5432`
 - Redis：`localhost:6379`
-- RabbitMQ：`localhost:5672`，管理介面 `localhost:15672`
+- RabbitMQ：`localhost:5672`，管理介面為 `localhost:15672`
 
-### 跑 migration
+Docker Compose 不會啟動 Go API、scheduler、Vue frontend 或 mock payment service。RabbitMQ 目前也尚未接入應用流程；outbox publisher 現階段只寫入 log。
+
+### 執行 migration
 
 ```powershell
 make migrate-up
 ```
 
-### 啟動 API + scheduler
+### 啟動 API 與 scheduler
 
 ```powershell
 make run-dev
 ```
 
-未設定 `APP_ROLE` 時等同 `APP_ROLE=all`，所以本機開發不需要特別設定。
-
-### 分開測 API / scheduler
+`make run-dev` 會使用 `APP_ENV=dev`。未設定 `APP_ROLE` 時等同 `APP_ROLE=all`。
 
 只啟動 API：
 
@@ -64,9 +66,23 @@ make run-dev
 Remove-Item Env:APP_ROLE
 ```
 
+### Mock payment service
+
+Mock payment service 是外部相依服務，不在本 repository，也不會由 `docker compose` 啟動。付款流程預設連線到：
+
+```text
+http://localhost:8081
+```
+
+啟動付款流程前，需另行啟動相容的 mock payment service，並確認 callback 可以連回：
+
+```text
+http://localhost:8080/payments/provider/ecpay/callback
+```
+
 ## 3. Docker image build
 
-`go-infra` 已改成 tag dependency：`github.com/austin72905/go-infra v0.1.0`，所以 Docker build 不需要本機 sibling repo。
+`go-infra` 使用 Go module tag dependency，目前版本為 `github.com/austin72905/go-infra v0.1.1`，Docker build 不需要本機 sibling repository。
 
 ```powershell
 cd D:\SourceCode\Go\buy-ticket
@@ -75,120 +91,86 @@ docker build -t buy-ticket:local .
 
 ### Migration image
 
-Release tags also build a dedicated migration image:
+Release 可以另外建立 migration image：
 
 ```text
 ghcr.io/austin72905/buy-ticket-migrate:<tag>
 ```
 
-The image contains:
+image 內容包含：
 
 ```text
 /usr/local/bin/migrate
 /app/migrations
 ```
 
-Local build:
+本機建立方式：
 
 ```powershell
 docker build -f Dockerfile.migrate -t buy-ticket-migrate:local .
 ```
 
-The Helm chart can run migrations as a pre-install/pre-upgrade Job when enabled:
+是否以及如何在部署時執行 migration，應以 `buy-ticket-deploy` repository 的 chart 與 values 設定為準。
+
+## 4. Helm 部署來源
+
+目前實際部署不使用本 repository 的 `charts/buy-ticket`。正式部署設定由獨立 repository 管理：
+
+- [austin72905/buy-ticket-deploy](https://github.com/austin72905/buy-ticket-deploy)
+
+Chart 位於 deployment repository 根目錄，主要設定檔為 `values.yaml`。部署設定、image tag、replica、Secret、migration 與環境差異都應在該 repository 維護。
+
+取得 deployment repository：
 
 ```bash
-helm upgrade --install buy-ticket ./charts/buy-ticket \
-  -n buy-ticket \
+git clone https://github.com/austin72905/buy-ticket-deploy.git
+cd buy-ticket-deploy
+```
+
+部署前先檢查實際 `values.yaml`，再渲染 chart：
+
+```bash
+helm template buy-ticket . -f ./values.yaml
+```
+
+安裝或升級：
+
+```bash
+helm upgrade --install buy-ticket . \
+  --namespace buy-ticket \
   --create-namespace \
-  --set migration.enabled=true \
-  --set migration.image.repository=ghcr.io/austin72905/buy-ticket-migrate \
-  --set migration.image.tag=v0.1.0
+  -f ./values.yaml
 ```
 
-Keep `migration.enabled=false` for deploys that should not run database migrations.
+本 repository 內的 `charts/buy-ticket` 僅保留為舊版或參考用 chart，不是目前 deployment source of truth，不應用它修改正式環境。
 
-## 4. 單機 k3s 部署
+## 5. 部署設定注意事項
 
-### 前提
+Pod 裡的 `localhost` 指向 Pod 本身，不能用來連線主機上的 PostgreSQL、Redis 或 mock payment service。部署 values 應填寫 Pod 可存取的 Kubernetes Service、DNS 名稱或外部位址。
 
-目標型態：
+正式環境至少需要正確設定：
 
-```text
-同一台 Linux 主機
-├─ Docker Compose
-│  ├─ PostgreSQL
-│  ├─ Redis
-│  └─ mock payment service
-└─ k3s
-   ├─ buy-ticket-api
-   └─ buy-ticket-scheduler
-```
+- `POSTGRES_DSN`
+- `REDIS_ADDR`
+- `PAYMENT_MOCK_BASE_URL`
+- `PAYMENT_MOCK_CALLBACK_URL`
+- payment signature secrets
 
-注意：Pod 裡的 `localhost` 是 Pod 自己，不是 Linux 主機。  
-如果 infra 用 Docker Compose 跑在同一台 Linux 主機，`charts/buy-ticket/values-local.yaml` 需要改成 Linux 主機 IP。
+其他注意事項：
 
-查 Linux 主機 IP：
+- API replicas 可以水平擴充。
+- Scheduler 目前維持一個 replica，避免相同排程跨 Pod 重複執行。
+- 若 scheduler 要高可用，應先加入 leader election、distributed lock 或資料 claim 機制。
+- 正式密碼與簽章資料不要直接寫入公開的 `values.yaml`，應透過 Kubernetes Secret 或外部 secret 管理。
+- 部署前確認 migration 已包含在 release 流程，避免新程式先於資料庫 schema 上線。
+
+## 6. 部署後檢查
 
 ```bash
-hostname -I
+kubectl get pods -n buy-ticket
+kubectl get svc -n buy-ticket
+kubectl logs deployment/buy-ticket-api -n buy-ticket
+kubectl logs deployment/buy-ticket-scheduler -n buy-ticket
 ```
 
-範例：
-
-```yaml
-postgres:
-  dsn: "postgres://postgres:postgres@192.168.1.10:5432/buy_ticket?sslmode=disable"
-
-redis:
-  addr: "192.168.1.10:6379"
-
-payment:
-  mock:
-    baseURL: "http://192.168.1.10:8081"
-    callbackURL: "http://192.168.1.10:8080/payments/provider/ecpay/callback"
-```
-
-### 匯入 image 到 k3s
-
-如果沒有 registry，可以先用本機 image 匯入 k3s：
-
-```bash
-docker build -t buy-ticket:local .
-docker save buy-ticket:local -o buy-ticket-local.tar
-sudo k3s ctr images import buy-ticket-local.tar
-```
-
-### Helm render 檢查
-
-```bash
-helm template buy-ticket ./charts/buy-ticket -f ./charts/buy-ticket/values-local.yaml
-```
-
-預期會產生：
-
-- 一個 Service，只 selector `app.kubernetes.io/component: api`
-- 一個 `buy-ticket-api` Deployment，`APP_ROLE=api`
-- 一個 `buy-ticket-scheduler` Deployment，`APP_ROLE=scheduler`
-
-### Helm 部署
-
-```bash
-helm upgrade --install buy-ticket ./charts/buy-ticket -f ./charts/buy-ticket/values-local.yaml
-```
-
-### 檢查 Pod
-
-```bash
-kubectl get pods
-kubectl get svc
-kubectl logs deploy/buy-ticket-api
-kubectl logs deploy/buy-ticket-scheduler
-```
-
-## 5. 常見注意事項
-
-- 本機 `make run-dev` 不需要改，預設仍是 API + scheduler。
-- k3s 裡不要把 Postgres / Redis 設成 `localhost`，要填 Pod 能連到的主機 IP 或 Kubernetes service name。
-- API replicas 可以調高；scheduler replicas 第一階段維持 `1`，避免重複跑排程。
-- 如果之後 scheduler 要高可用，先做 leader election 或 distributed lock，再把 scheduler replicas 調高。
-- `values.yaml` / `values-local.yaml` 不要放正式密碼；正式環境用外部 secret 或部署時覆寫。
+實際 resource name 與 namespace 若由 deployment chart 覆寫，以上指令需依 `buy-ticket-deploy/values.yaml` 調整。

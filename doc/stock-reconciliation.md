@@ -45,6 +45,21 @@ Reconciliation 的目的就是定期以 DB 為準，修正 Redis stock 的偏差
 
 目前已新增 `stock-reconcile` background job。
 
+庫存寫入目前有兩層保護：
+
+1. Redis Lua script 是高併發請求的快速 admission gate，原子檢查並扣減可用庫存。
+2. PostgreSQL 使用條件式原子 `UPDATE` 處理 reserve、release 與 confirm sale，避免 DB 庫存超賣、負數或確認超過已保留數量。
+
+Reserve 的 DB 更新會確認：
+
+```text
+quantity > 0
+quantity <= purchase_limit（purchase_limit 不為 0 時）
+reserved_quantity + sold_quantity + quantity <= total_quantity
+```
+
+Release 與 confirm sale 則會確認 `reserved_quantity >= quantity`。因此 PostgreSQL 是 Redis 之外的第二道庫存防線，也是最終的 durable consistency boundary。
+
 排程：
 
 ```text
@@ -76,7 +91,7 @@ available = total_quantity - reserved_quantity - sold_quantity
 
 `RebuildStock`：
 
-- app 啟動時執行。
+- `APP_ROLE=all` 或 `APP_ROLE=scheduler` 啟動時執行；純 `APP_ROLE=api` 不會執行。
 - 直接用 DB 狀態重建所有 Redis stock。
 - 適合服務啟動、Redis 清空、初始化。
 
@@ -96,20 +111,19 @@ Reconciliation 是「最終一致」修復手段。
 
 - 如果 reconciliation 剛好在 Redis reserve 成功、DB commit 還沒完成時執行，可能短暫把 Redis 修回 DB 舊值。
 - 目前每分鐘跑一次，降低撞到 in-flight reservation 的機率。
-- Production 可以再加 DB conditional update、outbox、retry、或 reconciliation lock 來降低風險。
+- 目前 scheduler guard 只限制單一 process 內不重入；多個 scheduler Pod 之間沒有 distributed lock。
+- Production 若要執行多個 scheduler replicas，可以加入 distributed lock、leader election 或更細緻的 reconciliation claim 機制。
 
 目前作品階段的定位：
 
 - Redis Lua 負責高併發扣庫存。
-- DB transaction 負責正式資料狀態。
+- PostgreSQL 條件式原子更新與 DB transaction 負責正式資料狀態及第二道庫存檢查。
 - 失敗補償負責即時修復。
 - `stock-reconcile` 負責補償失敗後的定期修復。
 
 ## 5. 後續可補強
 
-- DB section update 改成條件式原子更新，作為 Redis 之外的第二道防線。
 - Redis release script 加上最大可用量上限，避免 release 過量。
 - Reconciliation 加分散式鎖，避免多 instance 同時執行。
 - Reconciliation 加 metrics，例如 checked/fixed/error count。
 - 補一個 admin endpoint 或 CLI 手動觸發 reconciliation。
-
