@@ -10,6 +10,7 @@ import (
 	"buy-ticket/domain"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -926,6 +927,9 @@ func (r *PostgresPaymentAttemptRepository) Save(ctx context.Context, attempt *do
 			CreatedAt:          toPgTimestamp(attempt.CreatedAt),
 		})
 		if err != nil {
+			if isUniqueConstraintViolation(err) {
+				return ErrUniqueConstraintViolation
+			}
 			return err
 		}
 
@@ -1032,11 +1036,19 @@ func (r *PostgresIdempotencyRepository) Create(ctx context.Context, record *doma
 		CreatedAt:   toPgTimestamp(record.CreatedAt),
 	})
 	if err != nil {
+		if isUniqueConstraintViolation(err) {
+			return ErrUniqueConstraintViolation
+		}
 		return err
 	}
 
 	*record = *toDomainIdempotencyKey(created)
 	return nil
+}
+
+func isUniqueConstraintViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 func (r *PostgresAdminUserRepository) FindByID(ctx context.Context, adminUserID int64) (*domain.AdminUser, error) {

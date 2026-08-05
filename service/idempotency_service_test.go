@@ -121,11 +121,40 @@ func TestBookingServicePaymentIdempotency(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("unique collision reads the concurrently created record", func(t *testing.T) {
+		repo := newFakeIdempotencyRepository()
+		repo.createErr = repository.ErrUniqueConstraintViolation
+		repo.recordOnCreateError = &domain.IdempotencyKey{
+			ID:          99,
+			Key:         "race-key",
+			UserID:      3,
+			Endpoint:    "POST /payments",
+			RequestHash: "race-hash",
+			Status:      domain.IdempotencyStatusProcessing,
+		}
+		svc := newTestBookingService(testBookingDeps{IdempotencyRepo: repo})
+
+		_, replay, err := svc.BeginPaymentIdempotency(context.Background(), BeginIdempotencyInput{
+			Key:         "race-key",
+			UserID:      3,
+			Endpoint:    "POST /payments",
+			RequestHash: "race-hash",
+		})
+		if !errors.Is(err, ErrIdempotencyInProgress) {
+			t.Fatalf("expected in-progress result after unique collision, got %v", err)
+		}
+		if replay {
+			t.Fatal("processing record must not be replayed")
+		}
+	})
 }
 
 type fakeIdempotencyRepository struct {
-	nextID  int64
-	records map[string]*domain.IdempotencyKey
+	nextID              int64
+	records             map[string]*domain.IdempotencyKey
+	createErr           error
+	recordOnCreateError *domain.IdempotencyKey
 }
 
 func newFakeIdempotencyRepository() *fakeIdempotencyRepository {
@@ -146,6 +175,13 @@ func (f *fakeIdempotencyRepository) FindByKeyAndEndpoint(ctx context.Context, us
 }
 
 func (f *fakeIdempotencyRepository) Create(ctx context.Context, record *domain.IdempotencyKey) error {
+	if f.createErr != nil {
+		if f.recordOnCreateError != nil {
+			cloned := *f.recordOnCreateError
+			f.records[idempotencyMapKey(cloned.UserID, cloned.Key, cloned.Endpoint)] = &cloned
+		}
+		return f.createErr
+	}
 	record.ID = f.nextID
 	f.nextID++
 

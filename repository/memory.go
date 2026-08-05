@@ -1215,6 +1215,15 @@ func (r *MemoryPaymentAttemptRepository) Save(ctx context.Context, attempt *doma
 
 	cloned := *attempt
 	if cloned.ID == 0 {
+		for _, existing := range r.attempts {
+			if existing.MerchantTradeNo == cloned.MerchantTradeNo {
+				return ErrUniqueConstraintViolation
+			}
+			if cloned.IdempotencyKey != nil && existing.OrderID == cloned.OrderID &&
+				existing.IdempotencyKey != nil && *existing.IdempotencyKey == *cloned.IdempotencyKey {
+				return ErrUniqueConstraintViolation
+			}
+		}
 		cloned.ID = r.nextID
 		r.nextID++
 		attempt.ID = cloned.ID

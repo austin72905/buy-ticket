@@ -148,6 +148,27 @@ provider timeout 不代表 provider 沒處理。這種情況不能直接換 prov
 - 付款失敗後若使用者要重新付款，應產生新的 `Idempotency-Key`。
 - 新的付款請求會建立新的 `payment_attempt`。
 
+### 併發請求處理
+
+Idempotency 採用資料庫 unique constraint 作為最終一致性邊界，避免只依賴「先查詢、再新增」造成競爭：
+
+```text
+request A -> SELECT：找不到
+request B -> SELECT：找不到
+request A -> INSERT：成功
+request B -> INSERT：unique violation
+request B -> 重新查詢並讀回 request A 建立的紀錄
+```
+
+PostgreSQL 回傳 SQLSTATE `23505` 時，repository 會轉換為 unique constraint domain error，service 再依 idempotency scope 重新查詢：
+
+- `POST /payments`：依 `user_id + key + endpoint` 讀回 `idempotency_keys`。
+- `POST /payments/start`：依 `order_id + idempotency_key` 讀回 `payment_attempts`。
+- 若既有紀錄的 request hash、付款方式或 provider 不相容，回傳 idempotency conflict。
+- 若資料相容，回傳既有結果或 processing 狀態，不建立第二筆資料。
+
+`POST /payments/start` 另外會區分 payment attempt 是由本次 request 新建，還是競爭後讀回。只有成功新建 attempt 的 request 可以呼叫 payment provider；讀回既有 attempt 的 request 會直接回傳該紀錄，避免重複送出付款請求。
+
 ## Provider Router 與 Circuit Breaker
 
 目前支援 primary / backup mock payment provider。

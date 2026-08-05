@@ -17,6 +17,7 @@ var ErrReservationSnapshotMismatch = errors.New("reservation snapshot mismatch")
 var ErrOrderReservationMismatch = errors.New("order reservation mismatch")
 var ErrPaymentOrderMismatch = errors.New("payment order mismatch")
 var ErrResourceStateConflict = errors.New("resource state has changed")
+var ErrUniqueConstraintViolation = errors.New("unique constraint violation")
 
 type AdminUserRepository interface {
 	FindByID(ctx context.Context, adminUserID int64) (*domain.AdminUser, error)
