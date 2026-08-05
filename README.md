@@ -67,9 +67,7 @@ buy-ticket-scheduler  APP_ROLE=scheduler
 
 相關文件：
 
-- `doc/redis-queue-model.md`
-- `doc/queue-purchase-token-design.md`
-- `doc/queue-api.md`
+- `doc/queue-design.md`
 
 ### Booking Sequence
 
