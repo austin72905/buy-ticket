@@ -22,6 +22,30 @@ FROM orders
 WHERE id = $1
 LIMIT 1;
 
+-- name: GetOrderByIDForUpdate :one
+SELECT
+    id,
+    order_no,
+    reservation_id,
+    reservation_no,
+    event_id,
+    event_name,
+    section_id,
+    section_name,
+    user_id,
+    user_name,
+    quantity,
+    unit_price,
+    total_amount,
+    status,
+    expires_at,
+    paid_at,
+    created_at,
+    updated_at
+FROM orders
+WHERE id = $1
+FOR UPDATE;
+
 -- name: GetOrderByOrderNo :one
 SELECT
     id,
@@ -95,6 +119,15 @@ SET
     paid_at = $3,
     updated_at = $4
 WHERE id = $1;
+
+-- name: UpdateOrderStatusIfCurrent :execrows
+UPDATE orders
+SET
+    status = sqlc.arg(status),
+    paid_at = sqlc.narg(paid_at),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id)
+  AND status = sqlc.arg(expected_status);
 
 -- name: ListExpiredPendingOrders :many
 SELECT

@@ -474,6 +474,15 @@ func (r *PostgresReservationRepository) FindByID(ctx context.Context, reservatio
 	return toDomainReservation(record), nil
 }
 
+func (r *PostgresReservationRepository) FindByIDForUpdate(ctx context.Context, reservationID int64) (*domain.Reservation, error) {
+	record, err := r.queries.GetReservationByIDForUpdate(ctx, reservationID)
+	if err != nil {
+		return nil, err
+	}
+
+	return toDomainReservation(record), nil
+}
+
 func (r *PostgresReservationRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Reservation, error) {
 	records, err := r.queries.ListReservationsByUserID(ctx, userID)
 	if err != nil {
@@ -529,6 +538,22 @@ func (r *PostgresReservationRepository) Save(ctx context.Context, reservation *d
 	})
 }
 
+func (r *PostgresReservationRepository) UpdateStatus(ctx context.Context, reservation *domain.Reservation, expectedStatus domain.ReservationStatus) error {
+	rowsAffected, err := r.queries.UpdateReservationStatusIfCurrent(ctx, db.UpdateReservationStatusIfCurrentParams{
+		ID:             reservation.ID,
+		Status:         int16(reservation.Status),
+		UpdatedAt:      toPgTimestamp(reservation.UpdatedAt),
+		ExpectedStatus: int16(expectedStatus),
+	})
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrResourceStateConflict
+	}
+	return nil
+}
+
 func (r *PostgresReservationRepository) CreateFromEventSection(ctx context.Context, reservation *domain.Reservation, event *domain.Event, section *domain.Section) error {
 	if reservation.EventID != event.ID || reservation.EventID != section.EventID || reservation.SectionID != section.ID {
 		return ErrReservationSnapshotMismatch
@@ -560,6 +585,15 @@ func (r *PostgresReservationRepository) CreateFromEventSection(ctx context.Conte
 
 func (r *PostgresOrderRepository) FindByID(ctx context.Context, orderID int64) (*domain.Order, error) {
 	record, err := r.queries.GetOrderByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	return toDomainOrder(record), nil
+}
+
+func (r *PostgresOrderRepository) FindByIDForUpdate(ctx context.Context, orderID int64) (*domain.Order, error) {
+	record, err := r.queries.GetOrderByIDForUpdate(ctx, orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -671,6 +705,23 @@ func (r *PostgresOrderRepository) Save(ctx context.Context, order *domain.Order)
 		PaidAt:    nullablePgTimestamp(orderPaidAt(order)),
 		UpdatedAt: toPgTimestamp(order.UpdatedAt),
 	})
+}
+
+func (r *PostgresOrderRepository) UpdateStatus(ctx context.Context, order *domain.Order, expectedStatus domain.OrderStatus) error {
+	rowsAffected, err := r.queries.UpdateOrderStatusIfCurrent(ctx, db.UpdateOrderStatusIfCurrentParams{
+		ID:             order.ID,
+		Status:         int16(order.Status),
+		PaidAt:         nullablePgTimestamp(orderPaidAt(order)),
+		UpdatedAt:      toPgTimestamp(order.UpdatedAt),
+		ExpectedStatus: int16(expectedStatus),
+	})
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrResourceStateConflict
+	}
+	return nil
 }
 
 func (r *PostgresOrderRepository) CreateFromReservation(ctx context.Context, order *domain.Order, reservation *domain.Reservation) error {

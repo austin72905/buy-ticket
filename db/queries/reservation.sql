@@ -19,6 +19,27 @@ FROM reservations
 WHERE id = $1
 LIMIT 1;
 
+-- name: GetReservationByIDForUpdate :one
+SELECT
+    id,
+    reservation_no,
+    event_id,
+    event_name,
+    section_id,
+    section_name,
+    user_id,
+    user_name,
+    quantity,
+    unit_price,
+    total_amount,
+    status,
+    expires_at,
+    created_at,
+    updated_at
+FROM reservations
+WHERE id = $1
+FOR UPDATE;
+
 -- name: GetReservationByReservationNo :one
 SELECT
     id,
@@ -82,6 +103,14 @@ SET
     status = $2,
     updated_at = $3
 WHERE id = $1;
+
+-- name: UpdateReservationStatusIfCurrent :execrows
+UPDATE reservations
+SET
+    status = sqlc.arg(status),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id)
+  AND status = sqlc.arg(expected_status);
 
 -- name: ListExpiredHoldingReservations :many
 SELECT

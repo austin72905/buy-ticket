@@ -203,6 +203,51 @@ func (q *Queries) GetReservationByID(ctx context.Context, id int64) (Reservation
 	return i, err
 }
 
+const getReservationByIDForUpdate = `-- name: GetReservationByIDForUpdate :one
+SELECT
+    id,
+    reservation_no,
+    event_id,
+    event_name,
+    section_id,
+    section_name,
+    user_id,
+    user_name,
+    quantity,
+    unit_price,
+    total_amount,
+    status,
+    expires_at,
+    created_at,
+    updated_at
+FROM reservations
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetReservationByIDForUpdate(ctx context.Context, id int64) (Reservation, error) {
+	row := q.db.QueryRow(ctx, getReservationByIDForUpdate, id)
+	var i Reservation
+	err := row.Scan(
+		&i.ID,
+		&i.ReservationNo,
+		&i.EventID,
+		&i.EventName,
+		&i.SectionID,
+		&i.SectionName,
+		&i.UserID,
+		&i.UserName,
+		&i.Quantity,
+		&i.UnitPrice,
+		&i.TotalAmount,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getReservationByReservationNo = `-- name: GetReservationByReservationNo :one
 SELECT
     id,
@@ -388,4 +433,33 @@ type UpdateReservationStatusParams struct {
 func (q *Queries) UpdateReservationStatus(ctx context.Context, arg UpdateReservationStatusParams) error {
 	_, err := q.db.Exec(ctx, updateReservationStatus, arg.ID, arg.Status, arg.UpdatedAt)
 	return err
+}
+
+const updateReservationStatusIfCurrent = `-- name: UpdateReservationStatusIfCurrent :execrows
+UPDATE reservations
+SET
+    status = $1,
+    updated_at = $2
+WHERE id = $3
+  AND status = $4
+`
+
+type UpdateReservationStatusIfCurrentParams struct {
+	Status         int16              `json:"status"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID             int64              `json:"id"`
+	ExpectedStatus int16              `json:"expected_status"`
+}
+
+func (q *Queries) UpdateReservationStatusIfCurrent(ctx context.Context, arg UpdateReservationStatusIfCurrentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateReservationStatusIfCurrent,
+		arg.Status,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.ExpectedStatus,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

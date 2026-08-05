@@ -16,6 +16,7 @@ var ErrResourceVersionConflict = errors.New("resource has been modified, please 
 var ErrReservationSnapshotMismatch = errors.New("reservation snapshot mismatch")
 var ErrOrderReservationMismatch = errors.New("order reservation mismatch")
 var ErrPaymentOrderMismatch = errors.New("payment order mismatch")
+var ErrResourceStateConflict = errors.New("resource state has changed")
 
 type AdminUserRepository interface {
 	FindByID(ctx context.Context, adminUserID int64) (*domain.AdminUser, error)
@@ -83,6 +84,11 @@ type ReservationRepository interface {
 	Save(ctx context.Context, reservation *domain.Reservation) error
 }
 
+type ReservationStateRepository interface {
+	FindByIDForUpdate(ctx context.Context, reservationID int64) (*domain.Reservation, error)
+	UpdateStatus(ctx context.Context, reservation *domain.Reservation, expectedStatus domain.ReservationStatus) error
+}
+
 type OrderRepository interface {
 	FindByID(ctx context.Context, orderID int64) (*domain.Order, error)
 	FindByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error)
@@ -90,6 +96,11 @@ type OrderRepository interface {
 	ListByUserID(ctx context.Context, userID int64) ([]domain.Order, error)
 	CreateFromReservation(ctx context.Context, order *domain.Order, reservation *domain.Reservation) error
 	Save(ctx context.Context, order *domain.Order) error
+}
+
+type OrderStateRepository interface {
+	FindByIDForUpdate(ctx context.Context, orderID int64) (*domain.Order, error)
+	UpdateStatus(ctx context.Context, order *domain.Order, expectedStatus domain.OrderStatus) error
 }
 
 type PaymentRepository interface {

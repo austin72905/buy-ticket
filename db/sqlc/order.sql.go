@@ -245,6 +245,57 @@ func (q *Queries) GetOrderByID(ctx context.Context, id int64) (Order, error) {
 	return i, err
 }
 
+const getOrderByIDForUpdate = `-- name: GetOrderByIDForUpdate :one
+SELECT
+    id,
+    order_no,
+    reservation_id,
+    reservation_no,
+    event_id,
+    event_name,
+    section_id,
+    section_name,
+    user_id,
+    user_name,
+    quantity,
+    unit_price,
+    total_amount,
+    status,
+    expires_at,
+    paid_at,
+    created_at,
+    updated_at
+FROM orders
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetOrderByIDForUpdate(ctx context.Context, id int64) (Order, error) {
+	row := q.db.QueryRow(ctx, getOrderByIDForUpdate, id)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.OrderNo,
+		&i.ReservationID,
+		&i.ReservationNo,
+		&i.EventID,
+		&i.EventName,
+		&i.SectionID,
+		&i.SectionName,
+		&i.UserID,
+		&i.UserName,
+		&i.Quantity,
+		&i.UnitPrice,
+		&i.TotalAmount,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.PaidAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getOrderByOrderNo = `-- name: GetOrderByOrderNo :one
 SELECT
     id,
@@ -572,4 +623,36 @@ func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusPa
 		arg.UpdatedAt,
 	)
 	return err
+}
+
+const updateOrderStatusIfCurrent = `-- name: UpdateOrderStatusIfCurrent :execrows
+UPDATE orders
+SET
+    status = $1,
+    paid_at = $2,
+    updated_at = $3
+WHERE id = $4
+  AND status = $5
+`
+
+type UpdateOrderStatusIfCurrentParams struct {
+	Status         int16              `json:"status"`
+	PaidAt         pgtype.Timestamptz `json:"paid_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID             int64              `json:"id"`
+	ExpectedStatus int16              `json:"expected_status"`
+}
+
+func (q *Queries) UpdateOrderStatusIfCurrent(ctx context.Context, arg UpdateOrderStatusIfCurrentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateOrderStatusIfCurrent,
+		arg.Status,
+		arg.PaidAt,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.ExpectedStatus,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
