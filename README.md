@@ -341,17 +341,17 @@ create order
 
 ## Deployment
 
-Helm chart 在：
+實際部署使用獨立 repository 管理的 Helm chart：
 
-```text
-charts/buy-ticket
-```
+- [austin72905/buy-ticket-deploy](https://github.com/austin72905/buy-ticket-deploy)
 
-本地 K3s / k3d 可使用：
+Chart 位於 `buy-ticket-deploy` repository 根目錄，主要設定檔為 `values.yaml`。取得 deployment repository 後，可在其根目錄檢查渲染結果：
 
 ```powershell
-helm template buy-ticket ./charts/buy-ticket -f ./charts/buy-ticket/values-local.yaml
+helm template buy-ticket . -f ./values.yaml
 ```
+
+本 repository 內的 `charts/buy-ticket` 不是目前實際部署使用的 chart；部署設定與環境變更應以 `buy-ticket-deploy` repository 為準。
 
 正式部署時建議：
 
