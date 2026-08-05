@@ -248,8 +248,7 @@ Authenticated APIs:
 - Queue timeout cleanup
 - Purchase token cleanup
 - Stock consistency hardening: see `doc/stock-reconciliation.md`
-- Payment idempotency: see `doc/payment-idempotency.md`
-- Payment attempts and provider start flow: see `doc/payment-attempts.md`
+- Payment reliability: see `doc/payment-design.md`
 - Payment callback / webhook hardening
 - RabbitMQ delay or DLQ timeout flow
 

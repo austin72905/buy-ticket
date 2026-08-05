@@ -126,10 +126,7 @@ POST /payments/start
 
 相關文件：
 
-- `doc/payment-attempts.md`
-- `doc/payment-idempotency.md`
-- `doc/mock-payment-callback.md`
-- `doc/payment-reconciliation.md`
+- `doc/payment-design.md`
 
 ### Payment Sequence
 
@@ -180,7 +177,7 @@ PAYMENT_SUCCEEDED
 
 相關文件：
 
-- `doc/outbox-payment-notification.md`
+- `doc/payment-design.md`
 
 ### Admin Backoffice
 
