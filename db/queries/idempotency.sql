@@ -13,8 +13,9 @@ SELECT
     created_at,
     updated_at
 FROM idempotency_keys
-WHERE key = $1
-  AND endpoint = $2
+WHERE user_id = $1
+  AND key = $2
+  AND endpoint = $3
 LIMIT 1;
 
 -- name: CreateIdempotencyKey :one
@@ -48,10 +49,11 @@ RETURNING
 -- name: CompleteIdempotencyKey :exec
 UPDATE idempotency_keys
 SET
-    status = $3,
-    response_status = $4,
-    response_body = $5,
+    status = sqlc.arg(status),
+    response_status = sqlc.narg(response_status),
+    response_body = sqlc.narg(response_body),
     locked_until = NULL,
-    updated_at = $6
-WHERE key = $1
-  AND endpoint = $2;
+    updated_at = sqlc.arg(updated_at)
+WHERE user_id = sqlc.arg(user_id)
+  AND key = sqlc.arg(key)
+  AND endpoint = sqlc.arg(endpoint);

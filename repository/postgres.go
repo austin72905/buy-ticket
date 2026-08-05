@@ -843,10 +843,13 @@ func (r *PostgresPaymentAttemptRepository) FindByMerchantTradeNo(ctx context.Con
 	return toDomainPaymentAttemptFromGetPaymentAttemptByMerchantTradeNo(record), nil
 }
 
-func (r *PostgresPaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentAttempt, error) {
-	record, err := r.queries.GetPaymentAttemptByIdempotencyKey(ctx, pgtype.Text{
-		String: idempotencyKey,
-		Valid:  true,
+func (r *PostgresPaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, orderID int64, idempotencyKey string) (*domain.PaymentAttempt, error) {
+	record, err := r.queries.GetPaymentAttemptByIdempotencyKey(ctx, db.GetPaymentAttemptByIdempotencyKeyParams{
+		OrderID: orderID,
+		IdempotencyKey: pgtype.Text{
+			String: idempotencyKey,
+			Valid:  true,
+		},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1001,8 +1004,9 @@ func (r *PostgresOutboxEventRepository) UpdatePublishState(ctx context.Context, 
 	})
 }
 
-func (r *PostgresIdempotencyRepository) FindByKeyAndEndpoint(ctx context.Context, key, endpoint string) (*domain.IdempotencyKey, error) {
+func (r *PostgresIdempotencyRepository) FindByKeyAndEndpoint(ctx context.Context, userID int64, key, endpoint string) (*domain.IdempotencyKey, error) {
 	record, err := r.queries.GetIdempotencyKey(ctx, db.GetIdempotencyKeyParams{
+		UserID:   userID,
 		Key:      key,
 		Endpoint: endpoint,
 	})
@@ -1019,7 +1023,7 @@ func (r *PostgresIdempotencyRepository) FindByKeyAndEndpoint(ctx context.Context
 func (r *PostgresIdempotencyRepository) Create(ctx context.Context, record *domain.IdempotencyKey) error {
 	created, err := r.queries.CreateIdempotencyKey(ctx, db.CreateIdempotencyKeyParams{
 		Key:         record.Key,
-		UserID:      nullablePgInt8(record.UserID),
+		UserID:      record.UserID,
 		Endpoint:    record.Endpoint,
 		RequestHash: record.RequestHash,
 		Status:      int16(record.Status),
@@ -1213,8 +1217,9 @@ func (r *PostgresAdminAuditLogRepository) List(ctx context.Context, filter domai
 	return logs, nil
 }
 
-func (r *PostgresIdempotencyRepository) Complete(ctx context.Context, key, endpoint string, status int, responseBody []byte, now time.Time) error {
+func (r *PostgresIdempotencyRepository) Complete(ctx context.Context, userID int64, key, endpoint string, status int, responseBody []byte, now time.Time) error {
 	return r.queries.CompleteIdempotencyKey(ctx, db.CompleteIdempotencyKeyParams{
+		UserID:         userID,
 		Key:            key,
 		Endpoint:       endpoint,
 		Status:         int16(domain.IdempotencyStatusCompleted),
@@ -1921,6 +1926,7 @@ func toDomainIdempotencyKey(record db.IdempotencyKey) *domain.IdempotencyKey {
 	idempotencyKey := &domain.IdempotencyKey{
 		ID:           record.ID,
 		Key:          record.Key,
+		UserID:       record.UserID,
 		Endpoint:     record.Endpoint,
 		RequestHash:  record.RequestHash,
 		Status:       domain.IdempotencyStatus(record.Status),
@@ -1930,10 +1936,6 @@ func toDomainIdempotencyKey(record db.IdempotencyKey) *domain.IdempotencyKey {
 		UpdatedAt:    record.UpdatedAt.Time,
 	}
 
-	if record.UserID.Valid {
-		userID := record.UserID.Int64
-		idempotencyKey.UserID = &userID
-	}
 	if record.ResponseStatus.Valid {
 		responseStatus := int(record.ResponseStatus.Int32)
 		idempotencyKey.ResponseStatus = &responseStatus

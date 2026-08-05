@@ -115,6 +115,40 @@ func TestBookingServiceCreatePaymentAttempt(t *testing.T) {
 			t.Fatalf("expected same attempt id, got %d and %d", firstAttempt.ID, secondAttempt.ID)
 		}
 	})
+
+	t.Run("same idempotency key can be reused by a different order", func(t *testing.T) {
+		orderRepo := &fakeOrderRepository{
+			orders: map[int64]*domain.Order{
+				10: {ID: 10, Status: domain.OrderStatusPendingPayment, TotalAmount: 2800},
+				11: {ID: 11, Status: domain.OrderStatusPendingPayment, TotalAmount: 1800},
+			},
+		}
+		attemptRepo := &fakePaymentAttemptRepository{}
+		svc := &BookingService{OrderRepo: orderRepo, PaymentAttemptRepo: attemptRepo}
+
+		firstAttempt, err := svc.CreatePaymentAttempt(context.Background(), CreatePaymentAttemptInput{
+			OrderID:        10,
+			IdempotencyKey: "shared-attempt-key",
+			Provider:       "mock_ecpay",
+			Method:         "credit_card",
+		})
+		if err != nil {
+			t.Fatalf("first order should create an attempt: %v", err)
+		}
+
+		secondAttempt, err := svc.CreatePaymentAttempt(context.Background(), CreatePaymentAttemptInput{
+			OrderID:        11,
+			IdempotencyKey: "shared-attempt-key",
+			Provider:       "mock_ecpay",
+			Method:         "credit_card",
+		})
+		if err != nil {
+			t.Fatalf("second order should reuse the key independently: %v", err)
+		}
+		if secondAttempt.ID == firstAttempt.ID {
+			t.Fatalf("different orders should have different attempts, both used id %d", firstAttempt.ID)
+		}
+	})
 }
 
 func TestBookingServiceStartMockPaymentAttempt(t *testing.T) {
@@ -324,9 +358,9 @@ func (f *fakePaymentAttemptRepository) FindByMerchantTradeNo(ctx context.Context
 	return nil, errFakePaymentAttemptNotFound
 }
 
-func (f *fakePaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentAttempt, error) {
+func (f *fakePaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, orderID int64, idempotencyKey string) (*domain.PaymentAttempt, error) {
 	for _, attempt := range f.attempts {
-		if attempt.IdempotencyKey != nil && *attempt.IdempotencyKey == idempotencyKey {
+		if attempt.OrderID == orderID && attempt.IdempotencyKey != nil && *attempt.IdempotencyKey == idempotencyKey {
 			cloned := *attempt
 			return &cloned, nil
 		}

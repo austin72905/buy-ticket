@@ -101,7 +101,8 @@ SELECT
     created_at,
     updated_at
 FROM payment_attempts
-WHERE idempotency_key = $1
+WHERE order_id = $1
+  AND idempotency_key = $2
 LIMIT 1;
 
 -- name: ListPaymentAttemptsByOrderID :many

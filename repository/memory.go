@@ -1144,12 +1144,12 @@ func (r *MemoryPaymentAttemptRepository) FindByMerchantTradeNo(ctx context.Conte
 	return nil, ErrPaymentAttemptNotFound
 }
 
-func (r *MemoryPaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentAttempt, error) {
+func (r *MemoryPaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, orderID int64, idempotencyKey string) (*domain.PaymentAttempt, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	for _, attempt := range r.attempts {
-		if attempt.IdempotencyKey == nil || *attempt.IdempotencyKey != idempotencyKey {
+		if attempt.OrderID != orderID || attempt.IdempotencyKey == nil || *attempt.IdempotencyKey != idempotencyKey {
 			continue
 		}
 

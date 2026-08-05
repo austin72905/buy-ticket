@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -52,7 +53,7 @@ func TestBookingServicePaymentIdempotency(t *testing.T) {
 		if err != nil {
 			t.Fatalf("預期建立 idempotency key 成功，實際錯誤: %v", err)
 		}
-		if err := svc.CompletePaymentIdempotency(context.Background(), "pay-key-002", "POST /payments", 200, []byte(`{"id":1}`), now); err != nil {
+		if err := svc.CompletePaymentIdempotency(context.Background(), 3, "pay-key-002", "POST /payments", 200, []byte(`{"id":1}`), now); err != nil {
 			t.Fatalf("預期完成 idempotency key 成功，實際錯誤: %v", err)
 		}
 
@@ -100,6 +101,26 @@ func TestBookingServicePaymentIdempotency(t *testing.T) {
 			t.Fatalf("預期 idempotency conflict，實際為 %v", err)
 		}
 	})
+
+	t.Run("same key can be reused by a different user", func(t *testing.T) {
+		repo := newFakeIdempotencyRepository()
+		svc := newTestBookingService(testBookingDeps{IdempotencyRepo: repo})
+
+		for _, userID := range []int64{3, 4} {
+			_, replay, err := svc.BeginPaymentIdempotency(context.Background(), BeginIdempotencyInput{
+				Key:         "shared-key",
+				UserID:      userID,
+				Endpoint:    "POST /payments",
+				RequestHash: "hash-for-user",
+			})
+			if err != nil {
+				t.Fatalf("user %d should be able to use the key: %v", userID, err)
+			}
+			if replay {
+				t.Fatalf("user %d should create a separate record", userID)
+			}
+		}
+	})
 }
 
 type fakeIdempotencyRepository struct {
@@ -114,8 +135,8 @@ func newFakeIdempotencyRepository() *fakeIdempotencyRepository {
 	}
 }
 
-func (f *fakeIdempotencyRepository) FindByKeyAndEndpoint(ctx context.Context, key, endpoint string) (*domain.IdempotencyKey, error) {
-	record, ok := f.records[idempotencyMapKey(key, endpoint)]
+func (f *fakeIdempotencyRepository) FindByKeyAndEndpoint(ctx context.Context, userID int64, key, endpoint string) (*domain.IdempotencyKey, error) {
+	record, ok := f.records[idempotencyMapKey(userID, key, endpoint)]
 	if !ok {
 		return nil, repository.ErrIdempotencyKeyNotFound
 	}
@@ -129,12 +150,12 @@ func (f *fakeIdempotencyRepository) Create(ctx context.Context, record *domain.I
 	f.nextID++
 
 	cloned := *record
-	f.records[idempotencyMapKey(record.Key, record.Endpoint)] = &cloned
+	f.records[idempotencyMapKey(record.UserID, record.Key, record.Endpoint)] = &cloned
 	return nil
 }
 
-func (f *fakeIdempotencyRepository) Complete(ctx context.Context, key, endpoint string, status int, responseBody []byte, now time.Time) error {
-	record, ok := f.records[idempotencyMapKey(key, endpoint)]
+func (f *fakeIdempotencyRepository) Complete(ctx context.Context, userID int64, key, endpoint string, status int, responseBody []byte, now time.Time) error {
+	record, ok := f.records[idempotencyMapKey(userID, key, endpoint)]
 	if !ok {
 		return repository.ErrIdempotencyKeyNotFound
 	}
@@ -147,6 +168,6 @@ func (f *fakeIdempotencyRepository) Complete(ctx context.Context, key, endpoint 
 	return nil
 }
 
-func idempotencyMapKey(key, endpoint string) string {
-	return endpoint + ":" + key
+func idempotencyMapKey(userID int64, key, endpoint string) string {
+	return fmt.Sprintf("%d:%s:%s", userID, endpoint, key)
 }

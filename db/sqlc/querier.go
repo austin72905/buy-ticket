@@ -37,7 +37,7 @@ type Querier interface {
 	GetOrderByIDForUpdate(ctx context.Context, id int64) (Order, error)
 	GetOrderByOrderNo(ctx context.Context, orderNo string) (Order, error)
 	GetOrganizerByID(ctx context.Context, id int64) (GetOrganizerByIDRow, error)
-	GetPaymentAttemptByIdempotencyKey(ctx context.Context, idempotencyKey pgtype.Text) (GetPaymentAttemptByIdempotencyKeyRow, error)
+	GetPaymentAttemptByIdempotencyKey(ctx context.Context, arg GetPaymentAttemptByIdempotencyKeyParams) (GetPaymentAttemptByIdempotencyKeyRow, error)
 	GetPaymentAttemptByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (GetPaymentAttemptByMerchantTradeNoRow, error)
 	GetPaymentByPaymentNo(ctx context.Context, paymentNo string) (Payment, error)
 	GetReservationByID(ctx context.Context, id int64) (Reservation, error)

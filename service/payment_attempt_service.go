@@ -26,7 +26,7 @@ type CreatePaymentAttemptInput struct {
 func (s *BookingService) CreatePaymentAttempt(ctx context.Context, input CreatePaymentAttemptInput) (*domain.PaymentAttempt, error) {
 	provider := normalizePaymentAttemptProvider(input.Provider)
 	if input.IdempotencyKey != "" {
-		existingAttempt, err := s.PaymentAttemptRepo.FindByIdempotencyKey(ctx, input.IdempotencyKey)
+		existingAttempt, err := s.PaymentAttemptRepo.FindByIdempotencyKey(ctx, input.OrderID, input.IdempotencyKey)
 		if err == nil {
 			if existingAttempt.OrderID != input.OrderID || existingAttempt.Method != input.Method || !paymentAttemptProviderMatches(provider, existingAttempt.Provider) {
 				return nil, ErrPaymentAttemptIdempotencyConflict
@@ -72,7 +72,7 @@ func (s *BookingService) CreatePaymentAttempt(ctx context.Context, input CreateP
 func (s *BookingService) StartMockPaymentAttempt(ctx context.Context, input CreatePaymentAttemptInput) (*domain.PaymentAttempt, error) {
 	provider := normalizePaymentAttemptProvider(input.Provider)
 	if input.IdempotencyKey != "" {
-		existingAttempt, err := s.PaymentAttemptRepo.FindByIdempotencyKey(ctx, input.IdempotencyKey)
+		existingAttempt, err := s.PaymentAttemptRepo.FindByIdempotencyKey(ctx, input.OrderID, input.IdempotencyKey)
 		if err == nil {
 			if existingAttempt.OrderID != input.OrderID || existingAttempt.Method != input.Method || !paymentAttemptProviderMatches(provider, existingAttempt.Provider) {
 				return nil, ErrPaymentAttemptIdempotencyConflict

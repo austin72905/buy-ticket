@@ -48,7 +48,12 @@ Payment 模組的目標是讓付款流程具備可靠性，而不是讓前端直
 
 ### idempotency_keys
 
-用於 `POST /payments/start`，避免同一個付款請求因 retry 被處理多次。
+用於 `POST /payments`，避免同一位使用者對同一 endpoint 的付款請求因 retry 被處理多次。
+
+唯一範圍為 `user_id + key + endpoint`；不同使用者可以使用相同的 key。
+
+`POST /payments/start` 的冪等紀錄則存放在 `payment_attempts.idempotency_key`，唯一範圍為
+`order_id + idempotency_key`；不同訂單可以使用相同的 key。
 
 ## Payment Attempt 狀態
 
@@ -138,7 +143,8 @@ provider timeout 不代表 provider 沒處理。這種情況不能直接換 prov
 
 目前策略：
 
-- 同一個 `Idempotency-Key` 回同一筆結果。
+- 同一張訂單使用相同的 `Idempotency-Key` 時，回傳同一筆 payment attempt。
+- 不同訂單可以使用相同的 `Idempotency-Key`。
 - 付款失敗後若使用者要重新付款，應產生新的 `Idempotency-Key`。
 - 新的付款請求會建立新的 `payment_attempt`。
 
