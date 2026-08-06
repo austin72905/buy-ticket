@@ -73,7 +73,7 @@ Scheduler job 目前有本地 no-overlap guard：
 | `PAYMENT_MOCK_BACKUP_BASE_URL` | mock payment backup provider URL |
 | `PAYMENT_MOCK_CALLBACK_URL` | mock payment callback 回打 buy-ticket 的 URL |
 | `PAYMENT_BREAKER_*` | payment provider circuit breaker 設定 |
-| `PAYMENT_RECONCILE_*` | payment attempt 補償查詢排程設定 |
+| `PAYMENT_RECONCILE_*` | payment attempt 補償查詢排程設定；`PAYMENT_RECONCILE_WORKERS` 預設為 5 |
 | `OUTBOX_PUBLISH_*` | outbox 發送排程設定 |
 
 完整範例請看 `.env.example`。

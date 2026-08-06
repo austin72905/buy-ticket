@@ -231,12 +231,13 @@ reconcile_attempts < max_attempts
 ```env
 PAYMENT_RECONCILE_ENABLED=true
 PAYMENT_RECONCILE_BATCH_SIZE=100
+PAYMENT_RECONCILE_WORKERS=5
 PAYMENT_RECONCILE_DELAY_SECONDS=120
 PAYMENT_RECONCILE_RETRY_AFTER_SECONDS=30
 PAYMENT_RECONCILE_MAX_ATTEMPTS=5
 ```
 
-成功查到 provider 已付款時，會走和 callback 成功相同的完成付款流程。
+每批 candidates 由固定大小的 worker pool 處理，預設最多同時向 provider 查詢 5 筆。成功查到 provider 已付款時，會走和 callback 成功相同的完成付款流程。
 
 如果查詢失敗或 provider 還未完成：
 

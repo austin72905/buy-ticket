@@ -50,6 +50,7 @@ payment:
   reconcile:
     enabled: true
     batchSize: 100
+    workers: 5
     delaySeconds: 120
     retryAfterSeconds: 30
     maxAttempts: 5

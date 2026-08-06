@@ -214,7 +214,7 @@ All jobs run when `APP_ROLE=all` or `APP_ROLE=scheduler`. Each job has a process
 | `purchase-token-cleanup` | `*/1 * * * * *` | Removes expired purchase tokens from the ready queue |
 | `queue-timeout-cleanup` | `*/10 * * * * *` | Removes expired waiting and ready queue entries |
 | `stock-reconcile` | `0 * * * * *` | Reconciles Redis stock with PostgreSQL |
-| `payment-attempt-reconcile` | `*/30 * * * * *` | Queries provider state when callbacks are missing; can be disabled |
+| `payment-attempt-reconcile` | `*/30 * * * * *` | Queries provider state with a bounded worker pool (default 5) when callbacks are missing; can be disabled |
 | `outbox-publish` | `*/10 * * * * *` | Publishes pending outbox events to the current log-based publisher; can be disabled |
 
 `payment-attempt-reconcile` and `outbox-publish` are enabled by default and can be disabled with `PAYMENT_RECONCILE_ENABLED=false` and `OUTBOX_PUBLISH_ENABLED=false`.

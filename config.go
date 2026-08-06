@@ -81,6 +81,7 @@ type servicePaymentBreakerConfig struct {
 type PaymentReconcileConfig struct {
 	Enabled           bool
 	BatchSize         int
+	Workers           int
 	DelaySeconds      int
 	RetryAfterSeconds int
 	MaxAttempts       int
@@ -163,6 +164,7 @@ func loadConfig() Config {
 			Reconcile: PaymentReconcileConfig{
 				Enabled:           envBool("PAYMENT_RECONCILE_ENABLED", true),
 				BatchSize:         envInt("PAYMENT_RECONCILE_BATCH_SIZE", 100),
+				Workers:           envInt("PAYMENT_RECONCILE_WORKERS", 5),
 				DelaySeconds:      envInt("PAYMENT_RECONCILE_DELAY_SECONDS", 120),
 				RetryAfterSeconds: envInt("PAYMENT_RECONCILE_RETRY_AFTER_SECONDS", 30),
 				MaxAttempts:       envInt("PAYMENT_RECONCILE_MAX_ATTEMPTS", 5),

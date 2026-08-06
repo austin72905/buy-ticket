@@ -277,6 +277,7 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, cfg Config, bookingServic
 	paymentReconcileJobDelay := paymentReconcileDelay(cfg)
 	paymentReconcileJobRetryAfter := paymentReconcileRetryAfter(cfg)
 	paymentReconcileJobLimit := paymentReconcileBatchSize(cfg)
+	paymentReconcileJobWorkers := paymentReconcileWorkers(cfg)
 	paymentReconcileJobMaxAttempts := paymentReconcileMaxAttempts(cfg)
 	outboxPublishJobEnabled := outboxPublishEnabled(cfg)
 	outboxPublishJobLimit := outboxPublishBatchSize(cfg)
@@ -386,6 +387,7 @@ func registerBackgroundJobs(runtime *infraapp.Runtime, cfg Config, bookingServic
 					Delay:       paymentReconcileJobDelay,
 					RetryAfter:  paymentReconcileJobRetryAfter,
 					Limit:       paymentReconcileJobLimit,
+					Workers:     paymentReconcileJobWorkers,
 					MaxAttempts: paymentReconcileJobMaxAttempts,
 				})
 				if err != nil {
@@ -435,6 +437,10 @@ func paymentReconcileEnabled(cfg Config) bool {
 
 func paymentReconcileBatchSize(cfg Config) int {
 	return positiveInt(cfg.Payment.Reconcile.BatchSize, 100)
+}
+
+func paymentReconcileWorkers(cfg Config) int {
+	return positiveInt(cfg.Payment.Reconcile.Workers, 5)
 }
 
 func paymentReconcileDelay(cfg Config) time.Duration {
