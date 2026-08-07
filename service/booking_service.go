@@ -375,7 +375,7 @@ func (s *BookingService) payOrderWithRepos(ctx context.Context, repos bookingRep
 		return nil, ErrOutboxRepositoryNotConfigured
 	}
 
-	order, err := repos.order.FindByID(ctx, input.OrderID)
+	order, err := findOrderForUpdate(ctx, repos.order, input.OrderID)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +403,7 @@ func (s *BookingService) payOrderWithRepos(ctx context.Context, repos bookingRep
 		return nil, ErrPaymentAmountMismatch
 	}
 
-	reservation, err := repos.reservation.FindByID(ctx, order.ReservationID)
+	reservation, err := findReservationForUpdate(ctx, repos.reservation, order.ReservationID)
 	if err != nil {
 		return nil, err
 	}
@@ -442,11 +442,11 @@ func (s *BookingService) payOrderWithRepos(ctx context.Context, repos bookingRep
 		return nil, err
 	}
 
-	if err := repos.reservation.Save(ctx, reservation); err != nil {
+	if err := updateReservationStatus(ctx, repos.reservation, reservation, domain.ReservationStatusHolding); err != nil {
 		return nil, err
 	}
 
-	if err := repos.order.Save(ctx, order); err != nil {
+	if err := updateOrderStatus(ctx, repos.order, order, domain.OrderStatusPendingPayment); err != nil {
 		return nil, err
 	}
 
@@ -477,7 +477,7 @@ func (s *BookingService) ExpireOrder(ctx context.Context, input ExpireOrderInput
 
 	err := s.withTx(ctx, func(repos bookingRepos) error {
 		var err error
-		order, err = repos.order.FindByID(ctx, input.OrderID)
+		order, err = findOrderForUpdate(ctx, repos.order, input.OrderID)
 		if err != nil {
 			return err
 		}
@@ -486,7 +486,7 @@ func (s *BookingService) ExpireOrder(ctx context.Context, input ExpireOrderInput
 			return ErrOrderCannotExpire
 		}
 
-		reservation, err := repos.reservation.FindByID(ctx, order.ReservationID)
+		reservation, err := findReservationForUpdate(ctx, repos.reservation, order.ReservationID)
 		if err != nil {
 			return err
 		}
@@ -516,11 +516,11 @@ func (s *BookingService) ExpireOrder(ctx context.Context, input ExpireOrderInput
 			return err
 		}
 
-		if err := repos.reservation.Save(ctx, reservation); err != nil {
+		if err := updateReservationStatus(ctx, repos.reservation, reservation, domain.ReservationStatusHolding); err != nil {
 			return err
 		}
 
-		return repos.order.Save(ctx, order)
+		return updateOrderStatus(ctx, repos.order, order, domain.OrderStatusPendingPayment)
 	})
 	if err != nil {
 		if stockReleased && releasedSection != nil {
@@ -568,7 +568,7 @@ func (s *BookingService) ExpireReservation(ctx context.Context, input ExpireRese
 
 	err := s.withTx(ctx, func(repos bookingRepos) error {
 		var err error
-		reservation, err = repos.reservation.FindByID(ctx, input.ReservationID)
+		reservation, err = findReservationForUpdate(ctx, repos.reservation, input.ReservationID)
 		if err != nil {
 			return err
 		}
@@ -598,7 +598,7 @@ func (s *BookingService) ExpireReservation(ctx context.Context, input ExpireRese
 			return err
 		}
 
-		return repos.reservation.Save(ctx, reservation)
+		return updateReservationStatus(ctx, repos.reservation, reservation, domain.ReservationStatusHolding)
 	})
 	if err != nil {
 		if stockReleased && releasedSection != nil {
@@ -619,7 +619,7 @@ func (s *BookingService) CancelReservation(ctx context.Context, input CancelRese
 
 	err := s.withTx(ctx, func(repos bookingRepos) error {
 		var err error
-		reservation, err = repos.reservation.FindByID(ctx, input.ReservationID)
+		reservation, err = findReservationForUpdate(ctx, repos.reservation, input.ReservationID)
 		if err != nil {
 			return err
 		}
@@ -649,7 +649,7 @@ func (s *BookingService) CancelReservation(ctx context.Context, input CancelRese
 			return err
 		}
 
-		return repos.reservation.Save(ctx, reservation)
+		return updateReservationStatus(ctx, repos.reservation, reservation, domain.ReservationStatusHolding)
 	})
 	if err != nil {
 		if stockReleased && releasedSection != nil {
@@ -790,6 +790,34 @@ type bookingRepos struct {
 	payment        repository.PaymentRepository
 	paymentAttempt repository.PaymentAttemptRepository
 	outbox         repository.OutboxEventRepository
+}
+
+func findOrderForUpdate(ctx context.Context, repo repository.OrderRepository, orderID int64) (*domain.Order, error) {
+	if stateRepo, ok := repo.(repository.OrderStateRepository); ok {
+		return stateRepo.FindByIDForUpdate(ctx, orderID)
+	}
+	return repo.FindByID(ctx, orderID)
+}
+
+func updateOrderStatus(ctx context.Context, repo repository.OrderRepository, order *domain.Order, expectedStatus domain.OrderStatus) error {
+	if stateRepo, ok := repo.(repository.OrderStateRepository); ok {
+		return stateRepo.UpdateStatus(ctx, order, expectedStatus)
+	}
+	return repo.Save(ctx, order)
+}
+
+func findReservationForUpdate(ctx context.Context, repo repository.ReservationRepository, reservationID int64) (*domain.Reservation, error) {
+	if stateRepo, ok := repo.(repository.ReservationStateRepository); ok {
+		return stateRepo.FindByIDForUpdate(ctx, reservationID)
+	}
+	return repo.FindByID(ctx, reservationID)
+}
+
+func updateReservationStatus(ctx context.Context, repo repository.ReservationRepository, reservation *domain.Reservation, expectedStatus domain.ReservationStatus) error {
+	if stateRepo, ok := repo.(repository.ReservationStateRepository); ok {
+		return stateRepo.UpdateStatus(ctx, reservation, expectedStatus)
+	}
+	return repo.Save(ctx, reservation)
 }
 
 func (s *BookingService) withTx(ctx context.Context, fn func(repos bookingRepos) error) error {

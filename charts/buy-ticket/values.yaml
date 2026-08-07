@@ -68,7 +68,6 @@ app:
   pprofEnabled: false
 
 queue:
-  store: redis
   releaseLimit: 100
   join:
     maxInFlight: 500
@@ -111,6 +110,7 @@ payment:
   reconcile:
     enabled: true
     batchSize: 100
+    workers: 5
     delaySeconds: 120
     retryAfterSeconds: 30
     maxAttempts: 5

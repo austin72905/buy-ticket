@@ -186,9 +186,15 @@ SELECT
     created_at,
     updated_at
 FROM payment_attempts
-WHERE idempotency_key = $1
+WHERE order_id = $1
+  AND idempotency_key = $2
 LIMIT 1
 `
+
+type GetPaymentAttemptByIdempotencyKeyParams struct {
+	OrderID        int64       `json:"order_id"`
+	IdempotencyKey pgtype.Text `json:"idempotency_key"`
+}
 
 type GetPaymentAttemptByIdempotencyKeyRow struct {
 	ID                 int64              `json:"id"`
@@ -215,8 +221,8 @@ type GetPaymentAttemptByIdempotencyKeyRow struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) GetPaymentAttemptByIdempotencyKey(ctx context.Context, idempotencyKey pgtype.Text) (GetPaymentAttemptByIdempotencyKeyRow, error) {
-	row := q.db.QueryRow(ctx, getPaymentAttemptByIdempotencyKey, idempotencyKey)
+func (q *Queries) GetPaymentAttemptByIdempotencyKey(ctx context.Context, arg GetPaymentAttemptByIdempotencyKeyParams) (GetPaymentAttemptByIdempotencyKeyRow, error) {
+	row := q.db.QueryRow(ctx, getPaymentAttemptByIdempotencyKey, arg.OrderID, arg.IdempotencyKey)
 	var i GetPaymentAttemptByIdempotencyKeyRow
 	err := row.Scan(
 		&i.ID,

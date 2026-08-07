@@ -14,32 +14,35 @@ import (
 const completeIdempotencyKey = `-- name: CompleteIdempotencyKey :exec
 UPDATE idempotency_keys
 SET
-    status = $3,
-    response_status = $4,
-    response_body = $5,
+    status = $1,
+    response_status = $2,
+    response_body = $3,
     locked_until = NULL,
-    updated_at = $6
-WHERE key = $1
-  AND endpoint = $2
+    updated_at = $4
+WHERE user_id = $5
+  AND key = $6
+  AND endpoint = $7
 `
 
 type CompleteIdempotencyKeyParams struct {
-	Key            string             `json:"key"`
-	Endpoint       string             `json:"endpoint"`
 	Status         int16              `json:"status"`
 	ResponseStatus pgtype.Int4        `json:"response_status"`
 	ResponseBody   []byte             `json:"response_body"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	UserID         int64              `json:"user_id"`
+	Key            string             `json:"key"`
+	Endpoint       string             `json:"endpoint"`
 }
 
 func (q *Queries) CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error {
 	_, err := q.db.Exec(ctx, completeIdempotencyKey,
-		arg.Key,
-		arg.Endpoint,
 		arg.Status,
 		arg.ResponseStatus,
 		arg.ResponseBody,
 		arg.UpdatedAt,
+		arg.UserID,
+		arg.Key,
+		arg.Endpoint,
 	)
 	return err
 }
@@ -75,7 +78,7 @@ RETURNING
 
 type CreateIdempotencyKeyParams struct {
 	Key         string             `json:"key"`
-	UserID      pgtype.Int8        `json:"user_id"`
+	UserID      int64              `json:"user_id"`
 	Endpoint    string             `json:"endpoint"`
 	RequestHash string             `json:"request_hash"`
 	Status      int16              `json:"status"`
@@ -128,18 +131,20 @@ SELECT
     created_at,
     updated_at
 FROM idempotency_keys
-WHERE key = $1
-  AND endpoint = $2
+WHERE user_id = $1
+  AND key = $2
+  AND endpoint = $3
 LIMIT 1
 `
 
 type GetIdempotencyKeyParams struct {
+	UserID   int64  `json:"user_id"`
 	Key      string `json:"key"`
 	Endpoint string `json:"endpoint"`
 }
 
 func (q *Queries) GetIdempotencyKey(ctx context.Context, arg GetIdempotencyKeyParams) (IdempotencyKey, error) {
-	row := q.db.QueryRow(ctx, getIdempotencyKey, arg.Key, arg.Endpoint)
+	row := q.db.QueryRow(ctx, getIdempotencyKey, arg.UserID, arg.Key, arg.Endpoint)
 	var i IdempotencyKey
 	err := row.Scan(
 		&i.ID,

@@ -10,6 +10,7 @@ import (
 	"buy-ticket/domain"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -474,6 +475,15 @@ func (r *PostgresReservationRepository) FindByID(ctx context.Context, reservatio
 	return toDomainReservation(record), nil
 }
 
+func (r *PostgresReservationRepository) FindByIDForUpdate(ctx context.Context, reservationID int64) (*domain.Reservation, error) {
+	record, err := r.queries.GetReservationByIDForUpdate(ctx, reservationID)
+	if err != nil {
+		return nil, err
+	}
+
+	return toDomainReservation(record), nil
+}
+
 func (r *PostgresReservationRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Reservation, error) {
 	records, err := r.queries.ListReservationsByUserID(ctx, userID)
 	if err != nil {
@@ -529,6 +539,22 @@ func (r *PostgresReservationRepository) Save(ctx context.Context, reservation *d
 	})
 }
 
+func (r *PostgresReservationRepository) UpdateStatus(ctx context.Context, reservation *domain.Reservation, expectedStatus domain.ReservationStatus) error {
+	rowsAffected, err := r.queries.UpdateReservationStatusIfCurrent(ctx, db.UpdateReservationStatusIfCurrentParams{
+		ID:             reservation.ID,
+		Status:         int16(reservation.Status),
+		UpdatedAt:      toPgTimestamp(reservation.UpdatedAt),
+		ExpectedStatus: int16(expectedStatus),
+	})
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrResourceStateConflict
+	}
+	return nil
+}
+
 func (r *PostgresReservationRepository) CreateFromEventSection(ctx context.Context, reservation *domain.Reservation, event *domain.Event, section *domain.Section) error {
 	if reservation.EventID != event.ID || reservation.EventID != section.EventID || reservation.SectionID != section.ID {
 		return ErrReservationSnapshotMismatch
@@ -560,6 +586,15 @@ func (r *PostgresReservationRepository) CreateFromEventSection(ctx context.Conte
 
 func (r *PostgresOrderRepository) FindByID(ctx context.Context, orderID int64) (*domain.Order, error) {
 	record, err := r.queries.GetOrderByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	return toDomainOrder(record), nil
+}
+
+func (r *PostgresOrderRepository) FindByIDForUpdate(ctx context.Context, orderID int64) (*domain.Order, error) {
+	record, err := r.queries.GetOrderByIDForUpdate(ctx, orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -671,6 +706,23 @@ func (r *PostgresOrderRepository) Save(ctx context.Context, order *domain.Order)
 		PaidAt:    nullablePgTimestamp(orderPaidAt(order)),
 		UpdatedAt: toPgTimestamp(order.UpdatedAt),
 	})
+}
+
+func (r *PostgresOrderRepository) UpdateStatus(ctx context.Context, order *domain.Order, expectedStatus domain.OrderStatus) error {
+	rowsAffected, err := r.queries.UpdateOrderStatusIfCurrent(ctx, db.UpdateOrderStatusIfCurrentParams{
+		ID:             order.ID,
+		Status:         int16(order.Status),
+		PaidAt:         nullablePgTimestamp(orderPaidAt(order)),
+		UpdatedAt:      toPgTimestamp(order.UpdatedAt),
+		ExpectedStatus: int16(expectedStatus),
+	})
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrResourceStateConflict
+	}
+	return nil
 }
 
 func (r *PostgresOrderRepository) CreateFromReservation(ctx context.Context, order *domain.Order, reservation *domain.Reservation) error {
@@ -792,10 +844,13 @@ func (r *PostgresPaymentAttemptRepository) FindByMerchantTradeNo(ctx context.Con
 	return toDomainPaymentAttemptFromGetPaymentAttemptByMerchantTradeNo(record), nil
 }
 
-func (r *PostgresPaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentAttempt, error) {
-	record, err := r.queries.GetPaymentAttemptByIdempotencyKey(ctx, pgtype.Text{
-		String: idempotencyKey,
-		Valid:  true,
+func (r *PostgresPaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, orderID int64, idempotencyKey string) (*domain.PaymentAttempt, error) {
+	record, err := r.queries.GetPaymentAttemptByIdempotencyKey(ctx, db.GetPaymentAttemptByIdempotencyKeyParams{
+		OrderID: orderID,
+		IdempotencyKey: pgtype.Text{
+			String: idempotencyKey,
+			Valid:  true,
+		},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -872,6 +927,9 @@ func (r *PostgresPaymentAttemptRepository) Save(ctx context.Context, attempt *do
 			CreatedAt:          toPgTimestamp(attempt.CreatedAt),
 		})
 		if err != nil {
+			if isUniqueConstraintViolation(err) {
+				return ErrUniqueConstraintViolation
+			}
 			return err
 		}
 
@@ -950,8 +1008,9 @@ func (r *PostgresOutboxEventRepository) UpdatePublishState(ctx context.Context, 
 	})
 }
 
-func (r *PostgresIdempotencyRepository) FindByKeyAndEndpoint(ctx context.Context, key, endpoint string) (*domain.IdempotencyKey, error) {
+func (r *PostgresIdempotencyRepository) FindByKeyAndEndpoint(ctx context.Context, userID int64, key, endpoint string) (*domain.IdempotencyKey, error) {
 	record, err := r.queries.GetIdempotencyKey(ctx, db.GetIdempotencyKeyParams{
+		UserID:   userID,
 		Key:      key,
 		Endpoint: endpoint,
 	})
@@ -968,7 +1027,7 @@ func (r *PostgresIdempotencyRepository) FindByKeyAndEndpoint(ctx context.Context
 func (r *PostgresIdempotencyRepository) Create(ctx context.Context, record *domain.IdempotencyKey) error {
 	created, err := r.queries.CreateIdempotencyKey(ctx, db.CreateIdempotencyKeyParams{
 		Key:         record.Key,
-		UserID:      nullablePgInt8(record.UserID),
+		UserID:      record.UserID,
 		Endpoint:    record.Endpoint,
 		RequestHash: record.RequestHash,
 		Status:      int16(record.Status),
@@ -977,11 +1036,19 @@ func (r *PostgresIdempotencyRepository) Create(ctx context.Context, record *doma
 		CreatedAt:   toPgTimestamp(record.CreatedAt),
 	})
 	if err != nil {
+		if isUniqueConstraintViolation(err) {
+			return ErrUniqueConstraintViolation
+		}
 		return err
 	}
 
 	*record = *toDomainIdempotencyKey(created)
 	return nil
+}
+
+func isUniqueConstraintViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 func (r *PostgresAdminUserRepository) FindByID(ctx context.Context, adminUserID int64) (*domain.AdminUser, error) {
@@ -1162,8 +1229,9 @@ func (r *PostgresAdminAuditLogRepository) List(ctx context.Context, filter domai
 	return logs, nil
 }
 
-func (r *PostgresIdempotencyRepository) Complete(ctx context.Context, key, endpoint string, status int, responseBody []byte, now time.Time) error {
+func (r *PostgresIdempotencyRepository) Complete(ctx context.Context, userID int64, key, endpoint string, status int, responseBody []byte, now time.Time) error {
 	return r.queries.CompleteIdempotencyKey(ctx, db.CompleteIdempotencyKeyParams{
+		UserID:         userID,
 		Key:            key,
 		Endpoint:       endpoint,
 		Status:         int16(domain.IdempotencyStatusCompleted),
@@ -1870,6 +1938,7 @@ func toDomainIdempotencyKey(record db.IdempotencyKey) *domain.IdempotencyKey {
 	idempotencyKey := &domain.IdempotencyKey{
 		ID:           record.ID,
 		Key:          record.Key,
+		UserID:       record.UserID,
 		Endpoint:     record.Endpoint,
 		RequestHash:  record.RequestHash,
 		Status:       domain.IdempotencyStatus(record.Status),
@@ -1879,10 +1948,6 @@ func toDomainIdempotencyKey(record db.IdempotencyKey) *domain.IdempotencyKey {
 		UpdatedAt:    record.UpdatedAt.Time,
 	}
 
-	if record.UserID.Valid {
-		userID := record.UserID.Int64
-		idempotencyKey.UserID = &userID
-	}
 	if record.ResponseStatus.Valid {
 		responseStatus := int(record.ResponseStatus.Int32)
 		idempotencyKey.ResponseStatus = &responseStatus

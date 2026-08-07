@@ -743,6 +743,10 @@ func (r *MemoryReservationRepository) FindByID(ctx context.Context, reservationI
 	return &cloned, nil
 }
 
+func (r *MemoryReservationRepository) FindByIDForUpdate(ctx context.Context, reservationID int64) (*domain.Reservation, error) {
+	return r.FindByID(ctx, reservationID)
+}
+
 func (r *MemoryReservationRepository) ListByUserID(ctx context.Context, userID int64) ([]domain.Reservation, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -799,6 +803,23 @@ func (r *MemoryReservationRepository) Save(ctx context.Context, reservation *dom
 	return nil
 }
 
+func (r *MemoryReservationRepository) UpdateStatus(ctx context.Context, reservation *domain.Reservation, expectedStatus domain.ReservationStatus) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	current, ok := r.reservations[reservation.ID]
+	if !ok {
+		return ErrReservationNotFound
+	}
+	if current.Status != expectedStatus {
+		return ErrResourceStateConflict
+	}
+
+	cloned := *reservation
+	r.reservations[reservation.ID] = &cloned
+	return nil
+}
+
 type MemoryOrderRepository struct {
 	mu     sync.RWMutex
 	orders map[int64]*domain.Order
@@ -823,6 +844,10 @@ func (r *MemoryOrderRepository) FindByID(ctx context.Context, orderID int64) (*d
 
 	cloned := *order
 	return &cloned, nil
+}
+
+func (r *MemoryOrderRepository) FindByIDForUpdate(ctx context.Context, orderID int64) (*domain.Order, error) {
+	return r.FindByID(ctx, orderID)
 }
 
 func (r *MemoryOrderRepository) FindByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error) {
@@ -992,6 +1017,23 @@ func (r *MemoryOrderRepository) Save(ctx context.Context, order *domain.Order) e
 	return nil
 }
 
+func (r *MemoryOrderRepository) UpdateStatus(ctx context.Context, order *domain.Order, expectedStatus domain.OrderStatus) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	current, ok := r.orders[order.ID]
+	if !ok {
+		return ErrOrderNotFound
+	}
+	if current.Status != expectedStatus {
+		return ErrResourceStateConflict
+	}
+
+	cloned := *order
+	r.orders[order.ID] = &cloned
+	return nil
+}
+
 type MemoryPaymentRepository struct {
 	mu       sync.RWMutex
 	payments map[int64]*domain.Payment
@@ -1102,12 +1144,12 @@ func (r *MemoryPaymentAttemptRepository) FindByMerchantTradeNo(ctx context.Conte
 	return nil, ErrPaymentAttemptNotFound
 }
 
-func (r *MemoryPaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentAttempt, error) {
+func (r *MemoryPaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, orderID int64, idempotencyKey string) (*domain.PaymentAttempt, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	for _, attempt := range r.attempts {
-		if attempt.IdempotencyKey == nil || *attempt.IdempotencyKey != idempotencyKey {
+		if attempt.OrderID != orderID || attempt.IdempotencyKey == nil || *attempt.IdempotencyKey != idempotencyKey {
 			continue
 		}
 
@@ -1173,6 +1215,15 @@ func (r *MemoryPaymentAttemptRepository) Save(ctx context.Context, attempt *doma
 
 	cloned := *attempt
 	if cloned.ID == 0 {
+		for _, existing := range r.attempts {
+			if existing.MerchantTradeNo == cloned.MerchantTradeNo {
+				return ErrUniqueConstraintViolation
+			}
+			if cloned.IdempotencyKey != nil && existing.OrderID == cloned.OrderID &&
+				existing.IdempotencyKey != nil && *existing.IdempotencyKey == *cloned.IdempotencyKey {
+				return ErrUniqueConstraintViolation
+			}
+		}
 		cloned.ID = r.nextID
 		r.nextID++
 		attempt.ID = cloned.ID

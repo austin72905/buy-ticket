@@ -115,9 +115,86 @@ func TestBookingServiceCreatePaymentAttempt(t *testing.T) {
 			t.Fatalf("expected same attempt id, got %d and %d", firstAttempt.ID, secondAttempt.ID)
 		}
 	})
+
+	t.Run("same idempotency key can be reused by a different order", func(t *testing.T) {
+		orderRepo := &fakeOrderRepository{
+			orders: map[int64]*domain.Order{
+				10: {ID: 10, Status: domain.OrderStatusPendingPayment, TotalAmount: 2800},
+				11: {ID: 11, Status: domain.OrderStatusPendingPayment, TotalAmount: 1800},
+			},
+		}
+		attemptRepo := &fakePaymentAttemptRepository{}
+		svc := &BookingService{OrderRepo: orderRepo, PaymentAttemptRepo: attemptRepo}
+
+		firstAttempt, err := svc.CreatePaymentAttempt(context.Background(), CreatePaymentAttemptInput{
+			OrderID:        10,
+			IdempotencyKey: "shared-attempt-key",
+			Provider:       "mock_ecpay",
+			Method:         "credit_card",
+		})
+		if err != nil {
+			t.Fatalf("first order should create an attempt: %v", err)
+		}
+
+		secondAttempt, err := svc.CreatePaymentAttempt(context.Background(), CreatePaymentAttemptInput{
+			OrderID:        11,
+			IdempotencyKey: "shared-attempt-key",
+			Provider:       "mock_ecpay",
+			Method:         "credit_card",
+		})
+		if err != nil {
+			t.Fatalf("second order should reuse the key independently: %v", err)
+		}
+		if secondAttempt.ID == firstAttempt.ID {
+			t.Fatalf("different orders should have different attempts, both used id %d", firstAttempt.ID)
+		}
+	})
 }
 
 func TestBookingServiceStartMockPaymentAttempt(t *testing.T) {
+	t.Run("unique collision returns existing attempt without calling provider", func(t *testing.T) {
+		key := "race-payment-key"
+		existing := &domain.PaymentAttempt{
+			ID:              42,
+			OrderID:         10,
+			IdempotencyKey:  &key,
+			Provider:        "mock_ecpay",
+			MerchantTradeNo: "existing-trade-no",
+			Method:          "credit_card",
+			Amount:          2800,
+			Status:          domain.PaymentAttemptStatusProcessing,
+		}
+		attemptRepo := &fakePaymentAttemptRepository{
+			saveCreateErr:          repository.ErrUniqueConstraintViolation,
+			attemptOnSaveCreateErr: existing,
+		}
+		paymentClient := &fakeMockPaymentClient{response: []byte(`{"status":"processing"}`)}
+		svc := &BookingService{
+			OrderRepo: &fakeOrderRepository{orders: map[int64]*domain.Order{
+				10: {ID: 10, Status: domain.OrderStatusPendingPayment, TotalAmount: 2800},
+			}},
+			PaymentAttemptRepo:     attemptRepo,
+			MockPaymentClient:      paymentClient,
+			MockPaymentCallbackURL: "http://localhost:8080/payments/provider/ecpay/callback",
+		}
+
+		attempt, err := svc.StartMockPaymentAttempt(context.Background(), CreatePaymentAttemptInput{
+			OrderID:        10,
+			IdempotencyKey: key,
+			Provider:       "mock_ecpay",
+			Method:         "credit_card",
+		})
+		if err != nil {
+			t.Fatalf("unique collision should return the existing attempt: %v", err)
+		}
+		if attempt.ID != existing.ID {
+			t.Fatalf("expected existing attempt %d, got %d", existing.ID, attempt.ID)
+		}
+		if paymentClient.calls != 0 {
+			t.Fatalf("provider must not be called by the losing request, got %d calls", paymentClient.calls)
+		}
+	})
+
 	t.Run("successful mock provider call keeps attempt processing and stores response", func(t *testing.T) {
 		svc := &BookingService{
 			OrderRepo: &fakeOrderRepository{
@@ -298,16 +375,20 @@ func TestBookingServiceStartMockPaymentAttempt(t *testing.T) {
 }
 
 type fakePaymentAttemptRepository struct {
-	nextID   int64
-	attempts map[int64]*domain.PaymentAttempt
+	nextID                 int64
+	attempts               map[int64]*domain.PaymentAttempt
+	saveCreateErr          error
+	attemptOnSaveCreateErr *domain.PaymentAttempt
 }
 
 type fakeMockPaymentClient struct {
 	response []byte
 	err      error
+	calls    int
 }
 
 func (f *fakeMockPaymentClient) Process(ctx context.Context, input MockPaymentProcessInput) ([]byte, error) {
+	f.calls++
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -324,9 +405,9 @@ func (f *fakePaymentAttemptRepository) FindByMerchantTradeNo(ctx context.Context
 	return nil, errFakePaymentAttemptNotFound
 }
 
-func (f *fakePaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentAttempt, error) {
+func (f *fakePaymentAttemptRepository) FindByIdempotencyKey(ctx context.Context, orderID int64, idempotencyKey string) (*domain.PaymentAttempt, error) {
 	for _, attempt := range f.attempts {
-		if attempt.IdempotencyKey != nil && *attempt.IdempotencyKey == idempotencyKey {
+		if attempt.OrderID == orderID && attempt.IdempotencyKey != nil && *attempt.IdempotencyKey == idempotencyKey {
 			cloned := *attempt
 			return &cloned, nil
 		}
@@ -361,6 +442,13 @@ func (f *fakePaymentAttemptRepository) ListReconcileCandidates(ctx context.Conte
 func (f *fakePaymentAttemptRepository) Save(ctx context.Context, attempt *domain.PaymentAttempt) error {
 	if f.attempts == nil {
 		f.attempts = map[int64]*domain.PaymentAttempt{}
+	}
+	if attempt.ID == 0 && f.saveCreateErr != nil {
+		if f.attemptOnSaveCreateErr != nil {
+			cloned := *f.attemptOnSaveCreateErr
+			f.attempts[cloned.ID] = &cloned
+		}
+		return f.saveCreateErr
 	}
 	if f.nextID == 0 {
 		f.nextID = 1

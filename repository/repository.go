@@ -16,6 +16,8 @@ var ErrResourceVersionConflict = errors.New("resource has been modified, please 
 var ErrReservationSnapshotMismatch = errors.New("reservation snapshot mismatch")
 var ErrOrderReservationMismatch = errors.New("order reservation mismatch")
 var ErrPaymentOrderMismatch = errors.New("payment order mismatch")
+var ErrResourceStateConflict = errors.New("resource state has changed")
+var ErrUniqueConstraintViolation = errors.New("unique constraint violation")
 
 type AdminUserRepository interface {
 	FindByID(ctx context.Context, adminUserID int64) (*domain.AdminUser, error)
@@ -83,6 +85,11 @@ type ReservationRepository interface {
 	Save(ctx context.Context, reservation *domain.Reservation) error
 }
 
+type ReservationStateRepository interface {
+	FindByIDForUpdate(ctx context.Context, reservationID int64) (*domain.Reservation, error)
+	UpdateStatus(ctx context.Context, reservation *domain.Reservation, expectedStatus domain.ReservationStatus) error
+}
+
 type OrderRepository interface {
 	FindByID(ctx context.Context, orderID int64) (*domain.Order, error)
 	FindByOrderNo(ctx context.Context, orderNo string) (*domain.Order, error)
@@ -90,6 +97,11 @@ type OrderRepository interface {
 	ListByUserID(ctx context.Context, userID int64) ([]domain.Order, error)
 	CreateFromReservation(ctx context.Context, order *domain.Order, reservation *domain.Reservation) error
 	Save(ctx context.Context, order *domain.Order) error
+}
+
+type OrderStateRepository interface {
+	FindByIDForUpdate(ctx context.Context, orderID int64) (*domain.Order, error)
+	UpdateStatus(ctx context.Context, order *domain.Order, expectedStatus domain.OrderStatus) error
 }
 
 type PaymentRepository interface {
@@ -101,7 +113,7 @@ type PaymentRepository interface {
 
 type PaymentAttemptRepository interface {
 	FindByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (*domain.PaymentAttempt, error)
-	FindByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentAttempt, error)
+	FindByIdempotencyKey(ctx context.Context, orderID int64, idempotencyKey string) (*domain.PaymentAttempt, error)
 	ListByOrderID(ctx context.Context, orderID int64) ([]domain.PaymentAttempt, error)
 	ListReconcileCandidates(ctx context.Context, now time.Time, cutoff time.Time, limit int, maxAttempts int) ([]domain.PaymentAttempt, error)
 	Save(ctx context.Context, attempt *domain.PaymentAttempt) error
@@ -114,7 +126,7 @@ type OutboxEventRepository interface {
 }
 
 type IdempotencyRepository interface {
-	FindByKeyAndEndpoint(ctx context.Context, key, endpoint string) (*domain.IdempotencyKey, error)
+	FindByKeyAndEndpoint(ctx context.Context, userID int64, key, endpoint string) (*domain.IdempotencyKey, error)
 	Create(ctx context.Context, record *domain.IdempotencyKey) error
-	Complete(ctx context.Context, key, endpoint string, status int, responseBody []byte, now time.Time) error
+	Complete(ctx context.Context, userID int64, key, endpoint string, status int, responseBody []byte, now time.Time) error
 }

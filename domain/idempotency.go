@@ -12,7 +12,7 @@ const (
 type IdempotencyKey struct {
 	ID             int64
 	Key            string
-	UserID         *int64
+	UserID         int64
 	Endpoint       string
 	RequestHash    string
 	Status         IdempotencyStatus

@@ -8,7 +8,6 @@ data:
   APP_ENV: {{ .Values.app.env | quote }}
   SERVER_ADDR: {{ .Values.app.serverAddr | quote }}
   PPROF_ENABLED: {{ .Values.app.pprofEnabled | quote }}
-  QUEUE_STORE: {{ .Values.queue.store | quote }}
   QUEUE_RELEASE_LIMIT: {{ .Values.queue.releaseLimit | quote }}
   QUEUE_JOIN_MAX_IN_FLIGHT: {{ .Values.queue.join.maxInFlight | quote }}
   QUEUE_JOIN_RETRY_AFTER_SECONDS: {{ .Values.queue.join.retryAfterSeconds | quote }}
@@ -32,6 +31,7 @@ data:
   PAYMENT_BREAKER_HALF_OPEN_MAX_REQUESTS: {{ .Values.payment.breaker.halfOpenMaxRequests | quote }}
   PAYMENT_RECONCILE_ENABLED: {{ .Values.payment.reconcile.enabled | quote }}
   PAYMENT_RECONCILE_BATCH_SIZE: {{ .Values.payment.reconcile.batchSize | quote }}
+  PAYMENT_RECONCILE_WORKERS: {{ .Values.payment.reconcile.workers | quote }}
   PAYMENT_RECONCILE_DELAY_SECONDS: {{ .Values.payment.reconcile.delaySeconds | quote }}
   PAYMENT_RECONCILE_RETRY_AFTER_SECONDS: {{ .Values.payment.reconcile.retryAfterSeconds | quote }}
   PAYMENT_RECONCILE_MAX_ATTEMPTS: {{ .Values.payment.reconcile.maxAttempts | quote }}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"buy-ticket/domain"
@@ -15,6 +16,7 @@ type ReconcilePaymentAttemptsInput struct {
 	Delay       time.Duration
 	RetryAfter  time.Duration
 	Limit       int
+	Workers     int
 	MaxAttempts int
 }
 
@@ -57,25 +59,61 @@ func (s *BookingService) ReconcilePaymentAttempts(ctx context.Context, input Rec
 	if maxAttempts <= 0 {
 		maxAttempts = 5
 	}
+	workers := input.Workers
+	if workers <= 0 {
+		workers = 5
+	}
 
 	candidates, err := s.PaymentAttemptRepo.ListReconcileCandidates(ctx, now, now.Add(-delay), limit, maxAttempts)
 	if err != nil {
 		return 0, err
 	}
 
-	reconciled := 0
-	for index := range candidates {
-		attempt := candidates[index]
-		completed, err := s.reconcilePaymentAttempt(ctx, &attempt, now, retryAfter)
-		if err != nil {
-			return reconciled, err
-		}
-		if completed {
-			reconciled++
-		}
+	if len(candidates) == 0 {
+		return 0, nil
+	}
+	if workers > len(candidates) {
+		workers = len(candidates)
 	}
 
-	return reconciled, nil
+	type reconcileResult struct {
+		completed bool
+		err       error
+	}
+
+	jobs := make(chan domain.PaymentAttempt, len(candidates))
+	results := make(chan reconcileResult, len(candidates))
+	for index := range candidates {
+		jobs <- candidates[index]
+	}
+	close(jobs)
+
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(workers)
+	for range workers {
+		go func() {
+			defer waitGroup.Done()
+			for attempt := range jobs {
+				completed, err := s.reconcilePaymentAttempt(ctx, &attempt, now, retryAfter)
+				results <- reconcileResult{completed: completed, err: err}
+			}
+		}()
+	}
+
+	waitGroup.Wait()
+	close(results)
+
+	reconciled := 0
+	var firstErr error
+	for result := range results {
+		if result.completed {
+			reconciled++
+		}
+		if result.err != nil && firstErr == nil {
+			firstErr = result.err
+		}
+	}
+	return reconciled, firstErr
 }
 
 func (s *BookingService) reconcilePaymentAttempt(ctx context.Context, attempt *domain.PaymentAttempt, now time.Time, retryAfter time.Duration) (bool, error) {

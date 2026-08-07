@@ -24,26 +24,28 @@ type CreatePaymentAttemptInput struct {
 }
 
 func (s *BookingService) CreatePaymentAttempt(ctx context.Context, input CreatePaymentAttemptInput) (*domain.PaymentAttempt, error) {
+	attempt, _, err := s.createPaymentAttempt(ctx, input, normalizePaymentAttemptProvider(input.Provider))
+	return attempt, err
+}
+
+func (s *BookingService) createPaymentAttempt(ctx context.Context, input CreatePaymentAttemptInput, idempotencyProvider string) (*domain.PaymentAttempt, bool, error) {
 	provider := normalizePaymentAttemptProvider(input.Provider)
 	if input.IdempotencyKey != "" {
-		existingAttempt, err := s.PaymentAttemptRepo.FindByIdempotencyKey(ctx, input.IdempotencyKey)
+		existingAttempt, err := s.PaymentAttemptRepo.FindByIdempotencyKey(ctx, input.OrderID, input.IdempotencyKey)
 		if err == nil {
-			if existingAttempt.OrderID != input.OrderID || existingAttempt.Method != input.Method || !paymentAttemptProviderMatches(provider, existingAttempt.Provider) {
-				return nil, ErrPaymentAttemptIdempotencyConflict
-			}
-			return existingAttempt, nil
+			return validateExistingPaymentAttempt(existingAttempt, input, idempotencyProvider)
 		}
 		if !errors.Is(err, repository.ErrPaymentAttemptNotFound) {
-			return nil, err
+			return nil, false, err
 		}
 	}
 
 	order, err := s.OrderRepo.FindByID(ctx, input.OrderID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if order.Status != domain.OrderStatusPendingPayment {
-		return nil, ErrOrderCannotBePaid
+		return nil, false, ErrOrderCannotBePaid
 	}
 
 	now := time.Now()
@@ -62,17 +64,32 @@ func (s *BookingService) CreatePaymentAttempt(ctx context.Context, input CreateP
 	}
 
 	if err := s.PaymentAttemptRepo.Save(ctx, attempt); err != nil {
-		return nil, err
+		if !errors.Is(err, repository.ErrUniqueConstraintViolation) || input.IdempotencyKey == "" {
+			return nil, false, err
+		}
+
+		existingAttempt, findErr := s.PaymentAttemptRepo.FindByIdempotencyKey(ctx, input.OrderID, input.IdempotencyKey)
+		if findErr != nil {
+			return nil, false, err
+		}
+		return validateExistingPaymentAttempt(existingAttempt, input, idempotencyProvider)
 	}
 
-	return attempt, nil
+	return attempt, true, nil
+}
+
+func validateExistingPaymentAttempt(existing *domain.PaymentAttempt, input CreatePaymentAttemptInput, provider string) (*domain.PaymentAttempt, bool, error) {
+	if existing.OrderID != input.OrderID || existing.Method != input.Method || !paymentAttemptProviderMatches(provider, existing.Provider) {
+		return nil, false, ErrPaymentAttemptIdempotencyConflict
+	}
+	return existing, false, nil
 }
 
 // 開始一次支付流程
 func (s *BookingService) StartMockPaymentAttempt(ctx context.Context, input CreatePaymentAttemptInput) (*domain.PaymentAttempt, error) {
 	provider := normalizePaymentAttemptProvider(input.Provider)
 	if input.IdempotencyKey != "" {
-		existingAttempt, err := s.PaymentAttemptRepo.FindByIdempotencyKey(ctx, input.IdempotencyKey)
+		existingAttempt, err := s.PaymentAttemptRepo.FindByIdempotencyKey(ctx, input.OrderID, input.IdempotencyKey)
 		if err == nil {
 			if existingAttempt.OrderID != input.OrderID || existingAttempt.Method != input.Method || !paymentAttemptProviderMatches(provider, existingAttempt.Provider) {
 				return nil, ErrPaymentAttemptIdempotencyConflict
@@ -102,9 +119,12 @@ func (s *BookingService) StartMockPaymentAttempt(ctx context.Context, input Crea
 		providerSelectErr = selectErr
 	}
 
-	attempt, err := s.CreatePaymentAttempt(ctx, input)
+	attempt, created, err := s.createPaymentAttempt(ctx, input, provider)
 	if err != nil {
 		return nil, err
+	}
+	if !created {
+		return attempt, nil
 	}
 
 	if attempt.Status != domain.PaymentAttemptStatusProcessing || len(attempt.ResponsePayload) > 0 {

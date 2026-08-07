@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -563,9 +564,9 @@ func (f *fakePaymentAttemptRepositoryForController) FindByMerchantTradeNo(ctx co
 	return nil, repository.ErrPaymentAttemptNotFound
 }
 
-func (f *fakePaymentAttemptRepositoryForController) FindByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentAttempt, error) {
+func (f *fakePaymentAttemptRepositoryForController) FindByIdempotencyKey(ctx context.Context, orderID int64, idempotencyKey string) (*domain.PaymentAttempt, error) {
 	for _, attempt := range f.attempts {
-		if attempt.IdempotencyKey != nil && *attempt.IdempotencyKey == idempotencyKey {
+		if attempt.OrderID == orderID && attempt.IdempotencyKey != nil && *attempt.IdempotencyKey == idempotencyKey {
 			return attempt, nil
 		}
 	}
@@ -613,8 +614,8 @@ type fakeIdempotencyRepositoryForController struct {
 	records map[string]*domain.IdempotencyKey
 }
 
-func (f *fakeIdempotencyRepositoryForController) FindByKeyAndEndpoint(ctx context.Context, key, endpoint string) (*domain.IdempotencyKey, error) {
-	record, ok := f.records[endpoint+":"+key]
+func (f *fakeIdempotencyRepositoryForController) FindByKeyAndEndpoint(ctx context.Context, userID int64, key, endpoint string) (*domain.IdempotencyKey, error) {
+	record, ok := f.records[fmt.Sprintf("%d:%s:%s", userID, endpoint, key)]
 	if !ok {
 		return nil, repository.ErrIdempotencyKeyNotFound
 	}
@@ -631,12 +632,12 @@ func (f *fakeIdempotencyRepositoryForController) Create(ctx context.Context, rec
 	record.ID = f.nextID
 
 	cloned := *record
-	f.records[record.Endpoint+":"+record.Key] = &cloned
+	f.records[fmt.Sprintf("%d:%s:%s", record.UserID, record.Endpoint, record.Key)] = &cloned
 	return nil
 }
 
-func (f *fakeIdempotencyRepositoryForController) Complete(ctx context.Context, key, endpoint string, status int, responseBody []byte, now time.Time) error {
-	record, ok := f.records[endpoint+":"+key]
+func (f *fakeIdempotencyRepositoryForController) Complete(ctx context.Context, userID int64, key, endpoint string, status int, responseBody []byte, now time.Time) error {
+	record, ok := f.records[fmt.Sprintf("%d:%s:%s", userID, endpoint, key)]
 	if !ok {
 		return repository.ErrIdempotencyKeyNotFound
 	}

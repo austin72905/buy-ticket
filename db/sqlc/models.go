@@ -67,7 +67,7 @@ type EventSection struct {
 type IdempotencyKey struct {
 	ID             int64              `json:"id"`
 	Key            string             `json:"key"`
-	UserID         pgtype.Int8        `json:"user_id"`
+	UserID         int64              `json:"user_id"`
 	Endpoint       string             `json:"endpoint"`
 	RequestHash    string             `json:"request_hash"`
 	Status         int16              `json:"status"`

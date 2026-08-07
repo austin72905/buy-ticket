@@ -34,12 +34,14 @@ type Querier interface {
 	GetEventByID(ctx context.Context, id int64) (GetEventByIDRow, error)
 	GetIdempotencyKey(ctx context.Context, arg GetIdempotencyKeyParams) (IdempotencyKey, error)
 	GetOrderByID(ctx context.Context, id int64) (Order, error)
+	GetOrderByIDForUpdate(ctx context.Context, id int64) (Order, error)
 	GetOrderByOrderNo(ctx context.Context, orderNo string) (Order, error)
 	GetOrganizerByID(ctx context.Context, id int64) (GetOrganizerByIDRow, error)
-	GetPaymentAttemptByIdempotencyKey(ctx context.Context, idempotencyKey pgtype.Text) (GetPaymentAttemptByIdempotencyKeyRow, error)
+	GetPaymentAttemptByIdempotencyKey(ctx context.Context, arg GetPaymentAttemptByIdempotencyKeyParams) (GetPaymentAttemptByIdempotencyKeyRow, error)
 	GetPaymentAttemptByMerchantTradeNo(ctx context.Context, merchantTradeNo string) (GetPaymentAttemptByMerchantTradeNoRow, error)
 	GetPaymentByPaymentNo(ctx context.Context, paymentNo string) (Payment, error)
 	GetReservationByID(ctx context.Context, id int64) (Reservation, error)
+	GetReservationByIDForUpdate(ctx context.Context, id int64) (Reservation, error)
 	GetReservationByReservationNo(ctx context.Context, reservationNo string) (Reservation, error)
 	GetSectionByEventAndID(ctx context.Context, arg GetSectionByEventAndIDParams) (GetSectionByEventAndIDRow, error)
 	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
@@ -66,11 +68,13 @@ type Querier interface {
 	UpdateAdminUser(ctx context.Context, arg UpdateAdminUserParams) (UpdateAdminUserRow, error)
 	UpdateEvent(ctx context.Context, arg UpdateEventParams) (UpdateEventRow, error)
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) error
+	UpdateOrderStatusIfCurrent(ctx context.Context, arg UpdateOrderStatusIfCurrentParams) (int64, error)
 	UpdateOrganizer(ctx context.Context, arg UpdateOrganizerParams) (UpdateOrganizerRow, error)
 	UpdateOutboxEventPublishState(ctx context.Context, arg UpdateOutboxEventPublishStateParams) error
 	UpdatePaymentAttemptStatus(ctx context.Context, arg UpdatePaymentAttemptStatusParams) error
 	UpdatePaymentStatus(ctx context.Context, arg UpdatePaymentStatusParams) error
 	UpdateReservationStatus(ctx context.Context, arg UpdateReservationStatusParams) error
+	UpdateReservationStatusIfCurrent(ctx context.Context, arg UpdateReservationStatusIfCurrentParams) (int64, error)
 	UpdateSection(ctx context.Context, arg UpdateSectionParams) (UpdateSectionRow, error)
 	UpdateSectionInventory(ctx context.Context, arg UpdateSectionInventoryParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error

@@ -11,7 +11,7 @@ make migrate-up
 
 ### 1.2 Start API
 
-`local` uses PostgreSQL by default. Configure `postgres.dsn` in `config/local/app.properties` if your local database differs from the default.
+`local` uses the typed config defaults. If your local database differs from the default, set `POSTGRES_DSN` in `.env` or as an environment variable. See `.env.example` and `doc/config.md`.
 
 ```bash
 make run-local
@@ -208,7 +208,7 @@ Checks:
 
 - Returns `202 Accepted`.
 - Creates a `payment_attempt`.
-- Calls mock pay service at `payment.mock.base_url`, default `http://localhost:8081`.
+- Calls mock pay service at `PAYMENT_MOCK_BASE_URL`, default `http://localhost:8081`.
 - If mock pay service is not running, the attempt is marked `timeout`.
 - Does not mark the order paid yet.
 - Does not confirm the reservation yet.

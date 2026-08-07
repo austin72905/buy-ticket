@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	ErrIdempotencyConflict   = errors.New("idempotency key reused with different request")
-	ErrIdempotencyInProgress = errors.New("idempotency request is still processing")
+	ErrIdempotencyConflict     = errors.New("idempotency key reused with different request")
+	ErrIdempotencyInProgress   = errors.New("idempotency request is still processing")
+	ErrIdempotencyUserRequired = errors.New("idempotency user is required")
 )
 
 type BeginIdempotencyInput struct {
@@ -28,16 +29,13 @@ func (s *BookingService) BeginPaymentIdempotency(ctx context.Context, input Begi
 	if input.Key == "" {
 		return nil, false, nil
 	}
+	if input.UserID <= 0 {
+		return nil, false, ErrIdempotencyUserRequired
+	}
 
-	existing, err := s.IdempotencyRepo.FindByKeyAndEndpoint(ctx, input.Key, input.Endpoint)
+	existing, err := s.IdempotencyRepo.FindByKeyAndEndpoint(ctx, input.UserID, input.Key, input.Endpoint)
 	if err == nil {
-		if existing.UserID == nil || *existing.UserID != input.UserID || existing.RequestHash != input.RequestHash {
-			return nil, false, ErrIdempotencyConflict
-		}
-		if existing.Status == domain.IdempotencyStatusCompleted && existing.ResponseStatus != nil && len(existing.ResponseBody) > 0 {
-			return existing, true, nil
-		}
-		return nil, false, ErrIdempotencyInProgress
+		return evaluatePaymentIdempotency(existing, input.RequestHash)
 	}
 	if !errors.Is(err, repository.ErrIdempotencyKeyNotFound) {
 		return nil, false, err
@@ -56,11 +54,10 @@ func (s *BookingService) BeginPaymentIdempotency(ctx context.Context, input Begi
 		lockTTL = 5 * time.Minute
 	}
 
-	userID := input.UserID
 	lockedUntil := now.Add(lockTTL)
 	record := &domain.IdempotencyKey{
 		Key:         input.Key,
-		UserID:      &userID,
+		UserID:      input.UserID,
 		Endpoint:    input.Endpoint,
 		RequestHash: input.RequestHash,
 		Status:      domain.IdempotencyStatusProcessing,
@@ -70,18 +67,39 @@ func (s *BookingService) BeginPaymentIdempotency(ctx context.Context, input Begi
 		UpdatedAt:   now,
 	}
 	if err := s.IdempotencyRepo.Create(ctx, record); err != nil {
-		return nil, false, err
+		if !errors.Is(err, repository.ErrUniqueConstraintViolation) {
+			return nil, false, err
+		}
+
+		existing, findErr := s.IdempotencyRepo.FindByKeyAndEndpoint(ctx, input.UserID, input.Key, input.Endpoint)
+		if findErr != nil {
+			return nil, false, err
+		}
+		return evaluatePaymentIdempotency(existing, input.RequestHash)
 	}
 
 	return record, false, nil
 }
 
-func (s *BookingService) CompletePaymentIdempotency(ctx context.Context, key, endpoint string, responseStatus int, responseBody []byte, now time.Time) error {
+func evaluatePaymentIdempotency(existing *domain.IdempotencyKey, requestHash string) (*domain.IdempotencyKey, bool, error) {
+	if existing.RequestHash != requestHash {
+		return nil, false, ErrIdempotencyConflict
+	}
+	if existing.Status == domain.IdempotencyStatusCompleted && existing.ResponseStatus != nil && len(existing.ResponseBody) > 0 {
+		return existing, true, nil
+	}
+	return nil, false, ErrIdempotencyInProgress
+}
+
+func (s *BookingService) CompletePaymentIdempotency(ctx context.Context, userID int64, key, endpoint string, responseStatus int, responseBody []byte, now time.Time) error {
 	if key == "" {
 		return nil
+	}
+	if userID <= 0 {
+		return ErrIdempotencyUserRequired
 	}
 	if now.IsZero() {
 		now = time.Now()
 	}
-	return s.IdempotencyRepo.Complete(ctx, key, endpoint, responseStatus, responseBody, now)
+	return s.IdempotencyRepo.Complete(ctx, userID, key, endpoint, responseStatus, responseBody, now)
 }

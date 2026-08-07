@@ -2,7 +2,7 @@
 
 高併發搶票系統範例。核心重點是排隊閘門、Redis 庫存、PostgreSQL 交易一致性、付款 callback、idempotency、scheduler 補償與後台管理。
 
-目前定位是 **modular monolith**，不是強行拆微服務。API 與 scheduler 使用同一個 image，透過 `APP_ROLE` 分成不同 runtime role，方便本機開發與 K3s 部署。
+目前採用 **layered monolith**（分層式單體），不是強行拆微服務。API 與 scheduler 使用同一個 binary / image，透過 `APP_ROLE` 分成不同 runtime role，方便本機開發與 K3s 部署。目前的 package 主要依 controller、service、repository 與 domain 等技術分層組織，未來可再依 booking、payment、admin 等業務邊界漸進演進為 modular monolith。
 
 ## Architecture
 
@@ -10,14 +10,21 @@
 Vue Frontend
   -> Go API
       -> PostgreSQL
-      -> Redis Queue / Redis Stock
+      -> Redis Queue / Stock / Session
       -> Mock Payment Service
-  -> Scheduler Role
-      -> queue promotion
-      -> order expiration
-      -> payment reconciliation
-      -> outbox publish
-      -> stock reconciliation
+
+Scheduler Role
+  -> PostgreSQL
+  -> Redis Queue / Stock
+  -> Mock Payment Service
+  -> queue promotion
+  -> order expiration
+  -> event status advance
+  -> purchase-token cleanup
+  -> queue-timeout cleanup
+  -> stock reconciliation
+  -> payment reconciliation (enabled by default)
+  -> outbox publish (enabled by default)
 ```
 
 ### System Diagram
@@ -55,21 +62,21 @@ buy-ticket-scheduler  APP_ROLE=scheduler
 
 這樣 API replicas 擴充時，不會同時啟動多份 scheduler。
 
+Queue、stock 與 session 在 local、dev 與 prod 都固定使用 Redis。Local / dev 的 `REDIS_ADDR` 預設為 `localhost:6379`；prod 必須明確提供 `REDIS_ADDR`，否則應用會在啟動驗證時失敗。Memory store 只保留為單元測試替身，不用於應用 runtime。
+
 ## Core Features
 
 ### Queue
 
 - 使用 Redis queue model：`waiting ZSET` + `ready ZSET`。
 - `/queue/join` 只加入 waiting queue。
-- scheduler 依 `queue.release.limit` 定期放行 ready token。
+- scheduler 依 `QUEUE_RELEASE_LIMIT` 定期放行 ready token。
 - ready 後產生 `purchase_token`，前端才能 reserve ticket。
 - API 有 backpressure，避免瞬間大量 `/queue/join` 打爆服務。
 
 相關文件：
 
-- `doc/redis-queue-model.md`
-- `doc/queue-purchase-token-design.md`
-- `doc/queue-api.md`
+- `doc/queue-design.md`
 
 ### Booking Sequence
 
@@ -128,10 +135,7 @@ POST /payments/start
 
 相關文件：
 
-- `doc/payment-attempts.md`
-- `doc/payment-idempotency.md`
-- `doc/mock-payment-callback.md`
-- `doc/payment-reconciliation.md`
+- `doc/payment-design.md`
 
 ### Payment Sequence
 
@@ -182,7 +186,7 @@ PAYMENT_SUCCEEDED
 
 相關文件：
 
-- `doc/outbox-payment-notification.md`
+- `doc/payment-design.md`
 
 ### Admin Backoffice
 
@@ -194,10 +198,10 @@ PAYMENT_SUCCEEDED
 目前後台支援：
 
 - Admin login/logout/me。
-- Organizer CRUD。
-- Admin user CRUD。
-- Event CRUD。
-- Section CRUD。
+- Organizer list / create / update。
+- Admin user list / create / update。
+- Event list / get / create / update。
+- Section list / create / update。
 - Orders keyset pagination。
 - Audit logs keyset pagination。
 - Sensitive data masking / reveal audit log。
@@ -211,11 +215,13 @@ PAYMENT_SUCCEEDED
 
 ### Infra
 
-啟動 PostgreSQL / Redis / RabbitMQ 等本機 infra：
+啟動 PostgreSQL / Redis / RabbitMQ 等本機 infrastructure：
 
 ```powershell
 docker compose up -d
 ```
+
+`docker compose up -d` 只會啟動 infrastructure，不會啟動 Go API、scheduler、Vue frontend 或 mock payment service。RabbitMQ 目前尚未接入應用流程；現行 outbox publisher 只寫入 log，RabbitMQ container 是為未來整合預留。
 
 執行 migration：
 
@@ -243,7 +249,7 @@ go run .
 
 ### Mock Payment Service
 
-mock payment service 預設：
+Mock payment service 是外部相依服務，不在這個 repository，也不會由本專案的 `docker compose up -d` 啟動。啟動 Go API 的付款流程前，需先另行啟動一個相容的 mock payment service。後端預設連線位址為：
 
 ```text
 http://localhost:8081
@@ -254,6 +260,8 @@ http://localhost:8081
 ```powershell
 curl http://localhost:8081/health
 ```
+
+Payment reconciliation 與 outbox publish 預設啟用，可分別透過 `PAYMENT_RECONCILE_ENABLED` 與 `OUTBOX_PUBLISH_ENABLED` 關閉。
 
 ## Testing
 
@@ -333,17 +341,17 @@ create order
 
 ## Deployment
 
-Helm chart 在：
+實際部署使用獨立 repository 管理的 Helm chart：
 
-```text
-charts/buy-ticket
-```
+- [austin72905/buy-ticket-deploy](https://github.com/austin72905/buy-ticket-deploy)
 
-本地 K3s / k3d 可使用：
+Chart 位於 `buy-ticket-deploy` repository 根目錄，主要設定檔為 `values.yaml`。取得 deployment repository 後，可在其根目錄檢查渲染結果：
 
 ```powershell
-helm template buy-ticket ./charts/buy-ticket -f ./charts/buy-ticket/values-local.yaml
+helm template buy-ticket . -f ./values.yaml
 ```
+
+本 repository 內的 `charts/buy-ticket` 不是目前實際部署使用的 chart；部署設定與環境變更應以 `buy-ticket-deploy` repository 為準。
 
 正式部署時建議：
 
@@ -358,11 +366,11 @@ PostgreSQL / Redis 作為外部 infra
 這個作品刻意保留單體邊界，原因是搶票核心交易需要清楚的一致性模型。微服務不是目前第一目標；目前採用：
 
 ```text
-modular monolith
+layered monolith
 runtime role split
 transactional outbox
 scheduler compensation
 Redis + PostgreSQL consistency boundary
 ```
 
-這樣可以先把交易正確性與高併發行為講清楚，未來再自然拆出 notification、reporting 或 payment service。
+這樣可以先把交易正確性與高併發行為講清楚。當業務邊界與獨立擴縮需求變得明確時，可先演進為 modular monolith，再視需要拆出 notification、reporting 或 payment service。
