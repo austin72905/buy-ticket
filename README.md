@@ -2,7 +2,7 @@
 
 高併發搶票系統範例。核心重點是排隊閘門、Redis 庫存、PostgreSQL 交易一致性、付款 callback、idempotency、scheduler 補償與後台管理。
 
-目前採用 **layered monolith**（分層式單體），不是強行拆微服務。API 與 scheduler 使用同一個 binary / image，透過 `APP_ROLE` 分成不同 runtime role，方便本機開發與 K3s 部署。目前的 package 主要依 controller、service、repository 與 domain 等技術分層組織，未來可再依 booking、payment、admin 等業務邊界漸進演進為 modular monolith。
+目前採用 **layered monolith**（分層式單體），不是強行拆微服務。API 與 scheduler 使用同一個 binary / image，透過 `APP_ROLE` 分成不同 runtime role，方便本機開發與 K3s 部署。系統以 transactional outbox、scheduler compensation，以及 Redis 與 PostgreSQL 的一致性邊界處理高併發流程。目前的 package 主要依 controller、service、repository 與 domain 等技術分層組織，未來可再依 booking、payment、admin 等業務邊界漸進演進為 modular monolith。
 
 ## Architecture
 
@@ -360,17 +360,3 @@ API replicas: 2+
 Scheduler replicas: 1
 PostgreSQL / Redis 作為外部 infra
 ```
-
-## Design Notes
-
-這個作品刻意保留單體邊界，原因是搶票核心交易需要清楚的一致性模型。微服務不是目前第一目標；目前採用：
-
-```text
-layered monolith
-runtime role split
-transactional outbox
-scheduler compensation
-Redis + PostgreSQL consistency boundary
-```
-
-這樣可以先把交易正確性與高併發行為講清楚。當業務邊界與獨立擴縮需求變得明確時，可先演進為 modular monolith，再視需要拆出 notification、reporting 或 payment service。
