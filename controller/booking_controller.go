@@ -559,7 +559,7 @@ func (c *BookingController) PayOrder(ctx *gin.Context) {
 		writeError(ctx, http.StatusForbidden, service.ErrUnauthorized)
 		return
 	}
-
+	// 檢查idempotency key
 	idempotencyKey := ctx.GetHeader(idempotencyKeyHeader)
 	if len(idempotencyKey) > paymentIdempotencyMaxLen {
 		writeError(ctx, http.StatusBadRequest, errors.New("idempotency key is too long"))

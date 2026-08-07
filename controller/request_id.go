@@ -9,6 +9,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+/*
+Client request
+
+	↓
+
+取得 X-Request-ID
+
+	↓ 沒有就由系統產生
+
+存進 context + response header
+
+	↓
+
+Handler / Service / Repository
+
+	↓
+
+Log 與錯誤 response 帶上同一個 Request ID
+*/
 const headerRequestID = observability.HeaderRequestID
 
 const (
